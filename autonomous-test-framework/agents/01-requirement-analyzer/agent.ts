@@ -52,6 +52,9 @@ export class RequirementAnalyzerAgent {
       let rawRequirements = await this._parseInput(input);
       rawRequirements = await contextSqueezer.squeeze(rawRequirements, input.projectName || 'Requirements');
       
+      // Save raw requirements for the chatbot and downstream agents
+      await stateManager.setPipelineArtifact('requirements', rawRequirements);
+      
       this._logger.info('Executing LLM-driven requirements decomposition...');
       const analysisReport = await this._performLLMAnalysis(rawRequirements, input.projectName, memoryContext);
       analysisReport.featureFilePaths = [];
@@ -111,6 +114,11 @@ You are a senior QA architect performing an exhaustive requirements decompositio
 
 MEMORY / IMPROVEMENT RULES FROM PAST RUNS:
 ${JSON.stringify(memoryContext.improvementRules)}
+
+RESOLVED CLARIFICATIONS / ANSWERS FROM HUMAN:
+${JSON.stringify(memoryContext.resolvedClarifications)}
+
+CRITICAL INSTRUCTION: Do NOT ask questions in the "ambiguities" array if they have already been answered in the RESOLVED CLARIFICATIONS above. Integrate the human's answer directly into your analysis and acceptance criteria instead!
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 FULL REQUIREMENTS INPUT:

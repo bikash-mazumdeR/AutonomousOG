@@ -6,7 +6,7 @@ ARIA (**A**utonomous **R**eliability & **I**ntelligence **A**gent) is an AI-driv
 
 ## 📌 Project Context
 - **Framework Name:** ARIA (Autonomous Reliability & Intelligence Agent)
-- **Tech Stack:** TypeScript (Strict), Node.js (>=18), Playwright (1.44.0), K6, SQLite (`better-sqlite3` in WAL mode), LanceDB (Vector RAG memory), Jira MCP, Gmail SMTP, Docker.
+- **Tech Stack:** TypeScript (Strict), Node.js (>=18), Playwright (1.44.0), K6, SQLite (`better-sqlite3` in WAL mode), LanceDB (Vector RAG memory), Jira MCP, Gmail SMTP, Docker, LiteLLM (optional proxy for provider-agnostic LLM routing).
 - **Architecture:** 11 specialized autonomous agents orchestrated by `orchestrator.ts` or executable standalone via `npm run agent:XX`.
 - **Dual Working Directory:** Commands can be run either from the repository root (via root forwarding scripts) or from `autonomous-test-framework/`.
 

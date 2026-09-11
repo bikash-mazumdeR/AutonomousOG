@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Root forwarding package",
   "scripts": {
+    "ui:agent01": "npm --prefix autonomous-test-framework run ui:agent01 --",
     "pipeline:start": "npm --prefix autonomous-test-framework run pipeline:start --",
     "pipeline:status": "npm --prefix autonomous-test-framework run pipeline:status --",
     "pipeline:status:watch": "npm --prefix autonomous-test-framework run pipeline:status:watch --",

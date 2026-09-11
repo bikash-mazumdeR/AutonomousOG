@@ -2,7 +2,7 @@
   "version": "1.0.0",
   "projectId": "default",
   "createdAt": "2026-05-12T00:00:00.000Z",
-  "updatedAt": "2026-09-11T10:22:23.177Z",
+  "updatedAt": "2026-09-11T14:37:21.846Z",
   "cycles": [
     {
       "id": "cycle_1789122143177",
@@ -3002,7 +3002,43 @@
       }
     ],
     "performanceBaselines": {},
-    "resolvedClarifications": [],
+    "resolvedClarifications": [
+      {
+        "id": "clq_1789135311884",
+        "question": "Should the login button exhibit a loading indicator or transition to a disabled state upon click?",
+        "answer": "No. The Login Button will always be in enabled state.",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-11T14:01:51.884Z"
+      },
+      {
+        "id": "clq_1789135311894",
+        "question": "Should session tokens be stored specifically in Local Storage or HTTP-only Cookies?",
+        "answer": "Local Storage",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-11T14:01:51.894Z"
+      },
+      {
+        "id": "clq_1789135311902",
+        "question": "Is there a specific support URL or contact text that should be displayed alongside the locked out error message?",
+        "answer": "This is the error message - \"Epic sadface: Sorry, this user has been locked out.\"",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-11T14:01:51.902Z"
+      },
+      {
+        "id": "clq_1789136191531",
+        "question": "What is the specific visual behavior (loading indicator vs disabled state) for the login button upon click?",
+        "answer": "The login button will always remain enabled.",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-11T14:16:31.531Z"
+      },
+      {
+        "id": "clq_1789137441846",
+        "question": "The requirement states the button is 'enabled at all times' but also mentions a 'loading indicator or disabled state (TBD by design team)'. Which behavior should be implemented?",
+        "answer": "Ignore for now",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-11T14:37:21.846Z"
+      }
+    ],
     "stableTestIds": [],
     "flakyTestIds": []
   },

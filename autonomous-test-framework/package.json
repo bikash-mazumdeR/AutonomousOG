@@ -10,6 +10,7 @@
     "npm": ">=9.0.0"
   },
   "scripts": {
+    "ui:agent01": "node -r ts-node/register ui/agent01-ui-server.ts",
     "pipeline:start": "node -r ts-node/register orchestrator.ts",
     "pipeline:status": "node -r ts-node/register cli/status.ts",
     "pipeline:status:watch": "node -r ts-node/register cli/status.ts --watch",
@@ -60,6 +61,7 @@
     "lodash": "^4.17.21",
     "multer": "^2.1.1",
     "nodemailer": "^6.9.13",
+    "openai": "^7.15.0",
     "p-limit": "^3.1.0",
     "p-queue": "^6.6.2",
     "p-retry": "^8.0.0",

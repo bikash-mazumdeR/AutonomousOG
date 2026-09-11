@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ARIA — Agent 01: Requirement Analyzer</title>
+  <style>
+    /* ── Design tokens ───────────────────────────────────────────────────── */
+    :root {
+      --bg:           #0f172a;
+      --surface:      #1e293b;
+      --surface2:     #273449;
+      --border:       #334155;
+      --accent:       #6366f1;
+      --accent-h:     #4f46e5;
+      --success:      #22c55e;
+      --success-bg:   #14532d22;
+      --warning:      #f59e0b;
+      --warning-bg:   #78350f22;
+      --danger:       #ef4444;
+      --danger-bg:    #7f1d1d22;
+      --text:         #f1f5f9;
+      --text-muted:   #94a3b8;
+      --text-dim:     #64748b;
+      --radius:       10px;
+      --shadow:       0 4px 24px rgba(0,0,0,.4);
+    }
+
+    /* ── Reset & base ────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: var(--bg); color: var(--text);
+                 font-family: 'Inter', system-ui, -apple-system, sans-serif;
+                 font-size: 14px; line-height: 1.6; 
+                 overflow-x: hidden; word-wrap: break-word; }
+    a { color: var(--accent); }
+    ::placeholder { color: var(--text-dim); }
+
+    /* ── Scrollbar ───────────────────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--surface); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* ── Layout ──────────────────────────────────────────────────────────── */
+    .header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px;
+      display: flex; align-items: center; gap: 16px;
+      position: sticky; top: 0; z-index: 100;
+    }
+    .header-logo { font-size: 18px; font-weight: 700; color: var(--text);
+                   display: flex; align-items: center; gap: 8px; }
+    .header-logo span { color: var(--accent); }
+    .header-badge {
+      background: var(--accent); color: #fff;
+      padding: 3px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;
+      margin-left: auto;
+    }
+
+    /* Pipeline step indicator */
+    .pipeline-bar {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 10px 24px; display: flex; align-items: center; gap: 0; overflow-x: auto;
+    }
+    .step-node {
+      width: 28px; height: 28px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; flex-shrink: 0;
+      background: var(--surface2); border: 2px solid var(--border); color: var(--text-dim);
+      transition: all .2s;
+    }
+    .step-node.active  { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .step-node.done    { background: var(--success); border-color: var(--success); color: #fff; }
+    .step-connector {
+      height: 2px; flex: 1; min-width: 16px;
+      background: var(--border);
+    }
+    .step-connector.done { background: var(--success); }
+
+    .page-body { padding: 24px; max-width: 1280px; margin: 0 auto; }
+
+    /* Two-column grid */
+    .main-grid { display: grid; grid-template-columns: 1fr 320px; gap: 20px; align-items: start; }
+    @media (max-width: 900px) { .main-grid { grid-template-columns: 1fr; } }
+
+    /* ── Cards ───────────────────────────────────────────────────────────── */
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px;
+    }
+    .card + .card { margin-top: 16px; }
+    .card-title {
+      font-size: 13px; font-weight: 600; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: .05em; margin-bottom: 16px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .card-title .icon { font-size: 16px; }
+
+    /* ── Tabs ────────────────────────────────────────────────────────────── */
+    .tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+    .tab-btn {
+      padding: 8px 20px; font-size: 13px; font-weight: 500;
+      color: var(--text-muted); background: none; border: none;
+      border-bottom: 2px solid transparent; cursor: pointer;
+      transition: all .15s; margin-bottom: -1px;
+    }
+    .tab-btn:hover  { color: var(--text); }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    /* ── Drop zone ───────────────────────────────────────────────────────── */
+    .drop-zone {
+      border: 2px dashed var(--border); border-radius: var(--radius);
+      padding: 32px; text-align: center; cursor: pointer;
+      transition: all .2s; color: var(--text-muted);
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+    }
+    .drop-zone:hover, .drop-zone.drag-over {
+      border-color: var(--accent); background: #6366f111;
+    }
+    .drop-zone .dz-icon { font-size: 32px; }
+    .drop-zone .dz-text { font-size: 13px; }
+    .drop-zone .dz-hint { font-size: 11px; color: var(--text-dim); }
+    .drop-zone.has-file  { border-color: var(--success); background: var(--success-bg); }
+    .drop-zone.has-file .dz-text { color: var(--success); font-weight: 600; }
+
+    /* ── Form elements ───────────────────────────────────────────────────── */
+    .form-group { margin-bottom: 14px; }
+    .form-group label { display: block; font-size: 12px; color: var(--text-muted);
+                        margin-bottom: 6px; font-weight: 500; }
+    input[type="text"], textarea {
+      width: 100%; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text); padding: 9px 12px; font-size: 13px;
+      outline: none; transition: border .15s; font-family: inherit;
+    }
+    input[type="text"]:focus, textarea:focus { border-color: var(--accent); }
+    textarea { resize: vertical; min-height: 80px; }
+
+    /* ── Buttons ─────────────────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 9px 18px; border-radius: 6px; font-size: 13px; font-weight: 600;
+      cursor: pointer; border: none; transition: all .15s; user-select: none;
+    }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .btn-loading { pointer-events: none; opacity: 0.8; }
+    .btn-loading::before {
+      content: ''; display: inline-block; width: 14px; height: 14px;
+      border: 2px solid currentColor; border-bottom-color: transparent;
+      border-radius: 50%; animation: spin .8s linear infinite;
+    }
+    .btn-primary  { background: var(--accent); color: #fff; }
+    .btn-primary:hover:not(:disabled)  { background: var(--accent-h); }
+    .btn-success  { background: var(--success); color: #fff; }
+    .btn-success:hover:not(:disabled)  { background: #16a34a; }
+    .btn-danger   { background: var(--danger);  color: #fff; }
+    .btn-danger:hover:not(:disabled)   { background: #dc2626; }
+    .btn-outline  {
+      background: transparent; color: var(--accent);
+      border: 1.5px solid var(--accent);
+    }
+    .btn-outline:hover:not(:disabled) { background: #6366f111; }
+    .btn-ghost {
+      background: transparent; color: var(--text-muted); border: 1px solid var(--border);
+    }
+    .btn-ghost:hover:not(:disabled) { color: var(--text); border-color: var(--text-muted); }
+    .btn-block { width: 100%; justify-content: center; padding: 11px; }
+
+    /* ── Badges ──────────────────────────────────────────────────────────── */
+    .badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 700;
+    }
+    .badge-warning { background: var(--warning-bg); color: var(--warning); }
+    .badge-success { background: var(--success-bg); color: var(--success); }
+    .badge-danger  { background: var(--danger-bg);  color: var(--danger);  }
+    .badge-info    { background: #1d4ed822; color: #60a5fa; }
+
+    /* ── Log stream ──────────────────────────────────────────────────────── */
+    .log-stream {
+      background: #020817; border: 1px solid var(--border); border-radius: var(--radius);
+      height: 240px; overflow-y: auto; padding: 12px; font-family: 'Fira Code', 'JetBrains Mono', monospace;
+      font-size: 12px; line-height: 1.7; word-wrap: break-word; white-space: pre-wrap;
+    }
+    .log-line { color: var(--text-muted); }
+    .log-line.warn  { color: var(--warning); }
+    .log-line.error { color: var(--danger); }
+    .log-line.info  { color: #60a5fa; }
+    .spinner { display: flex; align-items: center; gap: 8px; color: var(--text-muted);
+               font-size: 13px; margin-top: 10px; }
+    .spinner::before {
+      content: ''; display: inline-block; width: 14px; height: 14px;
+      border: 2px solid var(--border); border-top-color: var(--accent);
+      border-radius: 50%; animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Summary stats ───────────────────────────────────────────────────── */
+    .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .stat-item { background: var(--surface2); border-radius: 6px; padding: 12px; }
+    .stat-label { font-size: 11px; color: var(--text-dim); }
+    .stat-value { font-size: 22px; font-weight: 700; color: var(--text); margin-top: 2px; }
+
+    .token-row { display: flex; justify-content: space-between; align-items: center;
+                 padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+    .token-row:last-child { border-bottom: none; }
+    .token-label { color: var(--text-muted); }
+    .token-value { color: var(--text); font-weight: 600; font-family: monospace; }
+
+    /* ── Ambiguity cards ─────────────────────────────────────────────────── */
+    .amb-card {
+      background: var(--surface2); border: 1px solid var(--warning);
+      border-radius: var(--radius); padding: 16px; margin-bottom: 14px;
+    }
+    .amb-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .amb-question { font-size: 13px; color: var(--text); line-height: 1.6; margin-bottom: 10px; }
+
+    /* ── Bottom action bar ───────────────────────────────────────────────── */
+    .action-bar {
+      position: sticky; bottom: 0; background: var(--surface);
+      border-top: 1px solid var(--border); padding: 14px 24px;
+      display: flex; gap: 12px; justify-content: flex-end; align-items: center;
+      z-index: 50;
+    }
+    .action-bar .hint { color: var(--text-dim); font-size: 12px; margin-right: auto; }
+
+    /* ── Chat drawer ─────────────────────────────────────────────────────── */
+    .chat-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.5);
+      z-index: 200; opacity: 0; pointer-events: none; transition: opacity .2s;
+    }
+    .chat-overlay.open { opacity: 1; pointer-events: all; }
+    .chat-drawer {
+      position: fixed; right: 0; top: 0; bottom: 0; width: 420px;
+      background: var(--surface); border-left: 1px solid var(--border);
+      display: flex; flex-direction: column; z-index: 201;
+      transform: translateX(100%); transition: transform .25s cubic-bezier(.4,0,.2,1);
+    }
+    .chat-drawer.open { transform: translateX(0); }
+    .chat-header {
+      padding: 16px 20px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 10px;
+      font-weight: 700; font-size: 15px;
+    }
+    .chat-close {
+      margin-left: auto; background: none; border: none; color: var(--text-muted);
+      cursor: pointer; font-size: 20px; line-height: 1;
+    }
+    .chat-messages {
+      flex: 1; overflow-y: auto; padding: 16px; display: flex;
+      flex-direction: column; gap: 12px;
+    }
+    .chat-bubble {
+      max-width: 85%; padding: 10px 14px; border-radius: 12px;
+      font-size: 13px; line-height: 1.6; word-wrap: break-word;
+    }
+    .chat-bubble.user {
+      background: var(--accent); color: #fff;
+      align-self: flex-end; border-bottom-right-radius: 4px;
+    }
+    .chat-bubble.aria {
+      background: var(--surface2); color: var(--text);
+      align-self: flex-start; border-bottom-left-radius: 4px;
+    }
+    .chat-bubble.typing { color: var(--text-dim); font-style: italic; }
+    .chat-input-row {
+      padding: 12px 16px; border-top: 1px solid var(--border);
+      display: flex; gap: 8px; align-items: flex-end;
+    }
+    .chat-input-row textarea { min-height: 44px; max-height: 120px; resize: none; flex: 1; }
+
+    /* ── Approval modal ──────────────────────────────────────────────────── */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.6);
+      z-index: 300; display: none; align-items: center; justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; padding: 28px; max-width: 480px; width: 90%;
+      box-shadow: var(--shadow);
+    }
+    .modal-title { font-size: 17px; font-weight: 700; margin-bottom: 8px; }
+    .modal-subtitle { color: var(--text-muted); font-size: 13px; margin-bottom: 20px; }
+    .modal-summary { background: var(--surface2); border-radius: 8px; padding: 14px;
+                     margin-bottom: 20px; font-size: 12px; }
+    .modal-summary-row { display: flex; justify-content: space-between; padding: 3px 0; }
+    .modal-summary-row .k { color: var(--text-muted); }
+    .modal-summary-row .v { color: var(--text); font-weight: 600; }
+    .modal-buttons { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+    /* ── Utility ─────────────────────────────────────────────────────────── */
+    .hidden  { display: none !important; }
+    .section-title { font-size: 15px; font-weight: 700; margin-bottom: 14px;
+                     display: flex; align-items: center; gap: 8px; }
+    .divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+    .text-success { color: var(--success); }
+    .text-danger  { color: var(--danger); }
+    .mt-12 { margin-top: 12px; }
+    .alert {
+      padding: 12px 16px; border-radius: 8px; font-size: 13px; margin-bottom: 16px;
+    }
+    .alert-success { background: var(--success-bg); border: 1px solid var(--success); color: var(--success); }
+    .alert-danger  { background: var(--danger-bg);  border: 1px solid var(--danger);  color: var(--danger); }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────────────────────── -->
+<header class="header">
+  <div class="header-logo">🤖 <span>ARIA</span> — Autonomous Testing Framework</div>
+  <div class="header-badge">Agent 01: Requirement Deep Analyzer</div>
+</header>
+
+<!-- ── Pipeline steps ─────────────────────────────────────────────────────── -->
+<div class="pipeline-bar" id="pipelineBar">
+  <!-- Rendered by JS -->
+</div>
+
+<!-- ── Main content ───────────────────────────────────────────────────────── -->
+<div class="page-body">
+  <div class="main-grid">
+
+    <!-- ── Left column ──────────────────────────────────────────────────── -->
+    <div class="left-col">
+
+      <!-- Phase 1: Input -->
+      <div id="phaseInput">
+        <div class="card">
+          <div class="card-title"><span class="icon">📄</span> Input Requirements</div>
+
+          <div class="tabs">
+            <button class="tab-btn active" data-tab="upload">📎 Upload Document</button>
+            <button class="tab-btn"        data-tab="jira">🔗 Jira Story</button>
+          </div>
+
+          <!-- Tab: Upload -->
+          <div class="tab-pane active" id="tab-upload">
+            <div class="drop-zone" id="dropZone">
+              <input type="file" id="fileInput" accept=".md,.txt" hidden />
+              <div class="dz-icon">📁</div>
+              <div class="dz-text" id="dzText">Drop .md or .txt file here, or click to browse</div>
+              <div class="dz-hint">Max 5 MB</div>
+            </div>
+          </div>
+
+          <!-- Tab: Jira -->
+          <div class="tab-pane" id="tab-jira">
+            <div class="form-group">
+              <label>Jira Story ID</label>
+              <input type="text" id="jiraIdInput" placeholder="e.g. SD-42 or PROJ-123" />
+            </div>
+          </div>
+
+          <div class="form-group mt-12">
+            <label>Project Name <span style="color:var(--text-dim)">(optional)</span></label>
+            <input type="text" id="projectNameInput" placeholder="e.g. E-Commerce Checkout" />
+          </div>
+
+          <button class="btn btn-primary btn-block mt-12" id="runBtn">
+            ▶ Run Analysis
+          </button>
+        </div>
+      </div>
+
+      <!-- Phase 2: Running -->
+      <div id="phaseRunning" class="hidden">
+        <div class="card">
+          <div class="card-title"><span class="icon">⚙️</span> Analysis in Progress</div>
+          <div class="log-stream" id="logStream"></div>
+          <div class="spinner" id="spinner" style="margin-top:12px">Analyzing requirements with LLM…</div>
+        </div>
+      </div>
+
+      <!-- Phase 3: Ambiguities -->
+      <div id="phaseAmbiguities" class="hidden">
+        <div class="card">
+          <div class="section-title">
+            ❓ Ambiguities &amp; Clarifications
+            <span class="badge badge-warning" id="ambCount"></span>
+          </div>
+          <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px">
+            ARIA found the following questions about the requirements. Please answer each one so the analysis can be refined.
+          </p>
+          <div id="ambCards"></div>
+          <button class="btn btn-primary btn-block" id="submitAnswersBtn">
+            🔄 Submit Answers &amp; Re-analyze
+          </button>
+        </div>
+      </div>
+
+      <!-- Phase 4: Results (shown after clean analysis) -->
+      <div id="phaseResults" class="hidden">
+        <div class="card">
+          <div class="section-title">✅ Analysis Complete</div>
+          <div id="successAlert" class="alert alert-success hidden"></div>
+          <div id="rejectedAlert" class="alert alert-danger hidden"></div>
+
+          <!-- Features accordion (simplified) -->
+          <div id="featuresList"></div>
+        </div>
+      </div>
+
+    </div><!-- /left col -->
+
+    <!-- ── Right column ─────────────────────────────────────────────────── -->
+    <div class="right-col">
+
+      <!-- Summary card -->
+      <div class="card" id="summaryCard">
+        <div class="card-title"><span class="icon">📊</span> Analysis Summary</div>
+        <div id="summaryBadge" style="margin-bottom:14px"></div>
+        <div class="stat-grid" id="statGrid">
+          <div class="stat-item">
+            <div class="stat-label">Features</div>
+            <div class="stat-value" id="statFeatures">—</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">User Stories</div>
+            <div class="stat-value" id="statStories">—</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Integration Pts</div>
+            <div class="stat-value" id="statIntegrations">—</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Ambiguities</div>
+            <div class="stat-value" id="statAmbiguities">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Token usage card -->
+      <div class="card hidden" id="tokenCard">
+        <div class="card-title"><span class="icon">🪙</span> Token Usage</div>
+        <div class="token-row">
+          <span class="token-label">Prompt tokens</span>
+          <span class="token-value" id="tokPrompt">—</span>
+        </div>
+        <div class="token-row">
+          <span class="token-label">Completion tokens</span>
+          <span class="token-value" id="tokCompletion">—</span>
+        </div>
+        <div class="token-row">
+          <span class="token-label">Total tokens</span>
+          <span class="token-value" id="tokTotal">—</span>
+        </div>
+        <div class="token-row">
+          <span class="token-label">Estimated cost</span>
+          <span class="token-value" id="tokCost">—</span>
+        </div>
+      </div>
+
+    </div><!-- /right col -->
+  </div>
+</div>
+
+<!-- ── Bottom action bar ───────────────────────────────────────────────────── -->
+<div class="action-bar hidden" id="actionBar">
+  <span class="hint" id="actionBarHint">Analysis complete — verify understanding or proceed to next agent.</span>
+  <button class="btn btn-outline" id="chatBtn">💬 Chat with ARIA</button>
+  <button class="btn btn-success" id="proceedBtn">Proceed to Agent 02 →</button>
+</div>
+
+<!-- ── Chat Drawer ─────────────────────────────────────────────────────────── -->
+<div class="chat-overlay" id="chatOverlay"></div>
+<div class="chat-drawer" id="chatDrawer">
+  <div class="chat-header">
+    💬 Chat with ARIA
+    <span style="color:var(--text-dim);font-size:12px;font-weight:400;margin-left:8px">
+      Verify the agent's understanding
+    </span>
+    <button class="chat-close" id="chatClose">✕</button>
+  </div>
+  <div class="chat-messages" id="chatMessages">
+    <div class="chat-bubble aria">
+      👋 Hello! I'm ARIA. Ask me anything about the requirements I just analyzed — I'll answer strictly from my analysis report.
+    </div>
+  </div>
+  <div class="chat-input-row">
+    <textarea id="chatInput" placeholder="Ask ARIA about the requirements…" rows="1"></textarea>
+    <button class="btn btn-primary" id="chatSendBtn">Send</button>
+  </div>
+</div>
+
+<!-- ── Approval Modal ──────────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="approvalModal">
+  <div class="modal-card">
+    <div class="modal-title" id="modalTitle">Stage Approval Gate</div>
+    <div class="modal-subtitle">
+      Review Agent 01's analysis, then approve or reject to continue.
+    </div>
+    <div class="modal-summary" id="modalSummary"></div>
+    <div class="form-group">
+      <label>Comment <span style="color:var(--text-dim)">(optional)</span></label>
+      <textarea id="modalComment" placeholder="Add an approval or rejection note…" style="min-height:60px"></textarea>
+    </div>
+    <div class="modal-buttons">
+      <button class="btn btn-ghost" id="modalCancelBtn">Cancel</button>
+      <button class="btn btn-danger" id="modalRejectBtn">❌ Reject</button>
+      <button class="btn btn-success" id="modalApproveBtn">✅ Approve</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Scripts ─────────────────────────────────────────────────────────────── -->
+<script>
+// ── Pipeline steps ─────────────────────────────────────────────────────────
+const STAGES = [
+  'Req Analyzer','Test Generator','Test Reviewer','Data Generator',
+  'Script Generator','Code Reviewer','Test Runner','Bug Reporter',
+  'Report Generator','Auto Healer','Re-Test Agent',
+];
+(function renderPipeline() {
+  const bar = document.getElementById('pipelineBar');
+  STAGES.forEach((name, i) => {
+    const node = document.createElement('div');
+    node.className = 'step-node' + (i === 0 ? ' active' : '');
+    node.title = `Agent ${String(i+1).padStart(2,'0')}: ${name}`;
+    node.textContent = i + 1;
+    bar.appendChild(node);
+    if (i < STAGES.length - 1) {
+      const conn = document.createElement('div');
+      conn.className = 'step-connector';
+      bar.appendChild(conn);
+    }
+  });
+})();
+
+// ── State ──────────────────────────────────────────────────────────────────
+// BUG-FIX NOTES:
+// 1. The agent blocks at approvalGate.waitForApproval() — process never exits
+//    until the user approves/rejects, so the SSE 'complete' event (sent on
+//    process close) would never fire during analysis. Completion is now
+//    detected by polling /api/agent01/state every 2 s instead.
+// 2. analysisCompleted flag prevents double-rendering if both poll AND SSE
+//    'complete' fire (e.g. if FRAMEWORK_APPROVAL_MODE=auto).
+// 3. Project ID in stateManager.initialize() on the server side was sanitised
+//    differently from the raw name the agent uses → wrong DB record was read.
+//    Fixed in agent01-ui-server.ts (uses raw projectName now).
+let currentReport     = null;
+let chatHistory       = [];
+let selectedFile      = null;
+let activeTab         = 'upload';
+let pollInterval      = null;
+let sseSource         = null;
+let analysisCompleted = false; // guards against double-render (poll + SSE close)
+
+// ── Phase helpers ──────────────────────────────────────────────────────────
+function showOnly(...ids) {
+  ['phaseInput','phaseRunning','phaseAmbiguities','phaseResults'].forEach(id => {
+    const el = document.getElementById(id);
+    el.classList.toggle('hidden', !ids.includes(id));
+  });
+}
+
+// ── Tab switching ──────────────────────────────────────────────────────────
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tab = btn.dataset.tab;
+    activeTab = tab;
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + tab).classList.add('active');
+  });
+});
+
+// ── Drop zone ──────────────────────────────────────────────────────────────
+const dropZone   = document.getElementById('dropZone');
+const fileInput  = document.getElementById('fileInput');
+const dzText     = document.getElementById('dzText');
+
+dropZone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) selectFile(fileInput.files[0]); });
+dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', ()  => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) selectFile(e.dataTransfer.files[0]);
+});
+
+function selectFile(file) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (!['md','txt'].includes(ext)) { alert('Only .md and .txt files are accepted.'); return; }
+  selectedFile = file;
+  dropZone.classList.add('has-file');
+  dzText.textContent = '📎 ' + file.name + ` (${(file.size/1024).toFixed(1)} KB)`;
+}
+
+// ── Log stream ─────────────────────────────────────────────────────────────
+function appendLog(message, level = 'info') {
+  const el = document.getElementById('logStream');
+  const line = document.createElement('div');
+  line.className = 'log-line ' + level;
+  line.textContent = message;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+// ── Run analysis ───────────────────────────────────────────────────────────
+document.getElementById('runBtn').addEventListener('click', startAnalysis);
+
+async function startAnalysis() {
+  const jiraId      = document.getElementById('jiraIdInput').value.trim();
+  const projectName = document.getElementById('projectNameInput').value.trim() || 'ARIA Project';
+
+  if (activeTab === 'upload' && !selectedFile) {
+    alert('Please select a .md or .txt requirement document first.'); return;
+  }
+  if (activeTab === 'jira' && !jiraId) {
+    alert('Please enter a Jira story ID.'); return;
+  }
+
+  // Build form data
+  const fd = new FormData();
+  fd.append('projectName', projectName);
+  if (activeTab === 'upload') {
+    fd.append('file', selectedFile);
+  } else {
+    fd.append('jiraId', jiraId);
+  }
+
+  // Reset state for this new run
+  analysisCompleted = false;
+  document.getElementById('logStream').innerHTML = '';
+  document.getElementById('actionBar').classList.add('hidden');
+  document.getElementById('phaseAmbiguities').classList.add('hidden');
+  document.getElementById('phaseResults').classList.add('hidden');
+  document.getElementById('spinner').classList.remove('hidden');
+  showOnly('phaseInput','phaseRunning');
+
+  // Connect SSE before POST so we don't miss early events
+  connectSSE();
+
+  const runBtn = document.getElementById('runBtn');
+  runBtn.classList.add('btn-loading');
+
+  try {
+    const resp = await fetch('/api/agent01/run', { method: 'POST', body: fd });
+    runBtn.classList.remove('btn-loading');
+    if (!resp.ok) {
+      const err = await resp.json();
+      alert('Error: ' + (err.error || 'Failed to start agent'));
+      showOnly('phaseInput'); return;
+    }
+    // Switch fully to running phase
+    showOnly('phaseRunning');
+    startPolling();
+  } catch (e) {
+    runBtn.classList.remove('btn-loading');
+    alert('Error connecting to server: ' + e.message);
+    showOnly('phaseInput');
+  }
+}
+
+// ── SSE ────────────────────────────────────────────────────────────────────
+function connectSSE() {
+  if (sseSource) { sseSource.close(); }
+  sseSource = new EventSource('/api/agent01/logs');
+  sseSource.onmessage = (e) => {
+    try {
+      const event = JSON.parse(e.data);
+      handleSSEEvent(event);
+    } catch (_) {}
+  };
+  sseSource.onerror = () => {};
+}
+
+function handleSSEEvent(event) {
+  switch (event.type) {
+    case 'log':
+      appendLog(event.message, event.level || 'info');
+      break;
+    case 'status':
+      appendLog('▶ ' + event.message, 'info');
+      break;
+    case 'complete':
+      // This fires ONLY when the agent process exits (i.e. after approval/rejection).
+      // Normally the polling below has already rendered results long before this.
+      // Guard with analysisCompleted so we don't re-render.
+      stopPolling();
+      if (sseSource) { sseSource.close(); sseSource = null; }
+      if (event.report && !analysisCompleted) { triggerAnalysisComplete(event.report); }
+      break;
+    case 'error':
+      appendLog('❌ ' + event.message, 'error');
+      document.getElementById('spinner').classList.add('hidden');
+      stopPolling();
+      break;
+  }
+}
+
+// ── triggerAnalysisComplete — single entry point, guarded ──────────────────
+// Called from EITHER the poll loop OR the SSE 'complete' event (whichever fires first).
+function triggerAnalysisComplete(report) {
+  if (analysisCompleted) return; // already rendered — skip
+  analysisCompleted = true;
+  stopPolling();
+  if (sseSource) { sseSource.close(); sseSource = null; }
+  onAnalysisComplete(report);
+}
+
+// ── Polling ────────────────────────────────────────────────────────────────
+// PRIMARY COMPLETION PATH: the agent blocks at approvalGate.waitForApproval()
+// so the process never exits → SSE 'complete' won't fire until AFTER approval.
+// We poll /api/agent01/state every 2 s and trigger completion when the stage
+// status transitions to COMPLETED (agent saved the report but is still alive).
+function startPolling() {
+  pollInterval = setInterval(async () => {
+    try {
+      const resp = await fetch('/api/agent01/state');
+      const data = await resp.json();
+      if (!data.stage) return;
+
+      // Always keep summary stats fresh
+      updateSummaryFromState(data.stage, data.report);
+
+      // ── Completion detection ──────────────────────────────────────────
+      if (!analysisCompleted && data.stage.status === 'COMPLETED' && data.report) {
+        triggerAnalysisComplete(data.report);
+        return; // no further processing needed this tick
+      }
+
+      // ── Post-approval states (agent process exited already) ───────────
+      if (data.stage.approval === 'APPROVED' && !data.running) {
+        stopPolling();
+      }
+    } catch (_) { /* transient network error — try again next tick */ }
+  }, 500);
+}
+function stopPolling() {
+  if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+}
+
+function updateSummaryFromState(stage, report) {
+  if (report) {
+    document.getElementById('statFeatures').textContent    = report.totalFeatures ?? '—';
+    document.getElementById('statStories').textContent     = report.totalUserStories ?? '—';
+    document.getElementById('statIntegrations').textContent = (report.integrationPoints || []).length;
+    const pending = (report.ambiguities || []).filter(a => !a.resolved).length;
+    document.getElementById('statAmbiguities').textContent = pending;
+  }
+  if (stage?.usage) updateTokenCard(stage.usage);
+}
+
+// ── Analysis complete ──────────────────────────────────────────────────────
+function onAnalysisComplete(report) {
+  currentReport = report;
+  document.getElementById('spinner').classList.add('hidden');
+
+  // Update summary
+  document.getElementById('statFeatures').textContent     = report.totalFeatures ?? '—';
+  document.getElementById('statStories').textContent      = report.totalUserStories ?? '—';
+  document.getElementById('statIntegrations').textContent = (report.integrationPoints || []).length;
+  const pending = (report.ambiguities || []).filter(a => !a.resolved);
+  document.getElementById('statAmbiguities').textContent  = pending.length;
+  document.getElementById('summaryBadge').innerHTML =
+    `<span class="badge ${pending.length ? 'badge-warning' : 'badge-success'}">` +
+    (pending.length ? '⚠ Ambiguities Pending' : '✓ COMPLETED') + '</span>';
+
+  // Token card
+  document.getElementById('tokenCard').classList.remove('hidden');
+
+  // Show ambiguities if any
+  if (pending.length > 0) {
+    renderAmbiguities(pending);
+    showOnly('phaseRunning','phaseAmbiguities');
+  } else {
+    renderResults(report);
+    showOnly('phaseRunning','phaseResults');
+    document.getElementById('actionBar').classList.remove('hidden');
+    buildModalSummary(report);
+  }
+}
+
+// ── Update token card ──────────────────────────────────────────────────────
+function updateTokenCard(usage) {
+  if (!usage) return;
+  document.getElementById('tokPrompt').textContent     = (usage.promptTokens || 0).toLocaleString();
+  document.getElementById('tokCompletion').textContent = (usage.completionTokens || 0).toLocaleString();
+  document.getElementById('tokTotal').textContent      = (usage.totalTokens || 0).toLocaleString();
+  document.getElementById('tokCost').textContent       = '$' + (usage.estimatedCost || 0).toFixed(6);
+  document.getElementById('tokenCard').classList.remove('hidden');
+}
+
+// ── Render ambiguities ─────────────────────────────────────────────────────
+function renderAmbiguities(pending) {
+  const container = document.getElementById('ambCards');
+  container.innerHTML = '';
+  document.getElementById('ambCount').textContent = pending.length + ' pending';
+
+  pending.forEach((amb, idx) => {
+    const card = document.createElement('div');
+    card.className = 'amb-card';
+    card.innerHTML = `
+      <div class="amb-header">
+        <span class="badge badge-warning">⚠ ${amb.id || ('AMB-' + String(idx+1).padStart(2,'0'))}</span>
+      </div>
+      <div class="amb-question">${escHtml(amb.question || amb.description || '')}</div>
+      <textarea class="amb-answer" data-question="${escHtml(amb.question || '')}"
+                data-id="${escHtml(amb.id || '')}"
+                placeholder="Your answer…" style="min-height:70px"></textarea>
+    `;
+    container.appendChild(card);
+  });
+
+  document.getElementById('phaseAmbiguities').classList.remove('hidden');
+  
+  // Re-enable the submit button in case it was disabled from a previous round
+  const btn = document.getElementById('submitAnswersBtn');
+  btn.disabled = false;
+  btn.textContent = '🔄 Submit Answers & Re-analyze';
+}
+
+// ── Submit clarification answers ───────────────────────────────────────────
+document.getElementById('submitAnswersBtn').addEventListener('click', async () => {
+  const textareas = document.querySelectorAll('.amb-answer');
+  const answers = [];
+  let missingCount = 0;
+
+  textareas.forEach(ta => {
+    const answer = ta.value.trim();
+    if (!answer) { missingCount++; return; }
+    answers.push({ id: ta.dataset.id, question: ta.dataset.question, answer });
+  });
+
+  if (missingCount > 0) {
+    alert(`Please answer all ${missingCount} remaining question(s).`); return;
+  }
+
+  const btn = document.getElementById('submitAnswersBtn');
+  btn.disabled = true; 
+  btn.textContent = 'Saving answers…';
+  btn.classList.add('btn-loading');
+
+  try {
+    const resp = await fetch('/api/agent01/clarify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ answers }),
+    });
+    if (!resp.ok) throw new Error((await resp.json()).error);
+
+    btn.textContent = 'Re-analyzing with your answers…';
+
+    const fd = new FormData();
+    fd.append('projectName', document.getElementById('projectNameInput').value.trim() || 'ARIA Project');
+    if (selectedFile) fd.append('file', selectedFile);
+    else fd.append('jiraId', document.getElementById('jiraIdInput').value.trim());
+
+    analysisCompleted = false;
+    document.getElementById('logStream').innerHTML = '';
+    document.getElementById('actionBar').classList.add('hidden');
+    document.getElementById('phaseAmbiguities').classList.add('hidden');
+    document.getElementById('spinner').classList.remove('hidden');
+    showOnly('phaseRunning');
+    connectSSE();
+
+    await fetch('/api/agent01/run', { method: 'POST', body: fd });
+    btn.classList.remove('btn-loading');
+    startPolling();
+
+  } catch (e) {
+    btn.classList.remove('btn-loading');
+    alert('Error: ' + e.message);
+    btn.disabled = false; 
+    btn.textContent = '🔄 Submit Answers & Re-analyze';
+  }
+});
+
+// ── Render results ─────────────────────────────────────────────────────────
+function renderResults(report) {
+  const container = document.getElementById('featuresList');
+  container.innerHTML = '';
+
+  (report.features || []).forEach((feature, fi) => {
+    const featureEl = document.createElement('div');
+    featureEl.style.cssText = 'margin-bottom:16px;';
+    featureEl.innerHTML = `
+      <div style="font-weight:700;color:var(--text);margin-bottom:8px;">
+        <span style="color:var(--accent)">${escHtml(feature.id)}</span> — ${escHtml(feature.name)}
+        <span class="badge badge-${feature.riskLevel === 'High' ? 'danger' : 'info'}" style="margin-left:8px;font-size:10px">
+          ${escHtml(feature.riskLevel || 'Medium')} Risk
+        </span>
+      </div>
+      <div style="color:var(--text-muted);font-size:12px;margin-bottom:8px">${escHtml(feature.description || '')}</div>
+      ${(feature.userStories || []).map((us, ui) => `
+        <div style="background:var(--surface2);border-radius:6px;padding:10px 14px;margin-bottom:6px;border-left:3px solid var(--accent)">
+          <div style="font-size:12px;color:var(--accent);font-weight:600">${escHtml(us.id)}: ${escHtml(us.title)}</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:4px">${escHtml(us.goal || '')}</div>
+          ${(us.acceptanceCriteria || []).map(ac => `
+            <div style="font-size:11px;color:var(--text-dim);margin-top:3px">✓ ${escHtml(ac)}</div>
+          `).join('')}
+        </div>
+      `).join('')}
+    `;
+    container.appendChild(featureEl);
+  });
+
+  if (!container.innerHTML) {
+    container.innerHTML = '<p style="color:var(--text-muted)">Analysis report loaded. Open the chat to explore details.</p>';
+  }
+}
+
+// ── Modal summary ──────────────────────────────────────────────────────────
+function buildModalSummary(report) {
+  if (!report) return;
+  const rows = [
+    ['Features',          report.totalFeatures ?? '—'],
+    ['User Stories',      report.totalUserStories ?? '—'],
+    ['Integration Points',(report.integrationPoints || []).length],
+    ['Pending Ambiguities',(report.ambiguities || []).filter(a => !a.resolved).length],
+    ['Next Stage',        'Agent 02: Test Case Generator'],
+  ];
+  document.getElementById('modalSummary').innerHTML = rows.map(([k, v]) =>
+    `<div class="modal-summary-row"><span class="k">${k}</span><span class="v">${v}</span></div>`
+  ).join('');
+}
+
+// ── Chat drawer ────────────────────────────────────────────────────────────
+function openChat() {
+  document.getElementById('chatOverlay').classList.add('open');
+  document.getElementById('chatDrawer').classList.add('open');
+  document.getElementById('chatInput').focus();
+}
+function closeChat() {
+  document.getElementById('chatOverlay').classList.remove('open');
+  document.getElementById('chatDrawer').classList.remove('open');
+}
+document.getElementById('chatBtn').addEventListener('click', openChat);
+document.getElementById('chatClose').addEventListener('click', closeChat);
+document.getElementById('chatOverlay').addEventListener('click', closeChat);
+
+document.getElementById('chatSendBtn').addEventListener('click', sendChatMessage);
+document.getElementById('chatInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }
+});
+
+function appendChatBubble(role, text) {
+  const messages = document.getElementById('chatMessages');
+  const bubble = document.createElement('div');
+  bubble.className = 'chat-bubble ' + role;
+  bubble.textContent = text;
+  messages.appendChild(bubble);
+  messages.scrollTop = messages.scrollHeight;
+  return bubble;
+}
+
+async function sendChatMessage() {
+  const input = document.getElementById('chatInput');
+  const msg   = input.value.trim();
+  if (!msg) return;
+
+  const btn = document.getElementById('chatSendBtn');
+  btn.disabled = true;
+  btn.classList.add('btn-loading');
+
+  input.value = '';
+  appendChatBubble('user', msg);
+  chatHistory.push({ role: 'user', content: msg });
+
+  const typing = appendChatBubble('aria typing', '…');
+
+  try {
+    const resp = await fetch('/api/agent01/chat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: msg, history: chatHistory.slice(-10) }),
+    });
+    const data = await resp.json();
+    typing.remove();
+    btn.disabled = false;
+    btn.classList.remove('btn-loading');
+    
+    const reply = data.reply || data.error || 'No response.';
+    appendChatBubble('aria', reply);
+    chatHistory.push({ role: 'assistant', content: reply });
+  } catch (e) {
+    typing.remove();
+    btn.disabled = false;
+    btn.classList.remove('btn-loading');
+    appendChatBubble('aria', '⚠ Error: ' + e.message);
+  }
+}
+
+// ── Approval modal ─────────────────────────────────────────────────────────
+document.getElementById('proceedBtn').addEventListener('click', () => {
+  document.getElementById('modalComment').value = '';
+  document.getElementById('approvalModal').classList.add('open');
+});
+document.getElementById('modalCancelBtn').addEventListener('click', () => {
+  document.getElementById('approvalModal').classList.remove('open');
+});
+
+document.getElementById('modalApproveBtn').addEventListener('click', () => submitApproval('approve'));
+document.getElementById('modalRejectBtn').addEventListener('click', () => submitApproval('reject'));
+
+async function submitApproval(action) {
+  const comment = document.getElementById('modalComment').value.trim();
+  const approveBtn = document.getElementById('modalApproveBtn');
+  const rejectBtn  = document.getElementById('modalRejectBtn');
+  
+  const targetBtn = action === 'approve' ? approveBtn : rejectBtn;
+  targetBtn.classList.add('btn-loading');
+  approveBtn.disabled = true; rejectBtn.disabled = true;
+
+  try {
+    const resp = await fetch(`/api/agent01/${action}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ comment: comment || (action === 'approve' ? 'Approved via ARIA UI' : 'Rejected via ARIA UI') }),
+    });
+
+    targetBtn.classList.remove('btn-loading');
+
+    document.getElementById('approvalModal').classList.remove('open');
+
+    if (action === 'approve') {
+      document.getElementById('successAlert').innerHTML =
+        '✅ Stage approved! <br><small>Navigating to Agent 02 (Test Case Generator)...</small>';
+      document.getElementById('successAlert').classList.remove('hidden');
+      document.getElementById('proceedBtn').disabled = true;
+      document.getElementById('proceedBtn').textContent = '✅ Approved';
+      document.getElementById('actionBar').style.borderTopColor = 'var(--success)';
+      // Update pipeline bar
+      document.querySelector('.step-node.active').classList.add('done');
+      
+      // Auto-navigate to Agent 02 UI after a short delay
+      setTimeout(() => {
+        window.location.href = window.location.protocol + '//' + window.location.hostname + ':3001';
+      }, 2500);
+    } else {
+      document.getElementById('rejectedAlert').textContent =
+        '❌ Stage rejected. Fix the issues and re-run Analysis.';
+      document.getElementById('rejectedAlert').classList.remove('hidden');
+      document.getElementById('actionBar').classList.add('hidden');
+      showOnly('phaseInput');
+      // Reset
+      selectedFile = null;
+      document.getElementById('dropZone').classList.remove('has-file');
+      document.getElementById('dzText').textContent = 'Drop .md or .txt file here, or click to browse';
+    }
+
+    if (!resp.ok) {
+      const err = await resp.json();
+      console.warn('Approval gate response:', err.error);
+    }
+
+  } catch (e) {
+    targetBtn.classList.remove('btn-loading');
+    alert('Could not reach approval gate: ' + e.message +
+          '\n\nMake sure the agent is still running and waiting for approval.');
+    approveBtn.disabled = false; rejectBtn.disabled = false;
+  }
+}
+
+// ── Utility ────────────────────────────────────────────────────────────────
+function escHtml(str) {
+  return String(str || '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Auto-resize chat textarea
+document.getElementById('chatInput').addEventListener('input', function() {
+  this.style.height = 'auto';
+  this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+});
+</script>
+</body>
+</html>

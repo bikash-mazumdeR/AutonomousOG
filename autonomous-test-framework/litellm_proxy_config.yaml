@@ -1,0 +1,112 @@
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# LiteLLM Proxy Configuration for ARIA Framework
+#
+# Usage:
+#   pip install 'litellm[proxy]'
+#   litellm --config litellm_proxy_config.yaml --port 4000
+#
+# Then in autonomous-test-framework/.env set:
+#   LITELLM_PROXY_URL=http://localhost:4000
+#   LITELLM_PROXY_API_KEY=sk-your-master-key
+#
+# IMPORTANT: Model names defined here must EXACTLY match the model names
+# configured in autonomous-test-framework/config/framework.config.ts
+# under the `llm.models` and `llm.fallbacks` entries.
+#
+# Docs: https://docs.litellm.ai/docs/proxy/quick_start
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+model_list:
+
+  # ── Gemini models ───────────────────────────────────────────────────────────
+  # These virtual names are used by the default / coding / data / large profiles
+  # in framework.config.ts. Map them to the real Gemini model identifiers below.
+
+  - model_name: gemini-3.5-flash
+    litellm_params:
+      model: gemini/gemini-2.0-flash
+      api_key: os.environ/GEMINI_API_KEY
+
+  - model_name: gemini-3.6-flash
+    litellm_params:
+      model: gemini/gemini-2.0-flash
+      api_key: os.environ/GEMINI_API_KEY
+
+  - model_name: gemini-3.7-flash
+    litellm_params:
+      model: gemini/gemini-2.0-flash
+      api_key: os.environ/GEMINI_API_KEY
+
+  - model_name: gemini-3.8-flash
+    litellm_params:
+      model: gemini/gemini-2.0-flash
+      api_key: os.environ/GEMINI_API_KEY
+
+  - model_name: gemini-flash-latest
+    litellm_params:
+      model: gemini/gemini-2.0-flash-latest
+      api_key: os.environ/GEMINI_API_KEY
+
+  - model_name: gemini-3.1-flash-lite-preview
+    litellm_params:
+      model: gemini/gemini-2.0-flash-lite
+      api_key: os.environ/GEMINI_API_KEY
+
+  - model_name: gemini-3.1-flash-lite
+    litellm_params:
+      model: gemini/gemini-2.0-flash-lite
+      api_key: os.environ/GEMINI_API_KEY
+
+  - model_name: gemini-flash-lite-latest
+    litellm_params:
+      model: gemini/gemini-2.0-flash-lite
+      api_key: os.environ/GEMINI_API_KEY
+
+  - model_name: gemini-2.5-pro
+    litellm_params:
+      model: gemini/gemini-2.5-pro
+      api_key: os.environ/GEMINI_API_KEY
+
+  # ── OpenAI models ───────────────────────────────────────────────────────────
+  # Used by the `vision` profile in framework.config.ts.
+
+  - model_name: gpt-4o
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+
+  - model_name: gpt-4o-mini
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+
+  # ── Anthropic models ────────────────────────────────────────────────────────
+  # If you switch the `coding` profile to Claude, add/enable these aliases
+  # and set ANTHROPIC_API_KEY in your shell environment.
+
+  - model_name: claude-3-5-sonnet-20240620
+    litellm_params:
+      model: anthropic/claude-3-5-sonnet-20240620
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  # ── Example: Ollama local model (uncomment to enable) ───────────────────────
+  # - model_name: llama3
+  #   litellm_params:
+  #     model: ollama/llama3
+  #     api_base: http://localhost:11434
+
+
+# ── LiteLLM Global Settings ──────────────────────────────────────────────────
+litellm_settings:
+  # Silently drop unsupported parameters (e.g. response_format on Gemini)
+  drop_params: true
+  # Request timeout in seconds (align with ARIA's 120s provider timeout)
+  request_timeout: 120
+  # Automatically fall back to next model in the list on errors
+  num_retries: 1
+
+# ── General Settings ─────────────────────────────────────────────────────────
+general_settings:
+  # Must match LITELLM_PROXY_API_KEY in autonomous-test-framework/.env
+  master_key: os.environ/LITELLM_PROXY_API_KEY
+  port: 4000

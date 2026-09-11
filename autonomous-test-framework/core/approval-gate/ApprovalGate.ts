@@ -164,7 +164,7 @@ export class ApprovalGate {
       });
 
       let server: http.Server;
-      const port = (FRAMEWORK_CONFIG as any).approvalWebhookPort || 8080;
+      const port = (FRAMEWORK_CONFIG as any).approvalWebhookPort || parseInt(process.env.APPROVAL_WEBHOOK_PORT || '8081', 10);
 
       const cleanup = () => {
         if (timeoutHandle) clearTimeout(timeoutHandle);

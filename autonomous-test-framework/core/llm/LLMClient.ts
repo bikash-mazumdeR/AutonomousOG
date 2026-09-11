@@ -7,6 +7,7 @@ import { LLMProvider, LLMChatOptions, LLMResponse } from './providers/LLMProvide
 import { OpenAIProvider } from './providers/OpenAIProvider';
 import { AnthropicProvider } from './providers/AnthropicProvider';
 import { GeminiProvider } from './providers/GeminiProvider';
+import { LiteLLMProvider } from './providers/LiteLLMProvider';
 import { TokenUsage } from '../types';
 import axios from 'axios';
 
@@ -28,6 +29,25 @@ export class LLMClient {
   }
 
   private _initializeProviders() {
+    // ── Hybrid mode: LiteLLM proxy takes precedence ─────────────────────────
+    // When LITELLM_PROXY_URL is set, ALL chat calls are routed through the proxy
+    // regardless of which `provider` is specified in framework.config.ts.
+    // The proxy is responsible for routing model names to the correct vendor.
+    const proxyUrl = process.env.LITELLM_PROXY_URL;
+    if (proxyUrl) {
+      const proxyKey = process.env.LITELLM_PROXY_API_KEY || 'litellm';
+      const proxy = new LiteLLMProvider(proxyUrl, proxyKey);
+      // Register under ALL provider names so the candidate loop in chat()
+      // routes every configured model (gemini, openai, anthropic) through the proxy.
+      this._providers.set('openai',    proxy);
+      this._providers.set('anthropic', proxy);
+      this._providers.set('gemini',    proxy);
+      this._providers.set('litellm',   proxy);
+      logger.info('LiteLLM proxy mode active — all chat calls routed through proxy.', { proxyUrl });
+      return;
+    }
+
+    // ── Direct mode: use individual vendor providers ─────────────────────────
     if (process.env.OPENAI_API_KEY) {
       this._providers.set('openai', new OpenAIProvider(process.env.OPENAI_API_KEY));
     }
@@ -38,6 +58,7 @@ export class LLMClient {
       this._providers.set('gemini', new GeminiProvider(process.env.GEMINI_API_KEY));
     }
   }
+
 
   /**
    * Generates a vector embedding for the given text.
