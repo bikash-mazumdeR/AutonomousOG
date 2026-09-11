@@ -1,0 +1,295 @@
+name: ARIA — Autonomous Test Pipeline
+
+on:
+  push:
+    branches: [main, develop, release/**]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options: [staging, uat, production]
+      approval_mode:
+        description: 'Approval mode (manual gates disabled in CI)'
+        required: false
+        default: 'auto'
+        type: choice
+        options: [auto, manual]
+      start_from_stage:
+        description: 'Start pipeline from stage (01-11)'
+        required: false
+        default: '01'
+
+concurrency:
+  group: aria-pipeline-${{ github.ref }}
+  cancel-in-progress: false   # Never cancel a running test pipeline
+
+# ─── Environment Variables ────────────────────────────────────────────
+env:
+  NODE_VERSION: '20.x'
+  PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers
+
+jobs:
+  # ════════════════════════════════════════════════════════
+  # JOB 1: Framework Validation & Setup
+  # ════════════════════════════════════════════════════════
+  setup:
+    name: 🔧 Framework Setup & Validation
+    runs-on: ubuntu-latest
+    outputs:
+      run-id: ${{ steps.meta.outputs.run-id }}
+      environment: ${{ steps.meta.outputs.environment }}
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: ⚙️ Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci --prefer-offline
+
+      - name: 🔍 ESLint — Lint framework code
+        run: npm run lint:check
+
+      - name: 🧪 Run unit tests
+        run: npm run test:unit
+
+      - name: 📋 Set pipeline metadata
+        id: meta
+        run: |
+          echo "run-id=aria-${{ github.run_id }}-${{ github.run_attempt }}" >> $GITHUB_OUTPUT
+          echo "environment=${{ github.event.inputs.environment || 'staging' }}" >> $GITHUB_OUTPUT
+
+      - name: ✅ Validate framework config
+        run: npm run framework:validate
+        env:
+          AUT_BASE_URL: ${{ secrets.AUT_BASE_URL }}
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          JIRA_PROJECT_KEY: ${{ secrets.JIRA_PROJECT_KEY }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          GMAIL_FROM: ${{ secrets.GMAIL_FROM }}
+          GMAIL_TO: ${{ secrets.GMAIL_TO }}
+
+  # ════════════════════════════════════════════════════════
+  # JOB 2: Install & Cache Playwright Browsers
+  # ════════════════════════════════════════════════════════
+  install-browsers:
+    name: 🌐 Install Playwright Browsers
+    runs-on: ubuntu-latest
+    needs: setup
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - run: npm ci --prefer-offline
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          key: playwright-browsers-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: playwright-browsers-${{ runner.os }}-
+
+      - name: 📥 Install Playwright browsers (if not cached)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium firefox webkit
+
+  # ════════════════════════════════════════════════════════
+  # JOB 3: Run ARIA Test Pipeline (CI Mode — Auto Gates)
+  # ════════════════════════════════════════════════════════
+  run-pipeline:
+    name: 🤖 ARIA Autonomous Test Pipeline
+    runs-on: ubuntu-latest
+    needs: [setup, install-browsers]
+    timeout-minutes: 120
+
+    strategy:
+      matrix:
+        browser: [chromium]
+      fail-fast: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - run: npm ci --prefer-offline
+
+      - name: Restore Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          key: playwright-browsers-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install Playwright system dependencies
+        run: npx playwright install-deps ${{ matrix.browser }}
+
+      - name: Install K6
+        run: |
+          curl https://github.com/grafana/k6/releases/download/v0.51.0/k6-v0.51.0-linux-amd64.tar.gz -L | tar xvz --strip-components 1
+          sudo mv k6 /usr/local/bin/k6
+
+      - name: 🚀 Start ARIA Pipeline
+        run: npm run pipeline:start
+        env:
+          # Application
+          AUT_BASE_URL:         ${{ secrets.AUT_BASE_URL }}
+          AUT_ENVIRONMENT:      ${{ needs.setup.outputs.environment }}
+          # Playwright
+          PLAYWRIGHT_HEADLESS:  true
+          PLAYWRIGHT_WORKERS:   4
+          PLAYWRIGHT_TIMEOUT:   30000
+          PLAYWRIGHT_RETRIES:   2
+          PLAYWRIGHT_BROWSERS_PATH: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          # Jira
+          JIRA_BASE_URL:        ${{ secrets.JIRA_BASE_URL }}
+          JIRA_EMAIL:           ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN:       ${{ secrets.JIRA_API_TOKEN }}
+          JIRA_PROJECT_KEY:     ${{ secrets.JIRA_PROJECT_KEY }}
+          JIRA_BOARD_ID:        ${{ secrets.JIRA_BOARD_ID }}
+          # Gmail
+          GMAIL_USER:           ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD:   ${{ secrets.GMAIL_APP_PASSWORD }}
+          GMAIL_FROM:           ${{ secrets.GMAIL_FROM }}
+          GMAIL_TO:             ${{ secrets.GMAIL_TO }}
+          # Framework
+          FRAMEWORK_LOG_LEVEL:  info
+          FRAMEWORK_PROJECT_ID: ${{ needs.setup.outputs.run-id }}
+          FRAMEWORK_APPROVAL_MODE: auto
+          FRAMEWORK_MAX_THREADS: 4
+          # K6
+          K6_VUS:               10
+          K6_DURATION:          30s
+          K6_THRESHOLD_P95:     500
+
+      - name: 📊 Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ matrix.browser }}-${{ github.run_id }}
+          path: |
+            reports/html/
+            reports/json/
+          retention-days: 30
+
+      - name: 📸 Upload test attachments
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-attachments-${{ matrix.browser }}-${{ github.run_id }}
+          path: |
+            reports/attachments/screenshots/
+            reports/attachments/network-logs/
+            reports/attachments/console-logs/
+          retention-days: 14
+
+      - name: 📝 Upload pipeline state & memory
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-state-${{ github.run_id }}
+          path: |
+            .state/
+            core/project-memory/memory.json
+          retention-days: 90
+
+  # ════════════════════════════════════════════════════════
+  # JOB 4: Re-test Failed Cases (if any failures)
+  # ════════════════════════════════════════════════════════
+  retest-failed:
+    name: 🔄 Re-test Healed Test Cases
+    runs-on: ubuntu-latest
+    needs: run-pipeline
+    if: failure()
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - run: npm ci --prefer-offline
+
+      - name: Download pipeline state
+        uses: actions/download-artifact@v4
+        with:
+          name: pipeline-state-${{ github.run_id }}
+
+      - name: Restore Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          key: playwright-browsers-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: 🔄 Run Agent 11 — Re-test Failed
+        run: npm run agent:11
+        env:
+          AUT_BASE_URL:            ${{ secrets.AUT_BASE_URL }}
+          PLAYWRIGHT_HEADLESS:     true
+          PLAYWRIGHT_BROWSERS_PATH: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          FRAMEWORK_APPROVAL_MODE: auto
+          FRAMEWORK_PROJECT_ID:    ${{ needs.setup.outputs.run-id }}
+          GEMINI_API_KEY:          ${{ secrets.GEMINI_API_KEY }}
+          OPENAI_API_KEY:          ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY:       ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: 📊 Upload retest report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: retest-report-${{ github.run_id }}
+          path: reports/
+          retention-days: 30
+
+  # ════════════════════════════════════════════════════════
+  # JOB 5: Publish GitHub Pages Report (main branch only)
+  # ════════════════════════════════════════════════════════
+  publish-report:
+    name: 📄 Publish Test Report
+    runs-on: ubuntu-latest
+    needs: run-pipeline
+    if: always() && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+      pages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download HTML report
+        uses: actions/download-artifact@v4
+        with:
+          name: playwright-report-chromium-${{ github.run_id }}
+          path: reports/
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir:  reports/html/
+          destination_dir: reports/${{ github.run_id }}

@@ -1,0 +1,3552 @@
+{
+  "version": "1.0.0",
+  "projectId": "default",
+  "createdAt": "2026-05-12T00:00:00.000Z",
+  "updatedAt": "2026-09-11T10:22:23.177Z",
+  "cycles": [
+    {
+      "id": "cycle_1789122143177",
+      "timestamp": "2026-09-11T10:22:23.177Z",
+      "runId": "run_1789122143164",
+      "passRate": 86,
+      "totalTests": 22,
+      "bugsFound": 3,
+      "autoHeals": 0,
+      "stages": {
+        "07-test-runner": "COMPLETED"
+      },
+      "keyLearnings": [
+        "Flaky: TC-008",
+        "Flaky: TC-009",
+        "Flaky: TC-017"
+      ]
+    },
+    {
+      "id": "cycle_1789121146512",
+      "timestamp": "2026-09-11T10:05:46.512Z",
+      "runId": "run_1789121146499",
+      "passRate": 86,
+      "totalTests": 22,
+      "bugsFound": 3,
+      "autoHeals": 0,
+      "stages": {
+        "07-test-runner": "COMPLETED"
+      },
+      "keyLearnings": [
+        "Flaky: TC-008",
+        "Flaky: TC-009",
+        "Flaky: TC-017"
+      ]
+    },
+    {
+      "id": "cycle_1789120536990",
+      "timestamp": "2026-09-11T09:55:36.990Z",
+      "runId": "run_1789120536987",
+      "passRate": 97,
+      "totalTests": 34,
+      "bugsFound": 0,
+      "autoHeals": 0,
+      "stages": {
+        "07-test-runner": "COMPLETED"
+      },
+      "keyLearnings": []
+    },
+    {
+      "id": "cycle_1789120336286",
+      "timestamp": "2026-09-11T09:52:16.286Z",
+      "runId": "run_1789120336281",
+      "passRate": 97,
+      "totalTests": 34,
+      "bugsFound": 0,
+      "autoHeals": 0,
+      "stages": {
+        "07-test-runner": "COMPLETED"
+      },
+      "keyLearnings": []
+    },
+    {
+      "id": "cycle_1789058794276",
+      "timestamp": "2026-09-10T16:46:34.276Z",
+      "runId": "run_1789047856418",
+      "passRate": 0,
+      "totalTests": 0,
+      "bugsFound": 0,
+      "autoHeals": 0,
+      "stages": {
+        "01-requirement-analyzer": "PENDING",
+        "02-test-case-generator": "PENDING",
+        "03-test-case-reviewer": "PENDING",
+        "04-test-data-generator": "PENDING",
+        "05-playwright-script-generator": "PENDING",
+        "06-automation-reviewer": "SKIPPED",
+        "07-test-runner": "SKIPPED",
+        "08-bug-reporter": "SKIPPED",
+        "09-report-generator": "SKIPPED",
+        "10-auto-healer": "SKIPPED",
+        "11-retest-agent": "SKIPPED"
+      },
+      "keyLearnings": []
+    },
+    {
+      "id": "cycle_1789058423828",
+      "timestamp": "2026-09-10T16:40:23.828Z",
+      "runId": "run_1789047856418",
+      "passRate": 0,
+      "totalTests": 0,
+      "bugsFound": 0,
+      "autoHeals": 0,
+      "stages": {
+        "01-requirement-analyzer": "PENDING",
+        "02-test-case-generator": "PENDING",
+        "03-test-case-reviewer": "PENDING",
+        "04-test-data-generator": "PENDING",
+        "05-playwright-script-generator": "PENDING",
+        "06-automation-reviewer": "SKIPPED",
+        "07-test-runner": "SKIPPED",
+        "08-bug-reporter": "SKIPPED",
+        "09-report-generator": "SKIPPED",
+        "10-auto-healer": "SKIPPED",
+        "11-retest-agent": "SKIPPED"
+      },
+      "keyLearnings": []
+    },
+    {
+      "id": "cycle_1789055796013",
+      "timestamp": "2026-09-10T15:56:36.013Z",
+      "runId": "run_1789054468779",
+      "passRate": 0,
+      "totalTests": 0,
+      "bugsFound": 0,
+      "stages": {
+        "01-requirement-analyzer": "COMPLETED",
+        "02-test-case-generator": "COMPLETED",
+        "03-test-case-reviewer": "COMPLETED",
+        "04-test-data-generator": "COMPLETED",
+        "05-playwright-script-generator": "COMPLETED",
+        "06-automation-reviewer": "COMPLETED",
+        "07-test-runner": "COMPLETED",
+        "08-bug-reporter": "FAILED",
+        "09-report-generator": "SKIPPED",
+        "10-auto-healer": "COMPLETED",
+        "11-retest-agent": "COMPLETED"
+      },
+      "keyLearnings": []
+    },
+    {
+      "id": "cycle_1789055786017",
+      "timestamp": "2026-09-10T15:56:26.017Z",
+      "runId": "retest_1789055786015",
+      "passRate": 100,
+      "totalTests": 35,
+      "bugsFound": 0,
+      "autoHeals": 1,
+      "stages": {
+        "11-retest-agent": "COMPLETED"
+      },
+      "keyLearnings": [
+        "Healed: TC-012"
+      ]
+    },
+    {
+      "id": "cycle_1789055775057",
+      "timestamp": "2026-09-10T15:56:15.057Z",
+      "runId": "run_1789055775056",
+      "passRate": 100,
+      "totalTests": 1,
+      "bugsFound": 0,
+      "autoHeals": 0,
+      "stages": {
+        "07-test-runner": "COMPLETED"
+      },
+      "keyLearnings": []
+    },
+    {
+      "id": "cycle_1789054670123",
+      "timestamp": "2026-09-10T15:37:50.123Z",
+      "runId": "run_1789054670118",
+      "passRate": 97,
+      "totalTests": 35,
+      "bugsFound": 1,
+      "autoHeals": 0,
+      "stages": {
+        "07-test-runner": "COMPLETED"
+      },
+      "keyLearnings": [
+        "Flaky: TC-012"
+      ]
+    },
+    {
+      "id": "cycle_1789051761519",
+      "timestamp": "2026-09-10T14:49:21.519Z",
+      "runId": "run_1789051761172",
+      "passRate": 24,
+      "totalTests": 33,
+      "bugsFound": 25,
+      "autoHeals": 0,
+      "stages": {
+        "07-test-runner": "COMPLETED"
+      },
+      "keyLearnings": [
+        "Flaky: TC-001",
+        "Flaky: TC-002",
+        "Flaky: TC-003",
+        "Flaky: TC-004",
+        "Flaky: TC-005",
+        "Flaky: TC-007",
+        "Flaky: TC-008",
+        "Flaky: TC-009",
+        "Flaky: TC-010",
+        "Flaky: TC-012",
+        "Flaky: TC-013",
+        "Flaky: TC-015",
+        "Flaky: TC-016",
+        "Flaky: TC-017",
+        "Flaky: TC-019",
+        "Flaky: TC-021",
+        "Flaky: TC-022",
+        "Flaky: TC-023",
+        "Flaky: TC-024",
+        "Flaky: TC-025",
+        "Flaky: TC-027",
+        "Flaky: TC-028",
+        "Flaky: TC-030",
+        "Flaky: TC-031",
+        "Flaky: TC-032"
+      ]
+    },
+    {
+      "id": "cycle_1789041978819",
+      "timestamp": "2026-09-10T12:06:18.819Z",
+      "runId": "run_1789041978668",
+      "passRate": 63,
+      "totalTests": 27,
+      "bugsFound": 10,
+      "autoHeals": 0,
+      "stages": {
+        "07-test-runner": "COMPLETED"
+      },
+      "keyLearnings": [
+        "Flaky: TC-001",
+        "Flaky: TC-004",
+        "Flaky: TC-006",
+        "Flaky: TC-009",
+        "Flaky: TC-011",
+        "Flaky: TC-013",
+        "Flaky: TC-016",
+        "Flaky: TC-017",
+        "Flaky: TC-019",
+        "Flaky: TC-021"
+      ]
+    },
+    {
+      "id": "cycle_1789037053293",
+      "timestamp": "2026-09-10T10:44:13.293Z",
+      "runId": "run_1789037053273",
+      "passRate": 84,
+      "totalTests": 32,
+      "bugsFound": 5,
+      "autoHeals": 0,
+      "stages": {
+        "07-test-runner": "COMPLETED"
+      },
+      "keyLearnings": [
+        "Flaky: TC-027",
+        "Flaky: TC-028",
+        "Flaky: TC-029",
+        "Flaky: TC-030",
+        "Flaky: TC-031"
+      ]
+    },
+    {
+      "id": "cycle_1788972237342",
+      "timestamp": "2026-09-09T16:43:57.342Z",
+      "runId": "run_1788972237171",
+      "passRate": 56,
+      "totalTests": 32,
+      "bugsFound": 14,
+      "autoHeals": 0,
+      "stages": {
+        "07-test-runner": "COMPLETED"
+      },
+      "keyLearnings": [
+        "Flaky: TC-027",
+        "Flaky: TC-028",
+        "Flaky: TC-029",
+        "Flaky: TC-030",
+        "Flaky: TC-031",
+        "Flaky: TC-006",
+        "Flaky: TC-007",
+        "Flaky: TC-010",
+        "Flaky: TC-011",
+        "Flaky: TC-012",
+        "Flaky: TC-013",
+        "Flaky: TC-014",
+        "Flaky: TC-018",
+        "Flaky: TC-019"
+      ]
+    },
+    {
+      "id": "cycle_1788972023844",
+      "timestamp": "2026-09-09T16:40:23.844Z",
+      "runId": "retest_1788972023843",
+      "passRate": 56,
+      "totalTests": 32,
+      "bugsFound": 7,
+      "autoHeals": 7,
+      "stages": {
+        "11-retest-agent": "COMPLETED"
+      },
+      "keyLearnings": [
+        "Healed: TC-027",
+        "Healed: TC-028",
+        "Healed: TC-029",
+        "Healed: TC-030",
+        "Healed: TC-031",
+        "Healed: TC-018",
+        "Healed: TC-019"
+      ]
+    },
+    {
+      "id": "cycle_1788972003185",
+      "timestamp": "2026-09-09T16:40:03.185Z",
+      "runId": "run_1788972003155",
+      "passRate": 0,
+      "totalTests": 7,
+      "bugsFound": 7,
+      "autoHeals": 0,
+      "stages": {
+        "07-test-runner": "COMPLETED"
+      },
+      "keyLearnings": [
+        "Flaky: TC-006",
+        "Flaky: TC-007",
+        "Flaky: TC-010",
+        "Flaky: TC-011",
+        "Flaky: TC-012",
+        "Flaky: TC-013",
+        "Flaky: TC-014"
+      ]
+    },
+    {
+      "id": "cycle_1788971695997",
+      "timestamp": "2026-09-09T16:34:55.997Z",
+      "runId": "run_1788971695587",
+      "passRate": 56,
+      "totalTests": 32,
+      "bugsFound": 14,
+      "autoHeals": 0,
+      "stages": {
+        "07-test-runner": "COMPLETED"
+      },
+      "keyLearnings": [
+        "Flaky: TC-027",
+        "Flaky: TC-028",
+        "Flaky: TC-029",
+        "Flaky: TC-030",
+        "Flaky: TC-031",
+        "Flaky: TC-006",
+        "Flaky: TC-007",
+        "Flaky: TC-010",
+        "Flaky: TC-011",
+        "Flaky: TC-012",
+        "Flaky: TC-013",
+        "Flaky: TC-014",
+        "Flaky: TC-018",
+        "Flaky: TC-019"
+      ]
+    },
+    {
+      "id": "cycle_1788969493298",
+      "timestamp": "2026-09-09T15:58:13.298Z",
+      "runId": "run_1788969493295",
+      "passRate": 100,
+      "totalTests": 1,
+      "bugsFound": 0,
+      "autoHeals": 0,
+      "stages": {
+        "07-test-runner": "COMPLETED"
+      },
+      "keyLearnings": []
+    },
+    {
+      "id": "cycle_1788968408918",
+      "timestamp": "2026-09-09T15:40:08.918Z",
+      "runId": "run_1788968408833",
+      "passRate": 96,
+      "totalTests": 26,
+      "bugsFound": 1,
+      "autoHeals": 0,
+      "stages": {
+        "07-test-runner": "COMPLETED"
+      },
+      "keyLearnings": [
+        "Flaky: TC-008"
+      ]
+    },
+    {
+      "id": "cycle_1788967154724",
+      "timestamp": "2026-09-09T15:19:14.724Z",
+      "runId": "run_1788967154718",
+      "passRate": 0,
+      "totalTests": 0,
+      "bugsFound": 0,
+      "autoHeals": 0,
+      "stages": {
+        "07-test-runner": "COMPLETED"
+      },
+      "keyLearnings": []
+    },
+    {
+      "id": "cycle_1788966816999",
+      "timestamp": "2026-09-09T15:13:36.999Z",
+      "runId": "run_1788966816995",
+      "passRate": 0,
+      "totalTests": 0,
+      "bugsFound": 0,
+      "autoHeals": 0,
+      "stages": {
+        "07-test-runner": "COMPLETED"
+      },
+      "keyLearnings": []
+    },
+    {
+      "id": "cycle_1788936328648",
+      "timestamp": "2026-09-09T06:45:28.648Z",
+      "runId": "run_1788936328644",
+      "passRate": 0,
+      "totalTests": 0,
+      "bugsFound": 0,
+      "autoHeals": 0,
+      "stages": {
+        "07-test-runner": "COMPLETED"
+      },
+      "keyLearnings": []
+    },
+    {
+      "id": "cycle_1788878103752",
+      "timestamp": "2026-09-08T14:35:03.752Z",
+      "runId": "run_1788878103748",
+      "passRate": 0,
+      "totalTests": 0,
+      "bugsFound": 0,
+      "autoHeals": 0,
+      "stages": {
+        "07-test-runner": "COMPLETED"
+      },
+      "keyLearnings": []
+    },
+    {
+      "id": "cycle_1788868159375",
+      "timestamp": "2026-09-08T11:49:19.375Z",
+      "runId": "run_1788868159371",
+      "passRate": 0,
+      "totalTests": 0,
+      "bugsFound": 0,
+      "autoHeals": 0,
+      "stages": {
+        "07-test-runner": "COMPLETED"
+      },
+      "keyLearnings": []
+    },
+    {
+      "id": "cycle_1788866060036",
+      "timestamp": "2026-09-08T11:14:20.036Z",
+      "runId": "run_1788866060032",
+      "passRate": 0,
+      "totalTests": 0,
+      "bugsFound": 0,
+      "autoHeals": 0,
+      "stages": {
+        "07-test-runner": "COMPLETED"
+      },
+      "keyLearnings": []
+    },
+    {
+      "id": "cycle_1788864164926",
+      "timestamp": "2026-09-08T10:42:44.926Z",
+      "runId": "run_1788864164918",
+      "passRate": 0,
+      "totalTests": 0,
+      "bugsFound": 0,
+      "autoHeals": 0,
+      "stages": {
+        "07-test-runner": "COMPLETED"
+      },
+      "keyLearnings": []
+    },
+    {
+      "id": "cycle_1788859736888",
+      "timestamp": "2026-09-08T09:28:56.888Z",
+      "runId": "run_1788859736885",
+      "passRate": 0,
+      "totalTests": 0,
+      "bugsFound": 0,
+      "autoHeals": 0,
+      "stages": {
+        "07-test-runner": "COMPLETED"
+      },
+      "keyLearnings": []
+    },
+    {
+      "id": "cycle_1788850881286",
+      "timestamp": "2026-09-08T07:01:21.286Z",
+      "runId": "run_1788850604869",
+      "passRate": 0,
+      "totalTests": 0,
+      "stages": {
+        "01-requirement-analyzer": "COMPLETED",
+        "02-test-case-generator": "COMPLETED",
+        "03-test-case-reviewer": "COMPLETED",
+        "04-test-data-generator": "COMPLETED",
+        "05-playwright-script-generator": "COMPLETED",
+        "06-automation-reviewer": "COMPLETED",
+        "07-test-runner": "COMPLETED",
+        "08-bug-reporter": "COMPLETED",
+        "09-report-generator": "COMPLETED",
+        "10-auto-healer": "COMPLETED",
+        "11-retest-agent": "COMPLETED"
+      },
+      "keyLearnings": []
+    },
+    {
+      "id": "cycle_1788850874501",
+      "timestamp": "2026-09-08T07:01:14.501Z",
+      "runId": "run_1788850874497",
+      "passRate": 0,
+      "totalTests": 0,
+      "bugsFound": 0,
+      "autoHeals": 0,
+      "stages": {
+        "07-test-runner": "COMPLETED"
+      },
+      "keyLearnings": []
+    }
+  ],
+  "globalLearnings": {
+    "selectorPatterns": {},
+    "knownBugs": [
+      {
+        "title": "[STAGING][Medium][TC-DEDUP-1778568779754] Duplicate Bug Test Case",
+        "hash": "ca450688940e8893",
+        "jiraKey": "SD-6",
+        "severity": "Medium",
+        "firstSeen": "2026-05-12T06:53:03.309Z",
+        "occurrences": 1
+      },
+      {
+        "title": "Verified Bug Status Test",
+        "hash": "mock-hash-1778569145131",
+        "jiraKey": "SD-6",
+        "tcKey": "TC-RETEST-1778569145131",
+        "severity": "Medium",
+        "firstSeen": "2026-05-12T06:59:05.132Z",
+        "occurrences": 1
+      },
+      {
+        "title": "Verified Bug Status Test",
+        "hash": "mock-hash-1778569203521",
+        "jiraKey": "SD-6",
+        "tcKey": "TC-RETEST-1778569203521",
+        "severity": "Medium",
+        "firstSeen": "2026-05-12T07:00:03.523Z",
+        "occurrences": 1
+      },
+      {
+        "title": "Verified Bug Status Test",
+        "hash": "mock-hash-1778569275632",
+        "jiraKey": "SD-6",
+        "tcKey": "TC-RETEST-1778569275632",
+        "severity": "Medium",
+        "firstSeen": "2026-05-12T07:01:15.634Z",
+        "occurrences": 1
+      },
+      {
+        "tcKey": "TC-SD5-1778570215770",
+        "jiraKey": "SD-5",
+        "hash": "h5",
+        "firstSeen": "2026-05-12T07:16:55.773Z",
+        "occurrences": 1
+      },
+      {
+        "tcKey": "TC-SD3-1778570215771",
+        "jiraKey": "SD-3",
+        "hash": "h3",
+        "firstSeen": "2026-05-12T07:16:55.774Z",
+        "occurrences": 1
+      }
+    ],
+    "healingStrategies": [
+      {
+        "name": "ASSERTION_RELAX",
+        "description": "Relaxed strict equality to containment",
+        "condition": "assertion",
+        "action": "Patched F-01-swag-labs-authentication-portal.spec.js",
+        "successRate": 1,
+        "successCount": 13,
+        "addedAt": "2026-09-09T15:48:56.187Z",
+        "lastUsed": "2026-09-09T16:40:23.821Z"
+      },
+      {
+        "name": "AGENTIC_RAG_LLM",
+        "description": "Healed using semantic RAG and LLM reasoning",
+        "condition": "complex",
+        "action": "LLM-Patched F-01-swag-labs-authentication-portal-api.spec.js",
+        "successRate": 1,
+        "successCount": 10,
+        "addedAt": "2026-09-09T16:37:38.104Z",
+        "lastUsed": "2026-09-09T16:40:23.816Z"
+      }
+    ],
+    "testDataPatterns": {},
+    "failurePatterns": [],
+    "approvalFeedback": [
+      {
+        "id": "fb_1778595388031",
+        "stageId": "09-report-generator",
+        "status": "APPROVED",
+        "comment": "Approved",
+        "content": "",
+        "timestamp": "2026-05-12T14:16:28.031Z"
+      },
+      {
+        "id": "fb_1778595903698",
+        "stageId": "09-report-generator",
+        "status": "APPROVED",
+        "comment": "Approved",
+        "content": "",
+        "timestamp": "2026-05-12T14:25:03.698Z"
+      },
+      {
+        "id": "fb_1778684924575",
+        "stageId": "01-requirement-analyzer",
+        "status": "REJECTED",
+        "comment": "Requirements analysis incomplete: missing UI/UX, Performance, Security, and Accessibility requirements from the Jira story. Gherkin coverage is insufficient.",
+        "content": "",
+        "timestamp": "2026-05-13T15:08:44.575Z"
+      },
+      {
+        "id": "fb_1778684924578",
+        "stageId": "01-requirement-analyzer",
+        "status": "REJECTED",
+        "comment": "Requirements analysis incomplete: missing UI/UX, Performance, Security, and Accessibility requirements from the Jira story. Gherkin coverage is insufficient.",
+        "content": "Features: 1, Gherkin Files: 1",
+        "timestamp": "2026-05-13T15:08:44.578Z"
+      },
+      {
+        "id": "fb_1788850648618",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "AUTO-APPROVED",
+        "content": "Features: 6, Gherkin Files: 6",
+        "timestamp": "2026-09-08T06:57:28.618Z"
+      },
+      {
+        "id": "fb_1788850761736",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "AUTO-APPROVED",
+        "content": "Features: 6, Gherkin Files: 6",
+        "timestamp": "2026-09-08T06:59:21.736Z"
+      },
+      {
+        "id": "fb_1788850806032",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "AUTO-APPROVED",
+        "content": "Features: 6, Gherkin Files: 6",
+        "timestamp": "2026-09-08T07:00:06.032Z"
+      },
+      {
+        "id": "fb_1788850806486",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "AUTO-APPROVED",
+        "content": "TCs: 73",
+        "timestamp": "2026-09-08T07:00:06.486Z"
+      },
+      {
+        "id": "fb_1788850806806",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "AUTO-APPROVED",
+        "content": "Grade: B, Score: 87",
+        "timestamp": "2026-09-08T07:00:06.806Z"
+      },
+      {
+        "id": "fb_1788850807092",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "AUTO-APPROVED",
+        "content": "Resolved: 110, Unresolved: 0",
+        "timestamp": "2026-09-08T07:00:07.092Z"
+      },
+      {
+        "id": "fb_1788850874283",
+        "stageId": "06-automation-reviewer",
+        "status": "APPROVED",
+        "comment": "AUTO-APPROVED",
+        "content": "Grade: A, Blockers: 0",
+        "timestamp": "2026-09-08T07:01:14.283Z"
+      },
+      {
+        "id": "fb_1788850874591",
+        "stageId": "07-test-runner",
+        "status": "APPROVED",
+        "comment": "AUTO-APPROVED",
+        "content": "Pass: 0, Fail: 0",
+        "timestamp": "2026-09-08T07:01:14.591Z"
+      },
+      {
+        "id": "fb_1788859539361",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-08T09:25:39.361Z"
+      },
+      {
+        "id": "fb_1788859539390",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Features: 6, Gherkin Files: 6",
+        "timestamp": "2026-09-08T09:25:39.390Z"
+      },
+      {
+        "id": "fb_1788859570219",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-08T09:26:10.219Z"
+      },
+      {
+        "id": "fb_1788859570230",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "TCs: 84",
+        "timestamp": "2026-09-08T09:26:10.230Z"
+      },
+      {
+        "id": "fb_1788859578630",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-08T09:26:18.630Z"
+      },
+      {
+        "id": "fb_1788859578641",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Grade: B, Score: 87",
+        "timestamp": "2026-09-08T09:26:18.641Z"
+      },
+      {
+        "id": "fb_1788859591122",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-08T09:26:31.122Z"
+      },
+      {
+        "id": "fb_1788859591132",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Resolved: 128, Unresolved: 0",
+        "timestamp": "2026-09-08T09:26:31.132Z"
+      },
+      {
+        "id": "fb_1788859723330",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-08T09:28:43.330Z"
+      },
+      {
+        "id": "fb_1788859736537",
+        "stageId": "06-automation-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-08T09:28:56.537Z"
+      },
+      {
+        "id": "fb_1788859736663",
+        "stageId": "06-automation-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Grade: A, Blockers: 0",
+        "timestamp": "2026-09-08T09:28:56.663Z"
+      },
+      {
+        "id": "fb_1788859807400",
+        "stageId": "07-test-runner",
+        "status": "REJECTED",
+        "comment": "No reason provided",
+        "content": "",
+        "timestamp": "2026-09-08T09:30:07.400Z"
+      },
+      {
+        "id": "fb_1788859807410",
+        "stageId": "07-test-runner",
+        "status": "REJECTED",
+        "comment": "No reason provided",
+        "content": "Pass: 0, Fail: 0",
+        "timestamp": "2026-09-08T09:30:07.410Z"
+      },
+      {
+        "id": "fb_1788863930883",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED 1. Use Loading Indicator 2. Yes",
+        "content": "",
+        "timestamp": "2026-09-08T10:38:50.883Z"
+      },
+      {
+        "id": "fb_1788863930924",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED 1. Use Loading Indicator 2. Yes",
+        "content": "Features: 1, Gherkin Files: 1",
+        "timestamp": "2026-09-08T10:38:50.924Z"
+      },
+      {
+        "id": "fb_1788864094098",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-08T10:41:34.098Z"
+      },
+      {
+        "id": "fb_1788864094135",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Features: 1, Gherkin Files: 1",
+        "timestamp": "2026-09-08T10:41:34.135Z"
+      },
+      {
+        "id": "fb_1788864105500",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-08T10:41:45.500Z"
+      },
+      {
+        "id": "fb_1788864105515",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "TCs: 16",
+        "timestamp": "2026-09-08T10:41:45.515Z"
+      },
+      {
+        "id": "fb_1788864112741",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-08T10:41:52.741Z"
+      },
+      {
+        "id": "fb_1788864112766",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Grade: B, Score: 88",
+        "timestamp": "2026-09-08T10:41:52.766Z"
+      },
+      {
+        "id": "fb_1788864133717",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-08T10:42:13.717Z"
+      },
+      {
+        "id": "fb_1788864133746",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Resolved: 38, Unresolved: 0",
+        "timestamp": "2026-09-08T10:42:13.746Z"
+      },
+      {
+        "id": "fb_1788864158752",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-08T10:42:38.752Z"
+      },
+      {
+        "id": "fb_1788864164628",
+        "stageId": "06-automation-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-08T10:42:44.628Z"
+      },
+      {
+        "id": "fb_1788864164654",
+        "stageId": "06-automation-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Grade: A, Blockers: 0",
+        "timestamp": "2026-09-08T10:42:44.654Z"
+      },
+      {
+        "id": "fb_1788864171397",
+        "stageId": "07-test-runner",
+        "status": "REJECTED",
+        "comment": "No reason provided",
+        "content": "",
+        "timestamp": "2026-09-08T10:42:51.397Z"
+      },
+      {
+        "id": "fb_1788864171423",
+        "stageId": "07-test-runner",
+        "status": "REJECTED",
+        "comment": "No reason provided",
+        "content": "Pass: 0, Fail: 0",
+        "timestamp": "2026-09-08T10:42:51.423Z"
+      },
+      {
+        "id": "fb_1788865968515",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED Yes under 100 user",
+        "content": "",
+        "timestamp": "2026-09-08T11:12:48.515Z"
+      },
+      {
+        "id": "fb_1788865968556",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED Yes under 100 user",
+        "content": "Features: 1, Gherkin Files: 1",
+        "timestamp": "2026-09-08T11:12:48.556Z"
+      },
+      {
+        "id": "fb_1788865976378",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-08T11:12:56.378Z"
+      },
+      {
+        "id": "fb_1788865976407",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "TCs: 15",
+        "timestamp": "2026-09-08T11:12:56.407Z"
+      },
+      {
+        "id": "fb_1788865988754",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-08T11:13:08.754Z"
+      },
+      {
+        "id": "fb_1788865988784",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Grade: B, Score: 88",
+        "timestamp": "2026-09-08T11:13:08.784Z"
+      },
+      {
+        "id": "fb_1788865998738",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-08T11:13:18.738Z"
+      },
+      {
+        "id": "fb_1788865998765",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Resolved: 35, Unresolved: 0",
+        "timestamp": "2026-09-08T11:13:18.765Z"
+      },
+      {
+        "id": "fb_1788866042430",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-08T11:14:02.430Z"
+      },
+      {
+        "id": "fb_1788866059868",
+        "stageId": "06-automation-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-08T11:14:19.868Z"
+      },
+      {
+        "id": "fb_1788866059894",
+        "stageId": "06-automation-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Grade: A, Blockers: 0",
+        "timestamp": "2026-09-08T11:14:19.894Z"
+      },
+      {
+        "id": "fb_1788868026389",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED Use Axe-core",
+        "content": "",
+        "timestamp": "2026-09-08T11:47:06.389Z"
+      },
+      {
+        "id": "fb_1788868026441",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED Use Axe-core",
+        "content": "Features: 1, Gherkin Files: 1",
+        "timestamp": "2026-09-08T11:47:06.441Z"
+      },
+      {
+        "id": "fb_1788868035306",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-08T11:47:15.306Z"
+      },
+      {
+        "id": "fb_1788868035335",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "TCs: 14",
+        "timestamp": "2026-09-08T11:47:15.335Z"
+      },
+      {
+        "id": "fb_1788868055371",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-08T11:47:35.371Z"
+      },
+      {
+        "id": "fb_1788868055400",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Grade: B, Score: 88",
+        "timestamp": "2026-09-08T11:47:35.400Z"
+      },
+      {
+        "id": "fb_1788868070534",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-08T11:47:50.534Z"
+      },
+      {
+        "id": "fb_1788868070563",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Resolved: 33, Unresolved: 0",
+        "timestamp": "2026-09-08T11:47:50.563Z"
+      },
+      {
+        "id": "fb_1788868149005",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-08T11:49:09.006Z"
+      },
+      {
+        "id": "fb_1788868159207",
+        "stageId": "06-automation-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-08T11:49:19.207Z"
+      },
+      {
+        "id": "fb_1788868159239",
+        "stageId": "06-automation-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Grade: A, Blockers: 0",
+        "timestamp": "2026-09-08T11:49:19.239Z"
+      },
+      {
+        "id": "fb_1788868165090",
+        "stageId": "07-test-runner",
+        "status": "REJECTED",
+        "comment": "No reason provided",
+        "content": "",
+        "timestamp": "2026-09-08T11:49:25.090Z"
+      },
+      {
+        "id": "fb_1788868165118",
+        "stageId": "07-test-runner",
+        "status": "REJECTED",
+        "comment": "No reason provided",
+        "content": "Pass: 0, Fail: 0",
+        "timestamp": "2026-09-08T11:49:25.118Z"
+      },
+      {
+        "id": "fb_1788869984710",
+        "stageId": "01-requirement-analyzer",
+        "status": "REJECTED",
+        "comment": "No reason provided",
+        "content": "",
+        "timestamp": "2026-09-08T12:19:44.710Z"
+      },
+      {
+        "id": "fb_1788869984749",
+        "stageId": "01-requirement-analyzer",
+        "status": "REJECTED",
+        "comment": "No reason provided",
+        "content": "Features: 1, Gherkin Files: 1",
+        "timestamp": "2026-09-08T12:19:44.749Z"
+      },
+      {
+        "id": "fb_1788870025166",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED only the login form fields",
+        "content": "",
+        "timestamp": "2026-09-08T12:20:25.166Z"
+      },
+      {
+        "id": "fb_1788870025208",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED only the login form fields",
+        "content": "Features: 1, Gherkin Files: 1",
+        "timestamp": "2026-09-08T12:20:25.208Z"
+      },
+      {
+        "id": "fb_1788870129361",
+        "stageId": "02-test-case-generator",
+        "status": "REJECTED",
+        "comment": "No reason provided",
+        "content": "",
+        "timestamp": "2026-09-08T12:22:09.361Z"
+      },
+      {
+        "id": "fb_1788870129395",
+        "stageId": "02-test-case-generator",
+        "status": "REJECTED",
+        "comment": "No reason provided",
+        "content": "TCs: 19",
+        "timestamp": "2026-09-08T12:22:09.395Z"
+      },
+      {
+        "id": "fb_1788870205523",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED use playwright for accessibility testing",
+        "content": "",
+        "timestamp": "2026-09-08T12:23:25.523Z"
+      },
+      {
+        "id": "fb_1788870205626",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED use playwright for accessibility testing",
+        "content": "Features: 1, Gherkin Files: 1",
+        "timestamp": "2026-09-08T12:23:25.626Z"
+      },
+      {
+        "id": "fb_1788870633425",
+        "stageId": "02-test-case-generator",
+        "status": "REJECTED",
+        "comment": "No reason provided",
+        "content": "",
+        "timestamp": "2026-09-08T12:30:33.425Z"
+      },
+      {
+        "id": "fb_1788870633458",
+        "stageId": "02-test-case-generator",
+        "status": "REJECTED",
+        "comment": "No reason provided",
+        "content": "TCs: 19",
+        "timestamp": "2026-09-08T12:30:33.458Z"
+      },
+      {
+        "id": "fb_1788870982671",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "Approved Yes use axe-core",
+        "content": "",
+        "timestamp": "2026-09-08T12:36:22.671Z"
+      },
+      {
+        "id": "fb_1788870982726",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "Approved Yes use axe-core",
+        "content": "Features: 1, Gherkin Files: 1",
+        "timestamp": "2026-09-08T12:36:22.726Z"
+      },
+      {
+        "id": "fb_1788872167214",
+        "stageId": "02-test-case-generator",
+        "status": "REJECTED",
+        "comment": "No reason provided",
+        "content": "",
+        "timestamp": "2026-09-08T12:56:07.215Z"
+      },
+      {
+        "id": "fb_1788872167237",
+        "stageId": "02-test-case-generator",
+        "status": "REJECTED",
+        "comment": "No reason provided",
+        "content": "TCs: 19",
+        "timestamp": "2026-09-08T12:56:07.237Z"
+      },
+      {
+        "id": "fb_1788872203245",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED Use Axe-core",
+        "content": "",
+        "timestamp": "2026-09-08T12:56:43.245Z"
+      },
+      {
+        "id": "fb_1788872203288",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED Use Axe-core",
+        "content": "Features: 1, Gherkin Files: 1",
+        "timestamp": "2026-09-08T12:56:43.288Z"
+      },
+      {
+        "id": "fb_1788872229987",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-08T12:57:09.987Z"
+      },
+      {
+        "id": "fb_1788872230001",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "TCs: 19",
+        "timestamp": "2026-09-08T12:57:10.001Z"
+      },
+      {
+        "id": "fb_1788872710381",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "AUTO-APPROVED",
+        "content": "TCs: 21",
+        "timestamp": "2026-09-08T13:05:10.381Z"
+      },
+      {
+        "id": "fb_1788872710474",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "AUTO-APPROVED",
+        "content": "Grade: A, Score: 99",
+        "timestamp": "2026-09-08T13:05:10.474Z"
+      },
+      {
+        "id": "fb_1788872771119",
+        "stageId": "03-test-case-reviewer",
+        "status": "REJECTED",
+        "comment": "No reason provided",
+        "content": "",
+        "timestamp": "2026-09-08T13:06:11.119Z"
+      },
+      {
+        "id": "fb_1788872771611",
+        "stageId": "03-test-case-reviewer",
+        "status": "REJECTED",
+        "comment": "No reason provided",
+        "content": "Grade: B, Score: 88",
+        "timestamp": "2026-09-08T13:06:11.611Z"
+      },
+      {
+        "id": "fb_1788873153441",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED 1. Loading indicator . 2. Let it be 30 minutes",
+        "content": "",
+        "timestamp": "2026-09-08T13:12:33.441Z"
+      },
+      {
+        "id": "fb_1788873153474",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED 1. Loading indicator . 2. Let it be 30 minutes",
+        "content": "Features: 1, Gherkin Files: 1",
+        "timestamp": "2026-09-08T13:12:33.474Z"
+      },
+      {
+        "id": "fb_1788873185581",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-08T13:13:05.581Z"
+      },
+      {
+        "id": "fb_1788873185597",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "TCs: 26",
+        "timestamp": "2026-09-08T13:13:05.597Z"
+      },
+      {
+        "id": "fb_1788873207540",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-08T13:13:27.540Z"
+      },
+      {
+        "id": "fb_1788873207558",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Grade: A, Score: 98",
+        "timestamp": "2026-09-08T13:13:27.558Z"
+      },
+      {
+        "id": "fb_1788873658177",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "AUTO-APPROVED",
+        "content": "Resolved: 49, Unresolved: 0",
+        "timestamp": "2026-09-08T13:20:58.177Z"
+      },
+      {
+        "id": "fb_1788873766546",
+        "stageId": "04-test-data-generator",
+        "status": "REJECTED",
+        "comment": "No reason provided",
+        "content": "",
+        "timestamp": "2026-09-08T13:22:46.546Z"
+      },
+      {
+        "id": "fb_1788873766612",
+        "stageId": "04-test-data-generator",
+        "status": "REJECTED",
+        "comment": "No reason provided",
+        "content": "Resolved: 49, Unresolved: 0",
+        "timestamp": "2026-09-08T13:22:46.612Z"
+      },
+      {
+        "id": "fb_1788874007889",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "AUTO-APPROVED",
+        "content": "Resolved: 49, Unresolved: 0",
+        "timestamp": "2026-09-08T13:26:47.889Z"
+      },
+      {
+        "id": "fb_1788874186043",
+        "stageId": "04-test-data-generator",
+        "status": "REJECTED",
+        "comment": "No reason provided",
+        "content": "",
+        "timestamp": "2026-09-08T13:29:46.043Z"
+      },
+      {
+        "id": "fb_1788874186078",
+        "stageId": "04-test-data-generator",
+        "status": "REJECTED",
+        "comment": "No reason provided",
+        "content": "Resolved: 49, Unresolved: 0",
+        "timestamp": "2026-09-08T13:29:46.078Z"
+      },
+      {
+        "id": "fb_1788874220632",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-08T13:30:20.632Z"
+      },
+      {
+        "id": "fb_1788874220663",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Resolved: 49, Unresolved: 0",
+        "timestamp": "2026-09-08T13:30:20.663Z"
+      },
+      {
+        "id": "fb_1788875312509",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-08T13:48:32.509Z"
+      },
+      {
+        "id": "fb_1788877185412",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED Yes sve the token in Local storage",
+        "content": "",
+        "timestamp": "2026-09-08T14:19:45.412Z"
+      },
+      {
+        "id": "fb_1788877185449",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED Yes sve the token in Local storage",
+        "content": "Features: 1, Gherkin Files: 1",
+        "timestamp": "2026-09-08T14:19:45.449Z"
+      },
+      {
+        "id": "fb_1788877231479",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-08T14:20:31.479Z"
+      },
+      {
+        "id": "fb_1788877231497",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "TCs: 25",
+        "timestamp": "2026-09-08T14:20:31.497Z"
+      },
+      {
+        "id": "fb_1788877252129",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-08T14:20:52.129Z"
+      },
+      {
+        "id": "fb_1788877252147",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Grade: A, Score: 98",
+        "timestamp": "2026-09-08T14:20:52.147Z"
+      },
+      {
+        "id": "fb_1788877321982",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-08T14:22:01.982Z"
+      },
+      {
+        "id": "fb_1788877321999",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Resolved: 44, Unresolved: 0",
+        "timestamp": "2026-09-08T14:22:01.999Z"
+      },
+      {
+        "id": "fb_1788878075316",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-08T14:34:35.316Z"
+      },
+      {
+        "id": "fb_1788878103581",
+        "stageId": "06-automation-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-08T14:35:03.581Z"
+      },
+      {
+        "id": "fb_1788878103598",
+        "stageId": "06-automation-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Grade: A, Blockers: 0",
+        "timestamp": "2026-09-08T14:35:03.598Z"
+      },
+      {
+        "id": "fb_1788889596695",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-08T17:46:36.695Z"
+      },
+      {
+        "id": "fb_1788889596823",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "TCs: 25",
+        "timestamp": "2026-09-08T17:46:36.823Z"
+      },
+      {
+        "id": "fb_1788889940317",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED Loading Indicator",
+        "content": "",
+        "timestamp": "2026-09-08T17:52:20.317Z"
+      },
+      {
+        "id": "fb_1788889940360",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED Loading Indicator",
+        "content": "Features: 1, Gherkin Files: 1",
+        "timestamp": "2026-09-08T17:52:20.360Z"
+      },
+      {
+        "id": "fb_1788890779368",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-08T18:06:19.368Z"
+      },
+      {
+        "id": "fb_1788890779423",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "TCs: 24",
+        "timestamp": "2026-09-08T18:06:19.423Z"
+      },
+      {
+        "id": "fb_1788892147750",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "AUTO-APPROVED",
+        "content": "TCs: 24",
+        "timestamp": "2026-09-08T18:29:07.750Z"
+      },
+      {
+        "id": "fb_1788892164316",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "AUTO-APPROVED",
+        "content": "Grade: A, Score: 99",
+        "timestamp": "2026-09-08T18:29:24.316Z"
+      },
+      {
+        "id": "fb_1788892170864",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "AUTO-APPROVED",
+        "content": "Resolved: 45, Unresolved: 0",
+        "timestamp": "2026-09-08T18:29:30.864Z"
+      },
+      {
+        "id": "fb_1788892310136",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED Show a loading indicator",
+        "content": "",
+        "timestamp": "2026-09-08T18:31:50.136Z"
+      },
+      {
+        "id": "fb_1788892310190",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED Show a loading indicator",
+        "content": "Features: 1, Stories: 1",
+        "timestamp": "2026-09-08T18:31:50.190Z"
+      },
+      {
+        "id": "fb_1788892819473",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED It is not yet finalized",
+        "content": "",
+        "timestamp": "2026-09-08T18:40:19.473Z"
+      },
+      {
+        "id": "fb_1788892819520",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED It is not yet finalized",
+        "content": "Features: 1, Stories: 1",
+        "timestamp": "2026-09-08T18:40:19.520Z"
+      },
+      {
+        "id": "fb_1788892836046",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-08T18:40:36.046Z"
+      },
+      {
+        "id": "fb_1788892836070",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "TCs: 34",
+        "timestamp": "2026-09-08T18:40:36.070Z"
+      },
+      {
+        "id": "fb_1788892852017",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-08T18:40:52.017Z"
+      },
+      {
+        "id": "fb_1788892852046",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Grade: A, Score: 98",
+        "timestamp": "2026-09-08T18:40:52.046Z"
+      },
+      {
+        "id": "fb_1788934274786",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "Approved",
+        "content": "",
+        "timestamp": "2026-09-09T06:11:14.786Z"
+      },
+      {
+        "id": "fb_1788934275837",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "Approved",
+        "content": "TCs: 34",
+        "timestamp": "2026-09-09T06:11:15.837Z"
+      },
+      {
+        "id": "fb_1788934301862",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-09T06:11:41.862Z"
+      },
+      {
+        "id": "fb_1788934301934",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Grade: A, Score: 98",
+        "timestamp": "2026-09-09T06:11:41.934Z"
+      },
+      {
+        "id": "fb_1788934325060",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-09T06:12:05.060Z"
+      },
+      {
+        "id": "fb_1788934325131",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Resolved: 78, Unresolved: 0",
+        "timestamp": "2026-09-09T06:12:05.131Z"
+      },
+      {
+        "id": "fb_1788934481052",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-09T06:14:41.052Z"
+      },
+      {
+        "id": "fb_1788935546421",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-09T06:32:26.421Z"
+      },
+      {
+        "id": "fb_1788935579363",
+        "stageId": "06-automation-reviewer",
+        "status": "REJECTED",
+        "comment": "Review rejected — Run Agent 05 to resolve code issues",
+        "content": "",
+        "timestamp": "2026-09-09T06:32:59.363Z"
+      },
+      {
+        "id": "fb_1788935579396",
+        "stageId": "06-automation-reviewer",
+        "status": "REJECTED",
+        "comment": "Review rejected — Run Agent 05 to resolve code issues",
+        "content": "Grade: A, Blockers: 1",
+        "timestamp": "2026-09-09T06:32:59.396Z"
+      },
+      {
+        "id": "fb_1788935686315",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-09T06:34:46.315Z"
+      },
+      {
+        "id": "fb_1788936211249",
+        "stageId": "06-automation-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-09T06:43:31.249Z"
+      },
+      {
+        "id": "fb_1788936211293",
+        "stageId": "06-automation-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Grade: A, Blockers: 0",
+        "timestamp": "2026-09-09T06:43:31.293Z"
+      },
+      {
+        "id": "fb_1788936254486",
+        "stageId": "06-automation-reviewer",
+        "status": "APPROVED",
+        "comment": "approved",
+        "content": "",
+        "timestamp": "2026-09-09T06:44:14.486Z"
+      },
+      {
+        "id": "fb_1788936254519",
+        "stageId": "06-automation-reviewer",
+        "status": "APPROVED",
+        "comment": "approved",
+        "content": "Grade: A, Blockers: 0",
+        "timestamp": "2026-09-09T06:44:14.519Z"
+      },
+      {
+        "id": "fb_1788968676833",
+        "stageId": "07-test-runner",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-09T15:44:36.833Z"
+      },
+      {
+        "id": "fb_1788968677235",
+        "stageId": "07-test-runner",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Pass: 25, Fail: 1",
+        "timestamp": "2026-09-09T15:44:37.235Z"
+      },
+      {
+        "id": "fb_1788968706432",
+        "stageId": "09-report-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-09T15:45:06.432Z"
+      },
+      {
+        "id": "fb_1788969539276",
+        "stageId": "07-test-runner",
+        "status": "REJECTED",
+        "comment": "No reason provided",
+        "content": "",
+        "timestamp": "2026-09-09T15:58:59.276Z"
+      },
+      {
+        "id": "fb_1788969539301",
+        "stageId": "07-test-runner",
+        "status": "REJECTED",
+        "comment": "No reason provided",
+        "content": "Pass: 1, Fail: 0",
+        "timestamp": "2026-09-09T15:58:59.301Z"
+      },
+      {
+        "id": "fb_1788971770257",
+        "stageId": "07-test-runner",
+        "status": "REJECTED",
+        "comment": "No reason provided",
+        "content": "",
+        "timestamp": "2026-09-09T16:36:10.257Z"
+      },
+      {
+        "id": "fb_1788971770388",
+        "stageId": "07-test-runner",
+        "status": "REJECTED",
+        "comment": "No reason provided",
+        "content": "Pass: 18, Fail: 14",
+        "timestamp": "2026-09-09T16:36:10.388Z"
+      },
+      {
+        "id": "fb_1788972023753",
+        "stageId": "07-test-runner",
+        "status": "REJECTED",
+        "comment": "No reason provided",
+        "content": "",
+        "timestamp": "2026-09-09T16:40:23.753Z"
+      },
+      {
+        "id": "fb_1788972023783",
+        "stageId": "07-test-runner",
+        "status": "REJECTED",
+        "comment": "No reason provided",
+        "content": "Pass: 0, Fail: 7",
+        "timestamp": "2026-09-09T16:40:23.783Z"
+      },
+      {
+        "id": "fb_1788972030575",
+        "stageId": "11-retest-agent",
+        "status": "REJECTED",
+        "comment": "No reason provided",
+        "content": "",
+        "timestamp": "2026-09-09T16:40:30.575Z"
+      },
+      {
+        "id": "fb_1789039800970",
+        "stageId": "07-test-runner",
+        "status": "REJECTED",
+        "comment": "No reason provided",
+        "content": "",
+        "timestamp": "2026-09-10T11:30:00.970Z"
+      },
+      {
+        "id": "fb_1789039801092",
+        "stageId": "07-test-runner",
+        "status": "REJECTED",
+        "comment": "No reason provided",
+        "content": "Pass: 27, Fail: 5",
+        "timestamp": "2026-09-10T11:30:01.092Z"
+      },
+      {
+        "id": "fb_1789041702908",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED always enabled",
+        "content": "",
+        "timestamp": "2026-09-10T12:01:42.908Z"
+      },
+      {
+        "id": "fb_1789041702959",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED always enabled",
+        "content": "Features: 1, Stories: 1",
+        "timestamp": "2026-09-10T12:01:42.959Z"
+      },
+      {
+        "id": "fb_1789041720907",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T12:02:00.907Z"
+      },
+      {
+        "id": "fb_1789041720931",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "TCs: 26",
+        "timestamp": "2026-09-10T12:02:00.931Z"
+      },
+      {
+        "id": "fb_1789041747520",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T12:02:27.520Z"
+      },
+      {
+        "id": "fb_1789041747548",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Grade: A, Score: 98",
+        "timestamp": "2026-09-10T12:02:27.548Z"
+      },
+      {
+        "id": "fb_1789041762187",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T12:02:42.187Z"
+      },
+      {
+        "id": "fb_1789041762207",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Resolved: 73, Unresolved: 0",
+        "timestamp": "2026-09-10T12:02:42.207Z"
+      },
+      {
+        "id": "fb_1789041885445",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T12:04:45.445Z"
+      },
+      {
+        "id": "fb_1789041897563",
+        "stageId": "06-automation-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T12:04:57.563Z"
+      },
+      {
+        "id": "fb_1789041897585",
+        "stageId": "06-automation-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Grade: A, Blockers: 0",
+        "timestamp": "2026-09-10T12:04:57.585Z"
+      },
+      {
+        "id": "fb_1789042056777",
+        "stageId": "07-test-runner",
+        "status": "REJECTED",
+        "comment": "No reason provided",
+        "content": "",
+        "timestamp": "2026-09-10T12:07:36.777Z"
+      },
+      {
+        "id": "fb_1789042056803",
+        "stageId": "07-test-runner",
+        "status": "REJECTED",
+        "comment": "No reason provided",
+        "content": "Pass: 17, Fail: 10",
+        "timestamp": "2026-09-10T12:07:36.803Z"
+      },
+      {
+        "id": "fb_1789048322777",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T13:52:02.777Z"
+      },
+      {
+        "id": "fb_1789048323867",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Features: 1, Stories: 1",
+        "timestamp": "2026-09-10T13:52:03.867Z"
+      },
+      {
+        "id": "fb_1789048397487",
+        "stageId": "02-test-case-generator",
+        "status": "REJECTED",
+        "comment": "No reason provided",
+        "content": "",
+        "timestamp": "2026-09-10T13:53:17.487Z"
+      },
+      {
+        "id": "fb_1789048397632",
+        "stageId": "02-test-case-generator",
+        "status": "REJECTED",
+        "comment": "No reason provided",
+        "content": "TCs: 31",
+        "timestamp": "2026-09-10T13:53:17.633Z"
+      },
+      {
+        "id": "fb_1789049386678",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED the Login button is always enabled state",
+        "content": "",
+        "timestamp": "2026-09-10T14:09:46.678Z"
+      },
+      {
+        "id": "fb_1789049386757",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED the Login button is always enabled state",
+        "content": "Features: 1, Stories: 2",
+        "timestamp": "2026-09-10T14:09:46.757Z"
+      },
+      {
+        "id": "fb_1789049413507",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T14:10:13.507Z"
+      },
+      {
+        "id": "fb_1789049413539",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "TCs: 30",
+        "timestamp": "2026-09-10T14:10:13.539Z"
+      },
+      {
+        "id": "fb_1789049423614",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T14:10:23.614Z"
+      },
+      {
+        "id": "fb_1789049425589",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Grade: A, Score: 99",
+        "timestamp": "2026-09-10T14:10:25.589Z"
+      },
+      {
+        "id": "fb_1789049444703",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T14:10:44.703Z"
+      },
+      {
+        "id": "fb_1789049444858",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Resolved: 80, Unresolved: 0",
+        "timestamp": "2026-09-10T14:10:44.858Z"
+      },
+      {
+        "id": "fb_1789050206473",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED the login button will always remain enabled",
+        "content": "",
+        "timestamp": "2026-09-10T14:23:26.473Z"
+      },
+      {
+        "id": "fb_1789050206528",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED the login button will always remain enabled",
+        "content": "Features: 1, Stories: 2",
+        "timestamp": "2026-09-10T14:23:26.528Z"
+      },
+      {
+        "id": "fb_1789050224034",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T14:23:44.034Z"
+      },
+      {
+        "id": "fb_1789050224126",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "TCs: 28",
+        "timestamp": "2026-09-10T14:23:44.126Z"
+      },
+      {
+        "id": "fb_1789050237972",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T14:23:57.972Z"
+      },
+      {
+        "id": "fb_1789050238017",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Grade: A, Score: 96",
+        "timestamp": "2026-09-10T14:23:58.017Z"
+      },
+      {
+        "id": "fb_1789050242922",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T14:24:02.922Z"
+      },
+      {
+        "id": "fb_1789050242970",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Resolved: 76, Unresolved: 0",
+        "timestamp": "2026-09-10T14:24:02.970Z"
+      },
+      {
+        "id": "fb_1789051366737",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED it is always in enabled state",
+        "content": "",
+        "timestamp": "2026-09-10T14:42:46.737Z"
+      },
+      {
+        "id": "fb_1789051366810",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED it is always in enabled state",
+        "content": "Features: 1, Stories: 2",
+        "timestamp": "2026-09-10T14:42:46.810Z"
+      },
+      {
+        "id": "fb_1789051372928",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T14:42:52.928Z"
+      },
+      {
+        "id": "fb_1789051372973",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "TCs: 32",
+        "timestamp": "2026-09-10T14:42:52.973Z"
+      },
+      {
+        "id": "fb_1789051377391",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T14:42:57.391Z"
+      },
+      {
+        "id": "fb_1789051377441",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Grade: A, Score: 99",
+        "timestamp": "2026-09-10T14:42:57.441Z"
+      },
+      {
+        "id": "fb_1789051380751",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T14:43:00.751Z"
+      },
+      {
+        "id": "fb_1789051380804",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Resolved: 83, Unresolved: 0",
+        "timestamp": "2026-09-10T14:43:00.804Z"
+      },
+      {
+        "id": "fb_1789051444067",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T14:44:04.067Z"
+      },
+      {
+        "id": "fb_1789051451400",
+        "stageId": "06-automation-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T14:44:11.400Z"
+      },
+      {
+        "id": "fb_1789051451552",
+        "stageId": "06-automation-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Grade: A, Blockers: 0",
+        "timestamp": "2026-09-10T14:44:11.552Z"
+      },
+      {
+        "id": "fb_1789054511447",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED the button is always enabled",
+        "content": "",
+        "timestamp": "2026-09-10T15:35:11.447Z"
+      },
+      {
+        "id": "fb_1789054511485",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED the button is always enabled",
+        "content": "Features: 1, Stories: 2",
+        "timestamp": "2026-09-10T15:35:11.485Z"
+      },
+      {
+        "id": "fb_1789054516457",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T15:35:16.457Z"
+      },
+      {
+        "id": "fb_1789054516483",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "TCs: 34",
+        "timestamp": "2026-09-10T15:35:16.483Z"
+      },
+      {
+        "id": "fb_1789054521697",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T15:35:21.697Z"
+      },
+      {
+        "id": "fb_1789054521719",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Grade: A, Score: 98",
+        "timestamp": "2026-09-10T15:35:21.719Z"
+      },
+      {
+        "id": "fb_1789054529170",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T15:35:29.170Z"
+      },
+      {
+        "id": "fb_1789054529193",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Resolved: 88, Unresolved: 0",
+        "timestamp": "2026-09-10T15:35:29.193Z"
+      },
+      {
+        "id": "fb_1789054621586",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T15:37:01.586Z"
+      },
+      {
+        "id": "fb_1789054627939",
+        "stageId": "06-automation-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T15:37:07.939Z"
+      },
+      {
+        "id": "fb_1789054627966",
+        "stageId": "06-automation-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Grade: A, Blockers: 0",
+        "timestamp": "2026-09-10T15:37:07.966Z"
+      },
+      {
+        "id": "fb_1789055748702",
+        "stageId": "07-test-runner",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T15:55:48.702Z"
+      },
+      {
+        "id": "fb_1789055748725",
+        "stageId": "07-test-runner",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Pass: 34, Fail: 1",
+        "timestamp": "2026-09-10T15:55:48.725Z"
+      },
+      {
+        "id": "fb_1789055785967",
+        "stageId": "07-test-runner",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T15:56:25.967Z"
+      },
+      {
+        "id": "fb_1789055785994",
+        "stageId": "07-test-runner",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Pass: 1, Fail: 0",
+        "timestamp": "2026-09-10T15:56:25.994Z"
+      },
+      {
+        "id": "fb_1789055795971",
+        "stageId": "11-retest-agent",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T15:56:35.971Z"
+      },
+      {
+        "id": "fb_1789056158421",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED the login button is always enabled",
+        "content": "",
+        "timestamp": "2026-09-10T16:02:38.421Z"
+      },
+      {
+        "id": "fb_1789056158460",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED the login button is always enabled",
+        "content": "Features: 1, Stories: 2",
+        "timestamp": "2026-09-10T16:02:38.460Z"
+      },
+      {
+        "id": "fb_1789056162486",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T16:02:42.486Z"
+      },
+      {
+        "id": "fb_1789056162533",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "TCs: 32",
+        "timestamp": "2026-09-10T16:02:42.533Z"
+      },
+      {
+        "id": "fb_1789056165373",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T16:02:45.373Z"
+      },
+      {
+        "id": "fb_1789056165394",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Grade: A, Score: 99",
+        "timestamp": "2026-09-10T16:02:45.394Z"
+      },
+      {
+        "id": "fb_1789056170264",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T16:02:50.264Z"
+      },
+      {
+        "id": "fb_1789056170288",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Resolved: 83, Unresolved: 0",
+        "timestamp": "2026-09-10T16:02:50.288Z"
+      },
+      {
+        "id": "fb_1789058354065",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T16:39:14.065Z"
+      },
+      {
+        "id": "fb_1789058375864",
+        "stageId": "06-automation-reviewer",
+        "status": "REJECTED",
+        "comment": "Review rejected — Run Agent 05 to resolve code issues",
+        "content": "",
+        "timestamp": "2026-09-10T16:39:35.864Z"
+      },
+      {
+        "id": "fb_1789058375890",
+        "stageId": "06-automation-reviewer",
+        "status": "REJECTED",
+        "comment": "Review rejected — Run Agent 05 to resolve code issues",
+        "content": "Grade: B, Blockers: 2",
+        "timestamp": "2026-09-10T16:39:35.890Z"
+      },
+      {
+        "id": "fb_1789058545539",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED the login button is always enabled state",
+        "content": "",
+        "timestamp": "2026-09-10T16:42:25.539Z"
+      },
+      {
+        "id": "fb_1789058545608",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED the login button is always enabled state",
+        "content": "Features: 1, Stories: 1",
+        "timestamp": "2026-09-10T16:42:25.608Z"
+      },
+      {
+        "id": "fb_1789058549874",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T16:42:29.874Z"
+      },
+      {
+        "id": "fb_1789058549988",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "TCs: 26",
+        "timestamp": "2026-09-10T16:42:29.988Z"
+      },
+      {
+        "id": "fb_1789058554407",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T16:42:34.407Z"
+      },
+      {
+        "id": "fb_1789058554441",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Grade: A, Score: 98",
+        "timestamp": "2026-09-10T16:42:34.441Z"
+      },
+      {
+        "id": "fb_1789058560195",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T16:42:40.195Z"
+      },
+      {
+        "id": "fb_1789058560226",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Resolved: 76, Unresolved: 0",
+        "timestamp": "2026-09-10T16:42:40.226Z"
+      },
+      {
+        "id": "fb_1789058688654",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T16:44:48.655Z"
+      },
+      {
+        "id": "fb_1789058719106",
+        "stageId": "06-automation-reviewer",
+        "status": "REJECTED",
+        "comment": "Review rejected — Run Agent 05 to resolve code issues",
+        "content": "",
+        "timestamp": "2026-09-10T16:45:19.106Z"
+      },
+      {
+        "id": "fb_1789058719148",
+        "stageId": "06-automation-reviewer",
+        "status": "REJECTED",
+        "comment": "Review rejected — Run Agent 05 to resolve code issues",
+        "content": "Grade: B, Blockers: 2",
+        "timestamp": "2026-09-10T16:45:19.148Z"
+      },
+      {
+        "id": "fb_1789060043065",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "aPPROVE LOGIN BUTTON WILL ALWAYS REMAIN IN ENABLED STATE",
+        "content": "",
+        "timestamp": "2026-09-10T17:07:23.065Z"
+      },
+      {
+        "id": "fb_1789060043125",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "aPPROVE LOGIN BUTTON WILL ALWAYS REMAIN IN ENABLED STATE",
+        "content": "Features: 1, Stories: 2",
+        "timestamp": "2026-09-10T17:07:23.125Z"
+      },
+      {
+        "id": "fb_1789060048332",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T17:07:28.332Z"
+      },
+      {
+        "id": "fb_1789060048565",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "TCs: 32",
+        "timestamp": "2026-09-10T17:07:28.565Z"
+      },
+      {
+        "id": "fb_1789060055745",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T17:07:35.745Z"
+      },
+      {
+        "id": "fb_1789060055787",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Grade: A, Score: 99",
+        "timestamp": "2026-09-10T17:07:35.787Z"
+      },
+      {
+        "id": "fb_1789060062622",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T17:07:42.622Z"
+      },
+      {
+        "id": "fb_1789060062678",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Resolved: 83, Unresolved: 0",
+        "timestamp": "2026-09-10T17:07:42.678Z"
+      },
+      {
+        "id": "fb_1789060132561",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-10T17:08:52.561Z"
+      },
+      {
+        "id": "fb_1789060152369",
+        "stageId": "06-automation-reviewer",
+        "status": "REJECTED",
+        "comment": "Review rejected — Run Agent 05 to resolve code issues",
+        "content": "",
+        "timestamp": "2026-09-10T17:09:12.369Z"
+      },
+      {
+        "id": "fb_1789060152416",
+        "stageId": "06-automation-reviewer",
+        "status": "REJECTED",
+        "comment": "Review rejected — Run Agent 05 to resolve code issues",
+        "content": "Grade: C, Blockers: 1",
+        "timestamp": "2026-09-10T17:09:12.416Z"
+      },
+      {
+        "id": "fb_1789107333364",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED 1 Login button remains enabled 2 UI Layer 3 Get the message with the help of Playwright cli",
+        "content": "",
+        "timestamp": "2026-09-11T06:15:33.364Z"
+      },
+      {
+        "id": "fb_1789107334628",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED 1 Login button remains enabled 2 UI Layer 3 Get the message with the help of Playwright cli",
+        "content": "Features: 1, Stories: 2",
+        "timestamp": "2026-09-11T06:15:34.628Z"
+      },
+      {
+        "id": "fb_1789107344443",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-11T06:15:44.443Z"
+      },
+      {
+        "id": "fb_1789107344745",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "TCs: 35",
+        "timestamp": "2026-09-11T06:15:44.745Z"
+      },
+      {
+        "id": "fb_1789107351781",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-11T06:15:51.782Z"
+      },
+      {
+        "id": "fb_1789107351806",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Grade: A, Score: 98",
+        "timestamp": "2026-09-11T06:15:51.806Z"
+      },
+      {
+        "id": "fb_1789107357174",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-11T06:15:57.174Z"
+      },
+      {
+        "id": "fb_1789107357200",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Resolved: 85, Unresolved: 0",
+        "timestamp": "2026-09-11T06:15:57.200Z"
+      },
+      {
+        "id": "fb_1789108497958",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED Login button will always remain in enabled state 2 It is the sole indicator",
+        "content": "",
+        "timestamp": "2026-09-11T06:34:57.958Z"
+      },
+      {
+        "id": "fb_1789108497999",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED Login button will always remain in enabled state 2 It is the sole indicator",
+        "content": "Features: 1, Stories: 2",
+        "timestamp": "2026-09-11T06:34:57.999Z"
+      },
+      {
+        "id": "fb_1789108502057",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-11T06:35:02.057Z"
+      },
+      {
+        "id": "fb_1789108502083",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "TCs: 34",
+        "timestamp": "2026-09-11T06:35:02.083Z"
+      },
+      {
+        "id": "fb_1789108509851",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-11T06:35:09.851Z"
+      },
+      {
+        "id": "fb_1789108509879",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Grade: A, Score: 98",
+        "timestamp": "2026-09-11T06:35:09.879Z"
+      },
+      {
+        "id": "fb_1789108522434",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-11T06:35:22.434Z"
+      },
+      {
+        "id": "fb_1789108522461",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Resolved: 83, Unresolved: 0",
+        "timestamp": "2026-09-11T06:35:22.461Z"
+      },
+      {
+        "id": "fb_1789108687476",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-11T06:38:07.476Z"
+      },
+      {
+        "id": "fb_1789108727468",
+        "stageId": "06-automation-reviewer",
+        "status": "REJECTED",
+        "comment": "Review rejected — Run Agent 05 to resolve code issues",
+        "content": "",
+        "timestamp": "2026-09-11T06:38:47.468Z"
+      },
+      {
+        "id": "fb_1789108727498",
+        "stageId": "06-automation-reviewer",
+        "status": "REJECTED",
+        "comment": "Review rejected — Run Agent 05 to resolve code issues",
+        "content": "Grade: D, Blockers: 3",
+        "timestamp": "2026-09-11T06:38:47.498Z"
+      },
+      {
+        "id": "fb_1789109038865",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-11T06:43:58.865Z"
+      },
+      {
+        "id": "fb_1789109096050",
+        "stageId": "06-automation-reviewer",
+        "status": "REJECTED",
+        "comment": "Review rejected — Run Agent 05 to resolve code issues",
+        "content": "",
+        "timestamp": "2026-09-11T06:44:56.050Z"
+      },
+      {
+        "id": "fb_1789109096078",
+        "stageId": "06-automation-reviewer",
+        "status": "REJECTED",
+        "comment": "Review rejected — Run Agent 05 to resolve code issues",
+        "content": "Grade: D, Blockers: 3",
+        "timestamp": "2026-09-11T06:44:56.078Z"
+      },
+      {
+        "id": "fb_1789110848358",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED 1 TBD by design team 2 currently no support link is available 3 Currently no expectation of case sensitive",
+        "content": "",
+        "timestamp": "2026-09-11T07:14:08.358Z"
+      },
+      {
+        "id": "fb_1789110848404",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "APPROVED 1 TBD by design team 2 currently no support link is available 3 Currently no expectation of case sensitive",
+        "content": "Features: 1, Stories: 2",
+        "timestamp": "2026-09-11T07:14:08.404Z"
+      },
+      {
+        "id": "fb_1789110854470",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-11T07:14:14.470Z"
+      },
+      {
+        "id": "fb_1789110854499",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "TCs: 34",
+        "timestamp": "2026-09-11T07:14:14.499Z"
+      },
+      {
+        "id": "fb_1789110859014",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-11T07:14:19.014Z"
+      },
+      {
+        "id": "fb_1789110859042",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Grade: A, Score: 97",
+        "timestamp": "2026-09-11T07:14:19.042Z"
+      },
+      {
+        "id": "fb_1789110865036",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-11T07:14:25.036Z"
+      },
+      {
+        "id": "fb_1789110865063",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Resolved: 82, Unresolved: 0",
+        "timestamp": "2026-09-11T07:14:25.063Z"
+      },
+      {
+        "id": "fb_1789111020602",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-11T07:17:00.602Z"
+      },
+      {
+        "id": "fb_1789112291490",
+        "stageId": "06-automation-reviewer",
+        "status": "REJECTED",
+        "comment": "Review rejected — Run Agent 05 to resolve code issues",
+        "content": "",
+        "timestamp": "2026-09-11T07:38:11.490Z"
+      },
+      {
+        "id": "fb_1789112291545",
+        "stageId": "06-automation-reviewer",
+        "status": "REJECTED",
+        "comment": "Review rejected — Run Agent 05 to resolve code issues",
+        "content": "Grade: D, Blockers: 7",
+        "timestamp": "2026-09-11T07:38:11.545Z"
+      },
+      {
+        "id": "fb_1789112571906",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-11T07:42:51.906Z"
+      },
+      {
+        "id": "fb_1789114230127",
+        "stageId": "06-automation-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-11T08:10:30.127Z"
+      },
+      {
+        "id": "fb_1789114230220",
+        "stageId": "06-automation-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Grade: B, Blockers: 0",
+        "timestamp": "2026-09-11T08:10:30.220Z"
+      },
+      {
+        "id": "fb_1789119012073",
+        "stageId": "06-automation-reviewer",
+        "status": "APPROVED",
+        "comment": "aPPROVED",
+        "content": "",
+        "timestamp": "2026-09-11T09:30:12.073Z"
+      },
+      {
+        "id": "fb_1789119012173",
+        "stageId": "06-automation-reviewer",
+        "status": "APPROVED",
+        "comment": "aPPROVED",
+        "content": "Grade: A, Blockers: 0",
+        "timestamp": "2026-09-11T09:30:12.173Z"
+      },
+      {
+        "id": "fb_1789120354261",
+        "stageId": "07-test-runner",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-11T09:52:34.261Z"
+      },
+      {
+        "id": "fb_1789120354360",
+        "stageId": "07-test-runner",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Pass: 33, Fail: 0",
+        "timestamp": "2026-09-11T09:52:34.360Z"
+      },
+      {
+        "id": "fb_1789120801532",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "Approved It will be enabled state",
+        "content": "",
+        "timestamp": "2026-09-11T10:00:01.532Z"
+      },
+      {
+        "id": "fb_1789120801577",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "Approved It will be enabled state",
+        "content": "Features: 1, Stories: 1",
+        "timestamp": "2026-09-11T10:00:01.577Z"
+      },
+      {
+        "id": "fb_1789120811612",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "Approved",
+        "content": "",
+        "timestamp": "2026-09-11T10:00:11.612Z"
+      },
+      {
+        "id": "fb_1789120811643",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "Approved",
+        "content": "TCs: 22",
+        "timestamp": "2026-09-11T10:00:11.643Z"
+      },
+      {
+        "id": "fb_1789120818769",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "Approved",
+        "content": "",
+        "timestamp": "2026-09-11T10:00:18.769Z"
+      },
+      {
+        "id": "fb_1789120818803",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "Approved",
+        "content": "Grade: A, Score: 99",
+        "timestamp": "2026-09-11T10:00:18.803Z"
+      },
+      {
+        "id": "fb_1789120828114",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "Approved",
+        "content": "",
+        "timestamp": "2026-09-11T10:00:28.114Z"
+      },
+      {
+        "id": "fb_1789120828380",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "Approved",
+        "content": "Resolved: 63, Unresolved: 0",
+        "timestamp": "2026-09-11T10:00:28.380Z"
+      },
+      {
+        "id": "fb_1789120970977",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "Approved",
+        "content": "",
+        "timestamp": "2026-09-11T10:02:50.977Z"
+      },
+      {
+        "id": "fb_1789121107038",
+        "stageId": "06-automation-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "",
+        "timestamp": "2026-09-11T10:05:07.038Z"
+      },
+      {
+        "id": "fb_1789121107069",
+        "stageId": "06-automation-reviewer",
+        "status": "APPROVED",
+        "comment": "APPROVED",
+        "content": "Grade: B, Blockers: 0",
+        "timestamp": "2026-09-11T10:05:07.069Z"
+      }
+    ],
+    "performanceBaselines": {},
+    "resolvedClarifications": [],
+    "stableTestIds": [],
+    "flakyTestIds": []
+  },
+  "improvementRules": [
+    {
+      "id": "RULE-05-DESIGN-001",
+      "description": "Agent 05 test case design: Prevent premature actions in component state verification. Assert initial element state (e.g. loginButton is enabled on load) before performing actions/submissions.",
+      "appliesTo": "05-playwright-script-generator",
+      "action": "ENFORCE_PRE_ACTION_STATE_ASSERTION",
+      "suggestion": "When verifying component state (e.g. button enabled/disabled, input masking), explicitly assert initial state on page load before performing interactions. Do not call composite actions like login() before checking the initial state.",
+      "addedAt": "2026-09-10T10:07:00.000Z",
+      "activeCount": 0
+    },
+    {
+      "id": "RULE-05-ASSERT-001",
+      "description": "Agent 05 assertion integrity: Mandate Playwright web-first assertions (e.g. await expect(locator).toBeVisible()). NEVER evaluate booleans via isVisible()/isEnabled() with .toBe(true) or broken .toContain(true).",
+      "appliesTo": "05-playwright-script-generator",
+      "action": "ENFORCE_WEB_FIRST_ASSERTIONS",
+      "suggestion": "Always assert element state directly using await expect(locator).toBeVisible() or .toBeEnabled(). Web-first assertions provide auto-waiting and eliminate non-iterable type errors.",
+      "addedAt": "2026-09-10T10:07:00.000Z",
+      "activeCount": 0
+    },
+    {
+      "id": "RULE-05-CONCURRENCY-001",
+      "description": "Agent 05 concurrency simulation: For test cases verifying concurrency or multi-session operations, spawn multiple browser.newContext() instances and execute via Promise.all instead of fake single-session sequential runs.",
+      "appliesTo": "05-playwright-script-generator",
+      "action": "ENFORCE_MULTI_CONTEXT_CONCURRENCY",
+      "suggestion": "Use browser.newContext() to create parallel isolated user sessions, execute login/actions concurrently with Promise.all, and properly close contexts.",
+      "addedAt": "2026-09-10T10:17:00.000Z",
+      "activeCount": 0
+    },
+    {
+      "id": "RULE-05-PATH-001",
+      "description": "Agent 05 Windows path safety: Sanitize testInfo.title with .replace(/[^a-zA-Z0-9_-]/g, '_') before constructing screenshot or artifact file paths to avoid illegal character ENOENT errors on Windows.",
+      "appliesTo": "05-playwright-script-generator",
+      "action": "SANITIZE_ATTACHMENT_PATHS",
+      "suggestion": "Replace colons and special characters in test titles when saving failure attachments on Windows.",
+      "addedAt": "2026-09-10T10:22:00.000Z",
+      "activeCount": 0
+    },
+    {
+      "id": "RULE-05-SEC-001",
+      "description": "Agent 05 security & protocol tests: For test cases verifying encryption or protocols (e.g. TLS 1.2+, HTTPS, CSRF, Secure cookies), directly assert security details, headers, or cookies instead of generating generic UI login boilerplate.",
+      "appliesTo": "05-playwright-script-generator",
+      "action": "ENFORCE_PROTOCOL_SECURITY_ASSERTIONS",
+      "suggestion": "Verify response.securityDetails().protocol matches /TLS 1\\.[23]/, assert response.url() starts with https://, and inspect headers/cookies directly.",
+      "addedAt": "2026-09-10T10:27:00.000Z",
+      "activeCount": 0
+    },
+    {
+      "id": "RULE-05-DESIGN-002",
+      "description": "Agent 05 test case specificity: Strictly forbid boilerplate login fallback for specialized acceptance criteria (e.g. WCAG accessibility, CSRF tokens, concurrency, responsiveness). Every test must directly assert its specific requirement.",
+      "appliesTo": "05-playwright-script-generator",
+      "action": "FORBID_BOILERPLATE_LOGIN_FALLBACK",
+      "suggestion": "Do not copy-paste standard login flows into tests for accessibility, tokens, or security. Generate criteria-specific assertions.",
+      "addedAt": "2026-09-10T10:31:00.000Z",
+      "activeCount": 0
+    },
+    {
+      "id": "RULE-04-DATA-1788850807013",
+      "description": "Test data patterns from this run for reuse",
+      "appliesTo": "04-test-data-generator",
+      "action": "REUSE_DATA_PATTERNS",
+      "data": {
+        "validBaseURL": "https://www.saucedemo.com/",
+        "validUsername": "aria_user_e612d811",
+        "validTestData": "aria_valid_df9a2879",
+        "existingEmail": "aria_existing_d0aa7319@testdomain.io",
+        "validDate": "2026-09-08",
+        "exactMinimumValue": "1",
+        "exactMaximumValue": "255",
+        "script": "console.log(\"ARIA Test Script Executing\");"
+      },
+      "addedAt": "2026-09-08T07:00:07.015Z",
+      "activeCount": 0
+    },
+    {
+      "id": "RULE-04-DATA-1788859578804",
+      "description": "Test data patterns from this run for reuse",
+      "appliesTo": "04-test-data-generator",
+      "action": "REUSE_DATA_PATTERNS",
+      "data": {
+        "validBaseURL": "https://www.saucedemo.com/",
+        "validTestData": "aria_valid_600c43a7",
+        "exactMinimumValue": "1",
+        "exactMaximumValue": "255",
+        "script": "console.log(\"ARIA Test Script Executing\");",
+        "validUsername": "aria_user_122dff34"
+      },
+      "addedAt": "2026-09-08T09:26:18.805Z",
+      "activeCount": 0
+    },
+    {
+      "id": "RULE-06-STYLE-003",
+      "description": "Agent 05 recurring issue (×3): console.log() in spec file. Use testInfo.attach() for debug output.",
+      "appliesTo": "05-playwright-script-generator",
+      "action": "FIX_STYLE-003",
+      "suggestion": "Remove console.log or replace with testInfo.attach() for structured debug.",
+      "addedAt": "2026-09-08T09:28:43.929Z",
+      "activeCount": 0
+    },
+    {
+      "id": "RULE-04-DATA-1788864113010",
+      "description": "Test data patterns from this run for reuse",
+      "appliesTo": "04-test-data-generator",
+      "action": "REUSE_DATA_PATTERNS",
+      "data": {
+        "validBaseURL": "https://www.saucedemo.com/",
+        "validUsername": "aria_user_d0aa7319",
+        "validEmail": "aria_test_ccf03612@testdomain.io",
+        "validTestData": "aria_valid_d0aa7319",
+        "validDate": "2026-09-08",
+        "existingEmail": "aria_existing_37ff6f2d@testdomain.io",
+        "exactMinimumValue": "1",
+        "exactMaximumValue": "255"
+      },
+      "addedAt": "2026-09-08T10:41:53.012Z",
+      "activeCount": 0
+    },
+    {
+      "id": "RULE-04-DATA-PATTERNS",
+      "description": "Test data patterns from this run for reuse",
+      "appliesTo": "04-test-data-generator",
+      "action": "REUSE_DATA_PATTERNS",
+      "data": {
+        "validBaseURL": "https://www.saucedemo.com/",
+        "validUsername": "standard_user",
+        "validTestData": "aria_valid_37ff6f2d",
+        "validName": "Manoj Tiwari",
+        "validMandatoryInputs": "aria_id_56a37af3",
+        "exactMinimumValue": "1",
+        "exactMaximumValue": "255"
+      },
+      "addedAt": "2026-09-11T10:00:18.949Z",
+      "activeCount": 0,
+      "updatedAt": "2026-09-11T10:00:18.955Z"
+    },
+    {
+      "id": "RULE-07-FAIL-TC-008",
+      "description": "Test failure pattern: TypeError: securityDetails.protocol is not a function",
+      "appliesTo": "10-auto-healer",
+      "action": "ANALYSE_FAILURE",
+      "tcKey": "TC-008",
+      "errorMessage": "TypeError: securityDetails.protocol is not a function",
+      "addedAt": "2026-09-11T10:22:23.164Z",
+      "activeCount": 0,
+      "updatedAt": "2026-09-11T10:22:23.166Z"
+    },
+    {
+      "id": "RULE-10-1788968936188",
+      "description": "Auto-heal: 1/1 fixed",
+      "appliesTo": "05-playwright-script-generator",
+      "action": "APPLY_HEALING_PATTERNS",
+      "addedAt": "2026-09-09T15:48:56.190Z",
+      "activeCount": 0
+    },
+    {
+      "id": "RULE-10-1788969178818",
+      "description": "Auto-heal: 1/1 fixed",
+      "appliesTo": "05-playwright-script-generator",
+      "action": "APPLY_HEALING_PATTERNS",
+      "addedAt": "2026-09-09T15:52:58.820Z",
+      "activeCount": 0
+    },
+    {
+      "id": "RULE-07-FAIL-TC-027",
+      "description": "Test failure pattern: TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('use",
+      "appliesTo": "10-auto-healer",
+      "action": "ANALYSE_FAILURE",
+      "tcKey": "TC-027",
+      "errorMessage": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('username')\u001b[22m\n",
+      "addedAt": "2026-09-10T14:49:21.469Z",
+      "activeCount": 0,
+      "updatedAt": "2026-09-10T14:49:21.471Z"
+    },
+    {
+      "id": "RULE-07-FAIL-TC-028",
+      "description": "Test failure pattern: TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('use",
+      "appliesTo": "10-auto-healer",
+      "action": "ANALYSE_FAILURE",
+      "tcKey": "TC-028",
+      "errorMessage": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('username')\u001b[22m\n",
+      "addedAt": "2026-09-10T14:49:21.472Z",
+      "activeCount": 0,
+      "updatedAt": "2026-09-10T14:49:21.474Z"
+    },
+    {
+      "id": "RULE-07-FAIL-TC-029",
+      "description": "Test failure pattern: Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoContain\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // in",
+      "appliesTo": "10-auto-healer",
+      "action": "ANALYSE_FAILURE",
+      "tcKey": "TC-029",
+      "errorMessage": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoContain\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // indexOf\u001b[22m\n\nExpected value: \u001b[32m405\u001b[39m\nReceived array: \u001b[31m[401, 404]\u001b[39m",
+      "addedAt": "2026-09-10T10:44:13.279Z",
+      "activeCount": 0,
+      "updatedAt": "2026-09-10T10:44:13.281Z"
+    },
+    {
+      "id": "RULE-07-FAIL-TC-030",
+      "description": "Test failure pattern: TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('use",
+      "appliesTo": "10-auto-healer",
+      "action": "ANALYSE_FAILURE",
+      "tcKey": "TC-030",
+      "errorMessage": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('username')\u001b[22m\n",
+      "addedAt": "2026-09-10T14:49:21.475Z",
+      "activeCount": 0,
+      "updatedAt": "2026-09-10T14:49:21.477Z"
+    },
+    {
+      "id": "RULE-07-FAIL-TC-031",
+      "description": "Test failure pattern: Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: ",
+      "appliesTo": "10-auto-healer",
+      "action": "ANALYSE_FAILURE",
+      "tcKey": "TC-031",
+      "errorMessage": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByTestId('username')\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('username')\u001b[22m\n",
+      "addedAt": "2026-09-10T14:49:21.479Z",
+      "activeCount": 0,
+      "updatedAt": "2026-09-10T14:49:21.480Z"
+    },
+    {
+      "id": "RULE-07-FAIL-TC-006",
+      "description": "Test failure pattern: Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: ",
+      "appliesTo": "10-auto-healer",
+      "action": "ANALYSE_FAILURE",
+      "tcKey": "TC-006",
+      "errorMessage": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: locator('#inventory_container')\nExpected: visible\nError: strict mode violation: locator('#inventory_container') resolved to 2 elements:\n    1) <div id=\"inventory_container\">…</div> aka locator('#inventory_container').first()\n    2) <div id=\"inventory_container\" class=\"inventory_container\" data-test=\"inventory-container\">…</div> aka locator('[data-test=\"inventory-container\"]')\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('#inventory_container')\u001b[22m\n",
+      "addedAt": "2026-09-10T12:06:18.709Z",
+      "activeCount": 0,
+      "updatedAt": "2026-09-10T12:06:18.710Z"
+    },
+    {
+      "id": "RULE-07-FAIL-TC-007",
+      "description": "Test failure pattern: TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('use",
+      "appliesTo": "10-auto-healer",
+      "action": "ANALYSE_FAILURE",
+      "tcKey": "TC-007",
+      "errorMessage": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('username')\u001b[22m\n",
+      "addedAt": "2026-09-10T14:49:21.261Z",
+      "activeCount": 0,
+      "updatedAt": "2026-09-10T14:49:21.262Z"
+    },
+    {
+      "id": "RULE-07-FAIL-TC-010",
+      "description": "Test failure pattern: TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('use",
+      "appliesTo": "10-auto-healer",
+      "action": "ANALYSE_FAILURE",
+      "tcKey": "TC-010",
+      "errorMessage": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('username')\u001b[22m\n",
+      "addedAt": "2026-09-10T14:49:21.269Z",
+      "activeCount": 0,
+      "updatedAt": "2026-09-10T14:49:21.271Z"
+    },
+    {
+      "id": "RULE-07-FAIL-TC-011",
+      "description": "Test failure pattern: Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: ",
+      "appliesTo": "10-auto-healer",
+      "action": "ANALYSE_FAILURE",
+      "tcKey": "TC-011",
+      "errorMessage": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: locator('#inventory_container')\nExpected: visible\nError: strict mode violation: locator('#inventory_container') resolved to 2 elements:\n    1) <div id=\"inventory_container\">…</div> aka locator('#inventory_container').first()\n    2) <div id=\"inventory_container\" class=\"inventory_container\" data-test=\"inventory-container\">…</div> aka locator('[data-test=\"inventory-container\"]')\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('#inventory_container')\u001b[22m\n",
+      "addedAt": "2026-09-10T12:06:18.746Z",
+      "activeCount": 0,
+      "updatedAt": "2026-09-10T12:06:18.747Z"
+    },
+    {
+      "id": "RULE-07-FAIL-TC-012",
+      "description": "Test failure pattern: Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: ",
+      "appliesTo": "10-auto-healer",
+      "action": "ANALYSE_FAILURE",
+      "tcKey": "TC-012",
+      "errorMessage": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: locator('[data-test=\"error\"]').first()\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('[data-test=\"error\"]').first()\u001b[22m\n",
+      "addedAt": "2026-09-10T15:37:50.119Z",
+      "activeCount": 0,
+      "updatedAt": "2026-09-10T15:37:50.120Z"
+    },
+    {
+      "id": "RULE-07-FAIL-TC-013",
+      "description": "Test failure pattern: TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('use",
+      "appliesTo": "10-auto-healer",
+      "action": "ANALYSE_FAILURE",
+      "tcKey": "TC-013",
+      "errorMessage": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('username')\u001b[22m\n",
+      "addedAt": "2026-09-10T14:49:21.276Z",
+      "activeCount": 0,
+      "updatedAt": "2026-09-10T14:49:21.277Z"
+    },
+    {
+      "id": "RULE-07-FAIL-TC-014",
+      "description": "Test failure pattern: TypeError: c is not iterable",
+      "appliesTo": "10-auto-healer",
+      "action": "ANALYSE_FAILURE",
+      "tcKey": "TC-014",
+      "errorMessage": "TypeError: c is not iterable",
+      "addedAt": "2026-09-09T16:43:57.303Z",
+      "activeCount": 0,
+      "updatedAt": "2026-09-09T16:43:57.308Z"
+    },
+    {
+      "id": "RULE-07-FAIL-TC-018",
+      "description": "Test failure pattern: TypeError: c is not iterable",
+      "appliesTo": "10-auto-healer",
+      "action": "ANALYSE_FAILURE",
+      "tcKey": "TC-018",
+      "errorMessage": "TypeError: c is not iterable",
+      "addedAt": "2026-09-09T16:43:57.311Z",
+      "activeCount": 0,
+      "updatedAt": "2026-09-09T16:43:57.315Z"
+    },
+    {
+      "id": "RULE-07-FAIL-TC-019",
+      "description": "Test failure pattern: TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('pas",
+      "appliesTo": "10-auto-healer",
+      "action": "ANALYSE_FAILURE",
+      "tcKey": "TC-019",
+      "errorMessage": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('password')\u001b[22m\n",
+      "addedAt": "2026-09-10T14:49:21.359Z",
+      "activeCount": 0,
+      "updatedAt": "2026-09-10T14:49:21.362Z"
+    },
+    {
+      "id": "RULE-10-1788971900036",
+      "description": "Auto-heal: 14/14 fixed",
+      "appliesTo": "05-playwright-script-generator",
+      "action": "APPLY_HEALING_PATTERNS",
+      "addedAt": "2026-09-09T16:38:20.040Z",
+      "activeCount": 0
+    },
+    {
+      "id": "RULE-02-API-PERF-STRICT-001",
+      "description": "Strict Requirement Gate: Generate API (@api) and Performance (@performance) test cases ONLY if explicit endpoints and quantitative SLA metrics are specified in requirements.",
+      "appliesTo": "02-test-case-generator",
+      "action": "VALIDATE_REQUIREMENTS_BEFORE_GENERATION",
+      "addedAt": "2026-09-10T11:30:00.000Z",
+      "activeCount": 0
+    },
+    {
+      "id": "RULE-05-API-PERF-STRICT-001",
+      "description": "Strict Requirement Gate: Skip generation of Playwright API specs (-api.spec.js) and K6 scripts (-perf.js) unless concrete endpoints and SLA thresholds exist.",
+      "appliesTo": "05-playwright-script-generator",
+      "action": "SKIP_SPECULATIVE_API_PERF_SCRIPTS",
+      "addedAt": "2026-09-10T11:30:00.000Z",
+      "activeCount": 0
+    },
+    {
+      "id": "RULE-07-FAIL-TC-001",
+      "description": "Test failure pattern: TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('use",
+      "appliesTo": "10-auto-healer",
+      "action": "ANALYSE_FAILURE",
+      "tcKey": "TC-001",
+      "errorMessage": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('username')\u001b[22m\n",
+      "addedAt": "2026-09-10T14:49:21.173Z",
+      "activeCount": 0,
+      "updatedAt": "2026-09-10T14:49:21.175Z"
+    },
+    {
+      "id": "RULE-07-FAIL-TC-004",
+      "description": "Test failure pattern: TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('use",
+      "appliesTo": "10-auto-healer",
+      "action": "ANALYSE_FAILURE",
+      "tcKey": "TC-004",
+      "errorMessage": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('username')\u001b[22m\n",
+      "addedAt": "2026-09-10T14:49:21.230Z",
+      "activeCount": 0,
+      "updatedAt": "2026-09-10T14:49:21.232Z"
+    },
+    {
+      "id": "RULE-07-FAIL-TC-009",
+      "description": "Test failure pattern: TypeError: Cannot read properties of undefined (reading 'snapshot')",
+      "appliesTo": "10-auto-healer",
+      "action": "ANALYSE_FAILURE",
+      "tcKey": "TC-009",
+      "errorMessage": "TypeError: Cannot read properties of undefined (reading 'snapshot')",
+      "addedAt": "2026-09-11T10:22:23.168Z",
+      "activeCount": 0,
+      "updatedAt": "2026-09-11T10:22:23.169Z"
+    },
+    {
+      "id": "RULE-07-FAIL-TC-016",
+      "description": "Test failure pattern: TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('use",
+      "appliesTo": "10-auto-healer",
+      "action": "ANALYSE_FAILURE",
+      "tcKey": "TC-016",
+      "errorMessage": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('username')\u001b[22m\n",
+      "addedAt": "2026-09-10T14:49:21.304Z",
+      "activeCount": 0,
+      "updatedAt": "2026-09-10T14:49:21.306Z"
+    },
+    {
+      "id": "RULE-07-FAIL-TC-017",
+      "description": "Test failure pattern: Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: ",
+      "appliesTo": "10-auto-healer",
+      "action": "ANALYSE_FAILURE",
+      "tcKey": "TC-017",
+      "errorMessage": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: locator('[data-test=\"error\"]')\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('[data-test=\"error\"]')\u001b[22m\n",
+      "addedAt": "2026-09-11T10:22:23.171Z",
+      "activeCount": 0,
+      "updatedAt": "2026-09-11T10:22:23.173Z"
+    },
+    {
+      "id": "RULE-07-FAIL-TC-021",
+      "description": "Test failure pattern: Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveAttribute\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocat",
+      "appliesTo": "10-auto-healer",
+      "action": "ANALYSE_FAILURE",
+      "tcKey": "TC-021",
+      "errorMessage": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveAttribute\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByTestId('username')\nExpected: have attribute\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toHaveAttribute\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('username')\u001b[22m\n",
+      "addedAt": "2026-09-10T14:49:21.364Z",
+      "activeCount": 0,
+      "updatedAt": "2026-09-10T14:49:21.366Z"
+    },
+    {
+      "id": "RULE-07-FAIL-TC-002",
+      "description": "Test failure pattern: TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('use",
+      "appliesTo": "10-auto-healer",
+      "action": "ANALYSE_FAILURE",
+      "tcKey": "TC-002",
+      "errorMessage": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('username')\u001b[22m\n",
+      "addedAt": "2026-09-10T14:49:21.178Z",
+      "activeCount": 0
+    },
+    {
+      "id": "RULE-07-FAIL-TC-003",
+      "description": "Test failure pattern: TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('use",
+      "appliesTo": "10-auto-healer",
+      "action": "ANALYSE_FAILURE",
+      "tcKey": "TC-003",
+      "errorMessage": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('username')\u001b[22m\n",
+      "addedAt": "2026-09-10T14:49:21.209Z",
+      "activeCount": 0
+    },
+    {
+      "id": "RULE-07-FAIL-TC-005",
+      "description": "Test failure pattern: TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('use",
+      "appliesTo": "10-auto-healer",
+      "action": "ANALYSE_FAILURE",
+      "tcKey": "TC-005",
+      "errorMessage": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('username')\u001b[22m\n",
+      "addedAt": "2026-09-10T14:49:21.234Z",
+      "activeCount": 0
+    },
+    {
+      "id": "RULE-07-FAIL-TC-015",
+      "description": "Test failure pattern: TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('use",
+      "appliesTo": "10-auto-healer",
+      "action": "ANALYSE_FAILURE",
+      "tcKey": "TC-015",
+      "errorMessage": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('username')\u001b[22m\n",
+      "addedAt": "2026-09-10T14:49:21.280Z",
+      "activeCount": 0
+    },
+    {
+      "id": "RULE-07-FAIL-TC-022",
+      "description": "Test failure pattern: Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.",
+      "appliesTo": "10-auto-healer",
+      "action": "ANALYSE_FAILURE",
+      "tcKey": "TC-022",
+      "errorMessage": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32mtrue\u001b[39m\nReceived: \u001b[31mfalse\u001b[39m",
+      "addedAt": "2026-09-10T14:49:21.377Z",
+      "activeCount": 0
+    },
+    {
+      "id": "RULE-07-FAIL-TC-023",
+      "description": "Test failure pattern: Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveAttribute\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocat",
+      "appliesTo": "10-auto-healer",
+      "action": "ANALYSE_FAILURE",
+      "tcKey": "TC-023",
+      "errorMessage": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveAttribute\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByTestId('username')\nExpected: have attribute\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toHaveAttribute\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('username')\u001b[22m\n",
+      "addedAt": "2026-09-10T14:49:21.400Z",
+      "activeCount": 0
+    },
+    {
+      "id": "RULE-07-FAIL-TC-024",
+      "description": "Test failure pattern: TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('use",
+      "appliesTo": "10-auto-healer",
+      "action": "ANALYSE_FAILURE",
+      "tcKey": "TC-024",
+      "errorMessage": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('username')\u001b[22m\n",
+      "addedAt": "2026-09-10T14:49:21.424Z",
+      "activeCount": 0
+    },
+    {
+      "id": "RULE-07-FAIL-TC-025",
+      "description": "Test failure pattern: TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('use",
+      "appliesTo": "10-auto-healer",
+      "action": "ANALYSE_FAILURE",
+      "tcKey": "TC-025",
+      "errorMessage": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('username')\u001b[22m\n",
+      "addedAt": "2026-09-10T14:49:21.447Z",
+      "activeCount": 0
+    },
+    {
+      "id": "RULE-07-FAIL-TC-032",
+      "description": "Test failure pattern: Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: ",
+      "appliesTo": "10-auto-healer",
+      "action": "ANALYSE_FAILURE",
+      "tcKey": "TC-032",
+      "errorMessage": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByTestId('username')\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('username')\u001b[22m\n",
+      "addedAt": "2026-09-10T14:49:21.483Z",
+      "activeCount": 0
+    },
+    {
+      "id": "RULE-06-ASSERT-003",
+      "description": "Agent 05 recurring issue (×2): Negative or Edge test \"[US-02] [NEG] Login Form Input Validation and UI Compliance — Use expired session token\" asserts successful inventory visibility instead of an error state. Auto-patching to errorMessage assertion.",
+      "appliesTo": "05-playwright-script-generator",
+      "action": "FIX_ASSERT-003",
+      "suggestion": "Assert that errorMessage is visible or that error text matches expected validation, not inventoryContainer.toBeVisible().",
+      "addedAt": "2026-09-11T08:56:34.976Z",
+      "activeCount": 0,
+      "updatedAt": "2026-09-11T08:56:34.981Z"
+    },
+    {
+      "id": "RULE-06-LOGIC-AI",
+      "description": "Agent 05 recurring issue (×4): In TC-021, the requirement specifies error message red color '#E2453C', which converts to RGB 'rgb(226, 69, 60)'. The regex assertion uses 'rgb(228, 69, 60)' (typo '228' instead of '226') and 'rgb(226, 35, 26)' (#E2231A), causing an expectation mismatch against the requirement.",
+      "appliesTo": "05-playwright-script-generator",
+      "action": "FIX_LOGIC-AI",
+      "suggestion": "Update the regex in TC-021 to include /rgb\\(226,\\s*69,\\s*60\\)|#e2453c/i.",
+      "addedAt": "2026-09-11T08:41:52.115Z",
+      "activeCount": 0,
+      "updatedAt": "2026-09-11T08:41:52.120Z"
+    },
+    {
+      "id": "RULE-06-SYNTAX-001",
+      "description": "Agent 05 recurring issue (×2): Syntax Error: Unexpected reserved word 'let'. (160:6)",
+      "appliesTo": "05-playwright-script-generator",
+      "action": "FIX_SYNTAX-001",
+      "suggestion": "Fix the TypeScript/JavaScript syntax errors in the generated code.",
+      "addedAt": "2026-09-11T07:17:18.730Z",
+      "activeCount": 0
+    },
+    {
+      "id": "RULE-06-DATA-002",
+      "description": "Agent 05 recurring issue (×2): Hardcoded URL detected: https://www.saucedemo.com/. Should use testData.baseURL.",
+      "appliesTo": "05-playwright-script-generator",
+      "action": "FIX_DATA-002",
+      "suggestion": "Replace hardcoded URL with testData.baseURL or process.env.AUT_BASE_URL.",
+      "addedAt": "2026-09-11T07:43:20.153Z",
+      "activeCount": 0,
+      "updatedAt": "2026-09-11T07:43:20.155Z"
+    }
+  ],
+  "metrics": {
+    "totalRuns": 29,
+    "totalTestsRun": 405,
+    "totalBugsFound": 90,
+    "totalAutoHeals": 8,
+    "avgPassRate": 41.32,
+    "avgHealingRate": 0
+  }
+}

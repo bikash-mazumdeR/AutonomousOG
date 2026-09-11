@@ -1,0 +1,119 @@
+{
+  "name": "aria-autonomous-testing-framework",
+  "version": "1.0.0",
+  "description": "ARIA — Autonomous Reliability & Intelligence Agent. AI-driven test automation framework with Playwright, K6, Jira, and Gmail integration.",
+  "main": "orchestrator.js",
+  "author": "Senior Test Automation Architect",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "scripts": {
+    "pipeline:start": "node -r ts-node/register orchestrator.ts",
+    "pipeline:status": "node -r ts-node/register cli/status.ts",
+    "pipeline:status:watch": "node -r ts-node/register cli/status.ts --watch",
+    "pipeline:dashboard": "node -r ts-node/register cli/dashboard.ts",
+    "pipeline:reset": "node -r ts-node/register cli/reset.ts",
+    "pipeline:validate": "node -r ts-node/register cli/validate.ts",
+    "pipeline:memory": "node -r ts-node/register cli/memory.ts",
+    "agent:01": "node -r ts-node/register agents/01-requirement-analyzer/agent.ts",
+    "agent:02": "node -r ts-node/register agents/02-test-case-generator/agent.ts",
+    "agent:03": "node -r ts-node/register agents/03-test-case-reviewer/agent.ts",
+    "agent:04": "node -r ts-node/register agents/04-test-data-generator/agent.ts",
+    "agent:05": "node -r ts-node/register agents/05-playwright-script-generator/agent.ts",
+    "agent:06": "node -r ts-node/register agents/06-automation-reviewer/agent.ts",
+    "agent:07": "node -r ts-node/register agents/07-test-runner/agent.ts",
+    "agent:08": "node -r ts-node/register agents/08-bug-reporter/agent.ts",
+    "agent:09": "node -r ts-node/register agents/09-report-generator/agent.ts",
+    "agent:10": "node -r ts-node/register agents/10-auto-healer/agent.ts",
+    "agent:11": "node -r ts-node/register agents/11-retest-agent/agent.ts",
+    "test": "jest",
+    "test:unit": "jest --verbose",
+    "test:coverage": "jest --coverage",
+    "test:watch": "jest --watch",
+    "test:playwright": "npx playwright test",
+    "test:playwright:ui": "npx playwright test --ui",
+    "test:k6": "k6 run tests/k6/load-test.js",
+    "lint": "eslint . --ext .ts --fix",
+    "lint:check": "eslint . --ext .ts",
+    "framework:validate": "node -r ts-node/register cli/validate.ts",
+    "framework:memory": "node -r ts-node/register cli/memory.ts",
+    "report:open": "open reports/html/latest.html || xdg-open reports/html/latest.html"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@playwright/test": "^1.44.0",
+    "@types/multer": "^2.1.0",
+    "ast-types": "^0.16.1",
+    "axios": "^1.7.2",
+    "better-sqlite3": "^12.9.0",
+    "chalk": "^4.1.2",
+    "dayjs": "^1.11.11",
+    "dotenv": "^16.4.5",
+    "express": "^5.2.1",
+    "express-fileupload": "^1.5.2",
+    "fast-glob": "^3.3.2",
+    "form-data": "^4.0.0",
+    "handlebars": "^4.7.8",
+    "js-yaml": "^4.1.0",
+    "lodash": "^4.17.21",
+    "multer": "^2.1.1",
+    "nodemailer": "^6.9.13",
+    "p-limit": "^3.1.0",
+    "p-queue": "^6.6.2",
+    "p-retry": "^8.0.0",
+    "recast": "^0.23.11",
+    "uuid": "^9.0.1",
+    "vectordb": "^0.21.2",
+    "winston": "^3.13.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/express": "^5.0.6",
+    "@types/express-fileupload": "^1.5.1",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^25.6.2",
+    "@types/nodemailer": "^8.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.70.0",
+    "@typescript-eslint/parser": "^8.70.0",
+    "eslint": "^8.57.0",
+    "eslint-config-airbnb-base": "^15.0.0",
+    "eslint-plugin-import": "^2.29.1",
+    "eslint-plugin-jsdoc": "^48.2.9",
+    "jest": "^30.3.0",
+    "prettier": "^3.2.5",
+    "ts-jest": "^29.4.9",
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.3"
+  },
+  "eslintConfig": {
+    "extends": [
+      "airbnb-base"
+    ],
+    "plugins": [
+      "jsdoc"
+    ],
+    "env": {
+      "node": true,
+      "es2022": true
+    },
+    "parserOptions": {
+      "ecmaVersion": 2022
+    },
+    "rules": {
+      "no-console": "off",
+      "no-await-in-loop": "warn",
+      "max-len": [
+        "warn",
+        {
+          "code": 120
+        }
+      ],
+      "no-underscore-dangle": "off",
+      "no-restricted-syntax": "off",
+      "jsdoc/require-jsdoc": "warn"
+    }
+  }
+}

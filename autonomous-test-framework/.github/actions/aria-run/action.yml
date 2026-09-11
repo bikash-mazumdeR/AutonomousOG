@@ -1,0 +1,37 @@
+name: 'ARIA Autonomous Test'
+description: 'Runs the ARIA autonomous testing pipeline'
+inputs:
+  openai-api-key:
+    description: 'OpenAI API Key'
+    required: false
+  gemini-api-key:
+    description: 'Gemini API Key'
+    required: false
+  aut-base-url:
+    description: 'Base URL of the Application Under Test'
+    required: true
+  approval-mode:
+    description: 'Approval mode (manual or auto)'
+    required: false
+    default: 'auto'
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+    - name: Install dependencies
+      run: npm ci
+      shell: bash
+    - name: Install Playwright Browsers
+      run: npx playwright install --with-deps chromium
+      shell: bash
+    - name: Run ARIA Pipeline
+      run: npm run pipeline:start
+      shell: bash
+      env:
+        OPENAI_API_KEY: ${{ inputs.openai-api-key }}
+        GEMINI_API_KEY: ${{ inputs.gemini-api-key }}
+        AUT_BASE_URL: ${{ inputs.aut-base-url }}
+        FRAMEWORK_APPROVAL_MODE: ${{ inputs.approval-mode }}

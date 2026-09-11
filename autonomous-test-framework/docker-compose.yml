@@ -1,0 +1,23 @@
+services:
+  aria-framework:
+    build: .
+    container_name: aria-framework
+    env_file:
+      - .env
+    environment:
+      - FRAMEWORK_PROJECT_ID=${FRAMEWORK_PROJECT_ID:-my-project}
+      - FRAMEWORK_APPROVAL_MODE=${FRAMEWORK_APPROVAL_MODE:-manual}
+      - APPROVAL_WEBHOOK_PORT=${APPROVAL_WEBHOOK_PORT:-8080}
+      - ARIA_DASHBOARD_PORT=${ARIA_DASHBOARD_PORT:-3000}
+      - AUT_BASE_URL=${AUT_BASE_URL:-https://www.saucedemo.com/}
+      - AUT_ENVIRONMENT=${AUT_ENVIRONMENT:-staging}
+    volumes:
+      - ./reports:/app/reports
+      - ./.state:/app/.state
+      - ./core/project-memory:/app/core/project-memory
+      - ./tests:/app/tests
+    ports:
+      - "8080:8080"
+      - "3000:3000"
+    stdin_open: true # Allows CLI interaction if in manual mode
+    tty: true

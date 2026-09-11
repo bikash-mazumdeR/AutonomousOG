@@ -1,0 +1,74 @@
+name: Retest Failed Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_ids:
+        description: "Comma-separated list of test IDs to re-run (e.g. TC-001,TC-042)"
+        required: true
+        type: string
+      environment:
+        description: "Target environment"
+        required: true
+        default: "staging"
+        type: choice
+        options:
+          - staging
+          - pre-prod
+          - prod
+
+jobs:
+  retest:
+    name: Run Agent 11 (Retest)
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Install Playwright Browsers
+        run: npx playwright install --with-deps
+
+      - name: Restore Framework State
+        uses: actions/cache@v4
+        with:
+          path: |
+            .state/
+            core/project-memory/memory.json
+          key: aria-state-${{ github.ref }}
+          restore-keys: |
+            aria-state-main
+
+      - name: Execute Retest Agent
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          FRAMEWORK_PROJECT_ID: ${{ github.repository }}
+          AUT_ENVIRONMENT: ${{ inputs.environment }}
+          RETEST_TARGETS: ${{ inputs.test_ids }}
+        run: |
+          echo "Starting targeted retest for: ${{ inputs.test_ids }}"
+          npm run agent:11 -- --targets="${{ inputs.test_ids }}"
+
+      - name: Upload Retest Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: retest-reports
+          path: |
+            reports/
+            playwright-report/
+            test-results/
+          retention-days: 14
