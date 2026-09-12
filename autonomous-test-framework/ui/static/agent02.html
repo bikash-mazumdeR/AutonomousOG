@@ -289,6 +289,100 @@
     .step-btn-remove:hover { color: var(--danger); border-color: var(--danger); background: rgba(239, 68, 68, 0.1); }
     .step-fields-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
+    /* ── Gherkin Step Preview & Feature Styles ───────────────────────────── */
+    .gh-preview-line {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      font-family: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 11px;
+      line-height: 1.45;
+      margin-top: 3px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .gh-kw {
+      font-weight: 700;
+      font-size: 10px;
+      padding: 1px 5px;
+      border-radius: 3px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      flex-shrink: 0;
+      font-family: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+    }
+    .gh-kw-given { color: #818cf8; background: rgba(99, 102, 241, 0.2); }
+    .gh-kw-when  { color: #38bdf8; background: rgba(56, 189, 248, 0.2); }
+    .gh-kw-then  { color: #4ade80; background: rgba(74, 222, 128, 0.2); }
+    .gh-kw-and   { color: #fbbf24; background: rgba(251, 191, 36, 0.2); }
+    .gh-kw-but   { color: #f87171; background: rgba(248, 113, 113, 0.2); }
+    .gh-text {
+      color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .gh-preview-more {
+      font-size: 10px;
+      color: var(--text-dim);
+      margin-top: 3px;
+      font-style: italic;
+    }
+    .modal-view-tabs {
+      display: flex;
+      gap: 8px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+      margin-top: 6px;
+    }
+    .modal-tab-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      border-radius: 6px;
+      padding: 6px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+    .modal-tab-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .step-compiled-gherkin {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-family: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 11px;
+      color: #93c5fd;
+      line-height: 1.4;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .gherkin-feature-box {
+      background: #020817;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      font-family: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      color: #e2e8f0;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 380px;
+      overflow-y: auto;
+    }
+
     /* ── Action bar & Modals (Mimic Agent 01) ────────────────────────────── */
     #runBtn {
       height: 38px;
@@ -551,19 +645,56 @@
           </div>
         </div>
 
-        <div class="steps-header-row">
-          <span>Test Steps (<span id="tcStepsCount">0</span>)</span>
-          <button type="button" class="btn btn-ghost btn-sm" id="addStepBtn">
+        <div class="modal-view-tabs">
+          <button type="button" class="modal-tab-btn active" id="tcTabStepsBtn">
             <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <line x1="5" y1="12" x2="19" y2="12"></line>
+              <line x1="8" y1="6" x2="21" y2="6"></line>
+              <line x1="8" y1="12" x2="21" y2="12"></line>
+              <line x1="8" y1="18" x2="21" y2="18"></line>
+              <line x1="3" y1="6" x2="3.01" y2="6"></line>
+              <line x1="3" y1="12" x2="3.01" y2="12"></line>
+              <line x1="3" y1="18" x2="3.01" y2="18"></line>
             </svg>
-            <span>Add Step</span>
+            <span>Gherkin Step Editor (<span id="tcStepsCount">0</span>)</span>
+          </button>
+          <button type="button" class="modal-tab-btn" id="tcTabFeatureBtn">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="16 18 22 12 16 6"></polyline>
+              <polyline points="8 6 2 12 8 18"></polyline>
+            </svg>
+            <span>Feature Scenario (.feature)</span>
           </button>
         </div>
 
-        <div id="tcStepsList">
-          <!-- Step cards rendered here -->
+        <div id="tcStepsViewContainer">
+          <div class="steps-header-row" style="margin-bottom: 10px;">
+            <span style="font-size: 12px; color: var(--text-dim); text-transform: uppercase;">Step Sequence (Given / When / Then)</span>
+            <button type="button" class="btn btn-ghost btn-sm" id="addStepBtn">
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              <span>Add Step</span>
+            </button>
+          </div>
+
+          <div id="tcStepsList">
+            <!-- Step cards rendered here -->
+          </div>
+        </div>
+
+        <div id="tcFeatureViewContainer" class="hidden">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+            <span style="font-size: 12px; color: var(--text-dim); text-transform: uppercase;">Exact Gherkin Scenario saved to Feature File</span>
+            <button type="button" class="btn btn-ghost btn-sm" id="copyGherkinBtn" style="height: 28px; padding: 0 10px;">
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+              <span id="copyGherkinText">Copy Gherkin</span>
+            </button>
+          </div>
+          <pre class="gherkin-feature-box" id="tcFeatureSnippet"></pre>
         </div>
       </div>
       <div class="tc-modal-foot">
@@ -694,7 +825,14 @@
       tcEditObjective: document.getElementById('tcEditObjective'),
       tcStepsCount: document.getElementById('tcStepsCount'),
       addStepBtn: document.getElementById('addStepBtn'),
-      tcStepsList: document.getElementById('tcStepsList')
+      tcStepsList: document.getElementById('tcStepsList'),
+      tcTabStepsBtn: document.getElementById('tcTabStepsBtn'),
+      tcTabFeatureBtn: document.getElementById('tcTabFeatureBtn'),
+      tcStepsViewContainer: document.getElementById('tcStepsViewContainer'),
+      tcFeatureViewContainer: document.getElementById('tcFeatureViewContainer'),
+      tcFeatureSnippet: document.getElementById('tcFeatureSnippet'),
+      copyGherkinBtn: document.getElementById('copyGherkinBtn'),
+      copyGherkinText: document.getElementById('copyGherkinText')
     };
 
     // ── Initialization ────────────────────────────────────────────────────
@@ -880,6 +1018,91 @@
       document.getElementById('statPerf').textContent = allTestCases.filter(t => (t.type || '').toUpperCase() === 'PERFORMANCE').length;
     }
 
+    // ── Gherkin Step & Feature Formatters ─────────────────────────────────
+    function convertTestStepsToGherkin(tc) {
+      const steps = tc?.testSteps || [];
+      const result = [];
+
+      if (steps.length === 0) {
+        result.push({ keyword: 'Given', text: 'the application state is prepared' });
+        result.push({ keyword: 'When', text: `the test action for "${tc?.key || 'TC'}" is executed` });
+        result.push({ keyword: 'Then', text: `the expected outcome is validated: ${tc?.objective || 'Success'}` });
+        return result;
+      }
+
+      for (let stepIdx = 0; stepIdx < steps.length; stepIdx++) {
+        const step = steps[stepIdx];
+        const desc = (step.description || '').trim();
+        const data = (step.testData || '').trim();
+        const expected = (step.expectedResult || '').trim();
+
+        const isVerification = /^(verify|validate|check|confirm|ensure)/i.test(desc);
+        const isNav = /^(navigate|open|given|go to)/i.test(desc);
+
+        if (isVerification) {
+          const thenText = expected || desc;
+          result.push({ keyword: 'Then', text: thenText });
+        } else {
+          const keyword = step.keyword || ((stepIdx === 0 && isNav) ? 'Given' : 'When');
+          result.push({ keyword, text: desc });
+
+          if (data && !/^\((leave blank|none|no token.*)\)$/i.test(data)) {
+            result.push({ keyword: 'And', text: `with test data "${data}"` });
+          }
+
+          if (expected && expected.toLowerCase() !== desc.toLowerCase()) {
+            result.push({ keyword: 'Then', text: expected });
+          }
+        }
+      }
+
+      return result;
+    }
+
+    function buildGherkinScenarioText(tc) {
+      const tags = [];
+      if (tc.type) tags.push(`@${tc.type.toLowerCase()}`);
+      if (Array.isArray(tc.labels)) {
+        for (const l of tc.labels) {
+          const clean = `@${String(l).toLowerCase().replace(/[^a-z0-9_-]/g, '')}`;
+          if (!tags.includes(clean)) tags.push(clean);
+        }
+      }
+      if (tc.key) tags.push(`@${tc.key.toLowerCase()}`);
+      if (tc.status === 'OBSOLETE' || tc.isObsolete) tags.push('@obsolete');
+
+      let scenarioTitle = tc.name || tc.objective || tc.key;
+      if (scenarioTitle.includes('—')) {
+        scenarioTitle = scenarioTitle.split('—').slice(1).join('—').trim();
+      } else if (scenarioTitle.includes(' - ')) {
+        scenarioTitle = scenarioTitle.split(' - ').slice(1).join(' - ').trim();
+      } else {
+        scenarioTitle = scenarioTitle.replace(/^\[.*?\]\s*/g, '').trim();
+      }
+
+      const gherkinSteps = convertTestStepsToGherkin(tc);
+      const stepLines = gherkinSteps.map((s) => `    ${s.keyword} ${s.text}`);
+
+      return [
+        `  ${tags.join(' ')}`,
+        `  Scenario: [${tc.key}] ${scenarioTitle}`,
+        ...stepLines,
+      ].join('\n');
+    }
+
+    function renderGherkinPreviewHtml(tc) {
+      const gherkinSteps = convertTestStepsToGherkin(tc);
+      if (!gherkinSteps || gherkinSteps.length === 0) {
+        return '<span style="color: var(--text-dim);">No steps generated</span>';
+      }
+      const linesHtml = gherkinSteps.slice(0, 3).map((s) => {
+        const kwClass = `gh-kw-${s.keyword.toLowerCase()}`;
+        return `<div class="gh-preview-line"><span class="gh-kw ${kwClass}">${s.keyword}</span> <span class="gh-text">${escapeHtml(s.text)}</span></div>`;
+      }).join('');
+      const more = gherkinSteps.length > 3 ? `<div class="gh-preview-more">+ ${gherkinSteps.length - 3} more Gherkin steps...</div>` : '';
+      return linesHtml + more;
+    }
+
     // ── Results Rendering ─────────────────────────────────────────────────
     function renderResults(testCasesOutput) {
       const exportData = testCasesOutput.zephyrExport;
@@ -895,7 +1118,6 @@
         tr.id = `row-${tc.key}`;
         
         const typeClass = (tc.type || '').toLowerCase();
-        const firstStep = tc.testSteps?.[0]?.description || 'No steps generated';
 
         tr.innerHTML = `
           <td><input type="checkbox" class="tc-checkbox" data-key="${tc.key}" checked></td>
@@ -910,7 +1132,7 @@
               </button>
             </div>
             <div class="tc-preview-text" id="preview-${tc.key}">
-              ${escapeHtml(firstStep)}...
+              ${renderGherkinPreviewHtml(tc)}
             </div>
           </td>
         `;
@@ -956,6 +1178,31 @@
     }
 
     // ── Test Case Modal & Step Editing Logic ──────────────────────────────
+    function updateGherkinFeatureSnippet() {
+      if (!currentEditingKey) return;
+      const tc = allTestCases.find(t => t.key === currentEditingKey) || {};
+      const stepCards = Array.from(DOM.tcStepsList.querySelectorAll('.step-card'));
+      const testSteps = stepCards.map((card, idx) => ({
+        index: idx + 1,
+        keyword: card.querySelector('.step-kw')?.value || 'When',
+        description: (card.querySelector('.step-desc')?.value || '').trim(),
+        testData: (card.querySelector('.step-data')?.value || '').trim(),
+        expectedResult: (card.querySelector('.step-expected')?.value || '').trim(),
+      }));
+
+      const syntheticTc = {
+        ...tc,
+        key: currentEditingKey,
+        name: DOM.tcEditName?.value?.trim() || tc.name,
+        type: DOM.tcEditType?.value || tc.type,
+        labels: (DOM.tcEditLabels?.value || '').split(',').map(s => s.trim()).filter(Boolean),
+        objective: DOM.tcEditObjective?.value?.trim() || tc.objective,
+        testSteps
+      };
+
+      DOM.tcFeatureSnippet.textContent = buildGherkinScenarioText(syntheticTc);
+    }
+
     function openTcModal(key) {
       const tc = allTestCases.find(t => t.key === key);
       if (!tc) return;
@@ -965,6 +1212,12 @@
       DOM.tcModalAlert.textContent = '';
       DOM.tcModalError.classList.add('hidden');
       DOM.tcModalError.textContent = '';
+
+      // Reset view tab to steps editor
+      DOM.tcTabStepsBtn.classList.add('active');
+      DOM.tcTabFeatureBtn.classList.remove('active');
+      DOM.tcStepsViewContainer.classList.remove('hidden');
+      DOM.tcFeatureViewContainer.classList.add('hidden');
 
       DOM.tcModalKey.textContent = tc.key;
       const typeStr = (tc.type || 'POSITIVE').toUpperCase();
@@ -984,6 +1237,7 @@
         DOM.tcStepsList.appendChild(createStepCardElement(step, idx));
       });
       updateStepNumbers();
+      updateGherkinFeatureSnippet();
 
       // Reset save button state
       DOM.tcModalSaveBtn.disabled = false;
@@ -1000,36 +1254,92 @@
       currentEditingKey = null;
     }
 
+    function computeStepGherkinLine(kw, desc, data, expected) {
+      const isVerification = /^(verify|validate|check|confirm|ensure)/i.test(desc);
+      if (isVerification) {
+        return `Then ${expected || desc}`;
+      }
+      let line = `${kw || 'When'} ${desc || '[step description]'}`;
+      if (data && !/^\((leave blank|none|no token.*)\)$/i.test(data)) {
+        line += `\nAnd with test data "${data}"`;
+      }
+      if (expected && expected.toLowerCase() !== desc.toLowerCase()) {
+        line += `\nThen ${expected}`;
+      }
+      return line;
+    }
+
     function createStepCardElement(step = {}, idx = 0) {
       const div = document.createElement('div');
       div.className = 'step-card';
+      const desc = step.description || '';
+      const isNav = /^(navigate|open|given|go to)/i.test(desc);
+      const isVerif = /^(verify|validate|check|confirm|ensure)/i.test(desc);
+      const defaultKw = step.keyword || ((idx === 0 && isNav) ? 'Given' : (isVerif ? 'Then' : 'When'));
+
       div.innerHTML = `
         <div class="step-card-head">
-          <span class="step-num-badge">Step ${idx + 1}</span>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="step-num-badge">Step ${idx + 1}</span>
+            <select class="form-select step-kw" style="width: 95px; height: 28px; padding: 2px 8px; font-weight: 700; font-family: monospace; font-size: 11px;">
+              <option value="Given" ${defaultKw === 'Given' ? 'selected' : ''}>Given</option>
+              <option value="When" ${defaultKw === 'When' ? 'selected' : ''}>When</option>
+              <option value="Then" ${defaultKw === 'Then' ? 'selected' : ''}>Then</option>
+              <option value="And" ${defaultKw === 'And' ? 'selected' : ''}>And</option>
+              <option value="But" ${defaultKw === 'But' ? 'selected' : ''}>But</option>
+            </select>
+          </div>
           <button type="button" class="step-btn-remove" title="Delete this step">
             ${SVG_ICONS.trash}
             <span>Remove</span>
           </button>
         </div>
+        <div class="step-compiled-gherkin">
+          <!-- Compiled Gherkin preview rendered here -->
+        </div>
         <div class="form-field">
-          <label>Action / Description</label>
-          <textarea class="form-textarea step-desc" rows="2" placeholder="e.g. When the user enters valid credentials">${escapeHtml(step.description || '')}</textarea>
+          <label>Action / Step Statement (Gherkin clause)</label>
+          <textarea class="form-textarea step-desc" rows="2" placeholder="e.g. user enters valid credentials into username field">${escapeHtml(desc)}</textarea>
         </div>
         <div class="step-fields-grid">
           <div class="form-field">
-            <label>Test Data (Optional)</label>
-            <input type="text" class="form-input step-data" placeholder="e.g. username: standard_user" value="${escapeHtml(step.testData || '')}">
+            <label>Test Data (And with test data "...")</label>
+            <input type="text" class="form-input step-data" placeholder="e.g. standard_user / secret_sauce" value="${escapeHtml(step.testData || '')}">
           </div>
           <div class="form-field">
-            <label>Expected Result</label>
-            <input type="text" class="form-input step-expected" placeholder="e.g. User is redirected to inventory" value="${escapeHtml(step.expectedResult || '')}">
+            <label>Expected Result (Then ...)</label>
+            <input type="text" class="form-input step-expected" placeholder="e.g. user is redirected to inventory" value="${escapeHtml(step.expectedResult || '')}">
           </div>
         </div>
       `;
 
+      const previewDiv = div.querySelector('.step-compiled-gherkin');
+      const kwSelect = div.querySelector('.step-kw');
+      const descInput = div.querySelector('.step-desc');
+      const dataInput = div.querySelector('.step-data');
+      const expInput = div.querySelector('.step-expected');
+
+      function updateCardPreview() {
+        previewDiv.textContent = computeStepGherkinLine(
+          kwSelect.value,
+          descInput.value.trim(),
+          dataInput.value.trim(),
+          expInput.value.trim()
+        );
+        updateGherkinFeatureSnippet();
+      }
+
+      [kwSelect, descInput, dataInput, expInput].forEach(el => {
+        el.addEventListener('input', updateCardPreview);
+        el.addEventListener('change', updateCardPreview);
+      });
+
+      updateCardPreview();
+
       div.querySelector('.step-btn-remove').addEventListener('click', () => {
         div.remove();
         updateStepNumbers();
+        updateGherkinFeatureSnippet();
       });
 
       return div;
@@ -1045,9 +1355,10 @@
     }
 
     function addStep() {
-      const newCard = createStepCardElement({ description: '', testData: '', expectedResult: '' }, DOM.tcStepsList.children.length);
+      const newCard = createStepCardElement({ keyword: 'When', description: '', testData: '', expectedResult: '' }, DOM.tcStepsList.children.length);
       DOM.tcStepsList.appendChild(newCard);
       updateStepNumbers();
+      updateGherkinFeatureSnippet();
       const descInput = newCard.querySelector('.step-desc');
       if (descInput) {
         descInput.focus();
@@ -1083,6 +1394,7 @@
       const stepCards = Array.from(DOM.tcStepsList.querySelectorAll('.step-card'));
       const testSteps = stepCards.map((card, idx) => ({
         index: idx + 1,
+        keyword: card.querySelector('.step-kw')?.value || 'When',
         description: (card.querySelector('.step-desc')?.value || '').trim(),
         testData: (card.querySelector('.step-data')?.value || '').trim(),
         expectedResult: (card.querySelector('.step-expected')?.value || '').trim()
@@ -1131,13 +1443,12 @@
 
         const rowPreview = document.getElementById(`preview-${currentEditingKey}`);
         if (rowPreview) {
-          const firstDesc = updated.testSteps?.[0]?.description || 'No steps generated';
-          rowPreview.textContent = `${firstDesc}...`;
+          rowPreview.innerHTML = renderGherkinPreviewHtml(updated);
         }
 
         updateSummaryCounts();
 
-        DOM.tcModalAlert.textContent = '✅ Test case & steps saved successfully! Feature files synced.';
+        DOM.tcModalAlert.textContent = '✅ Test case & Gherkin steps saved successfully! Feature files synced.';
         DOM.tcModalAlert.classList.remove('hidden');
 
         setTimeout(() => {
@@ -1154,6 +1465,32 @@
     }
 
     // Modal event bindings
+    DOM.tcTabStepsBtn.addEventListener('click', () => {
+      DOM.tcTabStepsBtn.classList.add('active');
+      DOM.tcTabFeatureBtn.classList.remove('active');
+      DOM.tcStepsViewContainer.classList.remove('hidden');
+      DOM.tcFeatureViewContainer.classList.add('hidden');
+    });
+
+    DOM.tcTabFeatureBtn.addEventListener('click', () => {
+      DOM.tcTabFeatureBtn.classList.add('active');
+      DOM.tcTabStepsBtn.classList.remove('active');
+      DOM.tcFeatureViewContainer.classList.remove('hidden');
+      DOM.tcStepsViewContainer.classList.add('hidden');
+      updateGherkinFeatureSnippet();
+    });
+
+    DOM.copyGherkinBtn.addEventListener('click', () => {
+      navigator.clipboard.writeText(DOM.tcFeatureSnippet.textContent || '');
+      DOM.copyGherkinText.textContent = 'Copied!';
+      setTimeout(() => { DOM.copyGherkinText.textContent = 'Copy Gherkin'; }, 1500);
+    });
+
+    [DOM.tcEditName, DOM.tcEditType, DOM.tcEditLabels, DOM.tcEditObjective].forEach(el => {
+      el.addEventListener('input', updateGherkinFeatureSnippet);
+      el.addEventListener('change', updateGherkinFeatureSnippet);
+    });
+
     DOM.addStepBtn.addEventListener('click', addStep);
     DOM.tcModalSaveBtn.addEventListener('click', saveTestCase);
     DOM.tcModalCloseXBtn.addEventListener('click', closeTcModal);

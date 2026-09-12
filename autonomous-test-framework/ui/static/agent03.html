@@ -396,6 +396,210 @@
     .findings-chip.warn { color: #fbbf24; }
     .findings-chip.danger { color: #f87171; }
 
+    /* Test Case Links & Buttons */
+    .tc-name-link {
+      color: var(--text);
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      transition: color 0.15s;
+    }
+    .tc-name-link:hover {
+      color: var(--accent);
+      text-decoration: underline;
+    }
+    .btn-inspect-tc {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      height: 32px;
+      width: 130px;
+      min-width: 130px;
+      max-width: 130px;
+      padding: 0 12px;
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1;
+      white-space: nowrap;
+      flex-shrink: 0;
+      background: var(--surface);
+      color: var(--accent);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      box-sizing: border-box;
+      transition: all 0.15s ease;
+      user-select: none;
+    }
+    .btn-inspect-tc:hover {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+    .tc-preview-text { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+
+    /* ── Gherkin Step Preview & Feature Styles ───────────────────────────── */
+    .gh-preview-line {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      font-family: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 11px;
+      line-height: 1.45;
+      margin-top: 3px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .gh-kw {
+      font-weight: 700;
+      font-size: 10px;
+      padding: 1px 5px;
+      border-radius: 3px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      flex-shrink: 0;
+      font-family: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+    }
+    .gh-kw-given { color: #818cf8; background: rgba(99, 102, 241, 0.2); }
+    .gh-kw-when  { color: #38bdf8; background: rgba(56, 189, 248, 0.2); }
+    .gh-kw-then  { color: #4ade80; background: rgba(74, 222, 128, 0.2); }
+    .gh-kw-and   { color: #fbbf24; background: rgba(251, 191, 36, 0.2); }
+    .gh-kw-but   { color: #f87171; background: rgba(248, 113, 113, 0.2); }
+    .gh-text {
+      color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .gh-preview-more {
+      font-size: 10px;
+      color: var(--text-dim);
+      margin-top: 3px;
+      font-style: italic;
+    }
+    .modal-view-tabs {
+      display: flex;
+      gap: 8px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+      margin-top: 6px;
+    }
+    .modal-tab-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      border-radius: 6px;
+      padding: 6px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+    .modal-tab-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .step-compiled-gherkin {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-family: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 11px;
+      color: #93c5fd;
+      line-height: 1.4;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .gherkin-feature-box {
+      background: #020817;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      font-family: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      color: #e2e8f0;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      max-height: 340px;
+    }
+
+    /* ── Requirements Mapping & Exclusions Advisory ─────────────────────── */
+    .advisory-card {
+      background: rgba(30, 41, 59, 0.7);
+      border: 1px solid rgba(59, 130, 246, 0.35);
+      border-left: 4px solid #3b82f6;
+      border-radius: var(--radius);
+      padding: 18px 20px;
+      margin-bottom: 20px;
+    }
+    .advisory-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .advisory-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #93c5fd;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .advisory-badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 12px;
+      background: rgba(59, 130, 246, 0.18);
+      border: 1px solid rgba(59, 130, 246, 0.35);
+      color: #60a5fa;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .advisory-body {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .advisory-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 12px;
+    }
+    @media (max-width: 900px) {
+      .advisory-grid { grid-template-columns: 1fr; }
+    }
+    .advisory-item {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+    }
+    .advisory-item-title {
+      font-weight: 600;
+      font-size: 12px;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+    .advisory-item-desc {
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
     /* ── Action bar & Modals ─────────────────────────────────────────────── */
     .action-bar {
       position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface);
@@ -606,6 +810,27 @@
         <!-- Injected by JS -->
       </div>
 
+      <!-- Requirements Mapping & Exclusions Advisory (Information Only) -->
+      <div class="advisory-card hidden" id="reqAdvisoryCard">
+        <div class="advisory-header">
+          <div class="advisory-title">
+            <svg style="width: 18px; height: 18px; flex-shrink: 0;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            <span>Requirements Mapping & Exclusions Advisory</span>
+          </div>
+          <span class="advisory-badge">Information Only &bull; Non-Blocking</span>
+        </div>
+        <div class="advisory-body" id="reqAdvisorySummary">
+          Agent 03 evaluated only test cases selected by user in Agent 02 stage. The following informational findings detail omitted test cases or features pending full mapping per the Requirement Document.
+        </div>
+        <div id="reqAdvisoryGrid" class="advisory-grid">
+          <!-- Injected dynamically -->
+        </div>
+      </div>
+
       <!-- Main Results Grid -->
       <div class="main-grid">
         
@@ -663,7 +888,7 @@
                     <th style="width: 40px;"><input type="checkbox" id="selectAllTc" checked title="Toggle All"></th>
                     <th>Key</th>
                     <th>Type</th>
-                    <th>Scenario & Preview</th>
+                    <th>Scenario & Gherkin Steps</th>
                     <th>Review Status</th>
                     <th>Findings</th>
                     <th style="width: 140px;">Action</th>
@@ -796,19 +1021,41 @@
           </div>
         </div>
 
-        <div class="steps-header-row" style="display: flex; align-items: center; justify-content: space-between; margin-top: 4px;">
-          <span style="font-size: 13px; font-weight: 600; color: var(--text); text-transform: uppercase;">Reviewed Test Steps (<span id="modalStepsCount">0</span>)</span>
-          <button type="button" class="btn btn-ghost btn-sm" id="modalAddStepBtn">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
-            <span>Add Step</span>
+        <!-- Modal View Tabs -->
+        <div class="modal-view-tabs">
+          <button type="button" class="modal-tab-btn active" id="modalTabStepsBtn">
+            <svg style="width: 14px; height: 14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+            <span>Gherkin Step Editor</span>
+          </button>
+          <button type="button" class="modal-tab-btn" id="modalTabFeatureBtn">
+            <svg style="width: 14px; height: 14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+            <span>Feature Scenario (.feature)</span>
+          </button>
+          <button type="button" class="btn btn-ghost btn-sm" id="copyGherkinBtn" style="margin-left: auto; height: 28px; min-width: 110px; font-size: 11px;">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+            <span>Copy Gherkin</span>
           </button>
         </div>
 
-        <div id="modalStepsList">
-          <!-- Step cards injected here -->
+        <div id="modalStepsViewContainer">
+          <div class="steps-header-row" style="display: flex; align-items: center; justify-content: space-between; margin-top: 8px; margin-bottom: 8px;">
+            <span style="font-size: 13px; font-weight: 600; color: var(--text); text-transform: uppercase;">Reviewed Test Steps (<span id="modalStepsCount">0</span>)</span>
+            <button type="button" class="btn btn-ghost btn-sm" id="modalAddStepBtn" style="height: 30px; min-width: 110px;">
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              <span>Add Step</span>
+            </button>
+          </div>
+
+          <div id="modalStepsList">
+            <!-- Step cards injected here -->
+          </div>
+        </div>
+
+        <div id="modalFeatureViewContainer" class="hidden">
+          <pre class="gherkin-feature-box" id="modalFeatureSnippet"></pre>
         </div>
       </div>
 
@@ -953,8 +1200,19 @@
       statDeduped: document.getElementById('statDeduped'),
       recommendationsList: document.getElementById('recommendationsList'),
 
+      // Advisory
+      reqAdvisoryCard: document.getElementById('reqAdvisoryCard'),
+      reqAdvisorySummary: document.getElementById('reqAdvisorySummary'),
+      reqAdvisoryGrid: document.getElementById('reqAdvisoryGrid'),
+
       // Modal
       tcReviewModal: document.getElementById('tcReviewModal'),
+      modalTabStepsBtn: document.getElementById('modalTabStepsBtn'),
+      modalTabFeatureBtn: document.getElementById('modalTabFeatureBtn'),
+      copyGherkinBtn: document.getElementById('copyGherkinBtn'),
+      modalStepsViewContainer: document.getElementById('modalStepsViewContainer'),
+      modalFeatureViewContainer: document.getElementById('modalFeatureViewContainer'),
+      modalFeatureSnippet: document.getElementById('modalFeatureSnippet'),
       modalTcKey: document.getElementById('modalTcKey'),
       modalTcTypeBadge: document.getElementById('modalTcTypeBadge'),
       modalTcStatusBadge: document.getElementById('modalTcStatusBadge'),
@@ -989,6 +1247,131 @@
       chatInput: document.getElementById('chatInput'),
       chatSendBtn: document.getElementById('chatSendBtn')
     };
+
+    // ── Gherkin Step & Feature Formatters ─────────────────────────────────
+    function convertTestStepsToGherkin(tc) {
+      const steps = tc?.testSteps || [];
+      const result = [];
+
+      if (steps.length === 0) {
+        result.push({ keyword: 'Given', text: 'the application state is prepared' });
+        result.push({ keyword: 'When', text: `the test action for "${tc?.key || 'TC'}" is executed` });
+        result.push({ keyword: 'Then', text: `the expected outcome is validated: ${tc?.objective || 'Success'}` });
+        return result;
+      }
+
+      for (let stepIdx = 0; stepIdx < steps.length; stepIdx++) {
+        const step = steps[stepIdx];
+        const desc = (step.description || '').trim();
+        const data = (step.testData || '').trim();
+        const expected = (step.expectedResult || '').trim();
+
+        const isVerification = /^(verify|validate|check|confirm|ensure)/i.test(desc);
+        const isNav = /^(navigate|open|given|go to)/i.test(desc);
+
+        if (isVerification) {
+          const thenText = expected || desc;
+          result.push({ keyword: 'Then', text: thenText });
+        } else {
+          const keyword = step.keyword || ((stepIdx === 0 && isNav) ? 'Given' : 'When');
+          result.push({ keyword, text: desc });
+
+          if (data && !/^\((leave blank|none|no token.*)\)$/i.test(data)) {
+            result.push({ keyword: 'And', text: `with test data "${data}"` });
+          }
+
+          if (expected && expected.toLowerCase() !== desc.toLowerCase()) {
+            result.push({ keyword: 'Then', text: expected });
+          }
+        }
+      }
+
+      return result;
+    }
+
+    function buildGherkinScenarioText(tc) {
+      const tags = [];
+      if (tc.type) tags.push(`@${tc.type.toLowerCase()}`);
+      if (Array.isArray(tc.labels)) {
+        for (const l of tc.labels) {
+          const clean = `@${String(l).toLowerCase().replace(/[^a-z0-9_-]/g, '')}`;
+          if (!tags.includes(clean)) tags.push(clean);
+        }
+      }
+      if (tc.key) tags.push(`@${tc.key.toLowerCase()}`);
+      if (tc.status === 'OBSOLETE' || tc.isObsolete) tags.push('@obsolete');
+
+      let scenarioTitle = tc.name || tc.objective || tc.key;
+      if (scenarioTitle.includes('—')) {
+        scenarioTitle = scenarioTitle.split('—').slice(1).join('—').trim();
+      } else if (scenarioTitle.includes(' - ')) {
+        scenarioTitle = scenarioTitle.split(' - ').slice(1).join(' - ').trim();
+      } else {
+        scenarioTitle = scenarioTitle.replace(/^\[.*?\]\s*/g, '').trim();
+      }
+
+      const gherkinSteps = convertTestStepsToGherkin(tc);
+      const stepLines = gherkinSteps.map((s) => `    ${s.keyword} ${s.text}`);
+
+      return [
+        `  ${tags.join(' ')}`,
+        `  Scenario: [${tc.key}] ${scenarioTitle}`,
+        ...stepLines,
+      ].join('\n');
+    }
+
+    function renderGherkinPreviewHtml(tc) {
+      const gherkinSteps = convertTestStepsToGherkin(tc);
+      if (!gherkinSteps || gherkinSteps.length === 0) {
+        return '<span style="color: var(--text-dim);">No steps generated</span>';
+      }
+      const linesHtml = gherkinSteps.slice(0, 3).map((s) => {
+        const kwClass = `gh-kw-${s.keyword.toLowerCase()}`;
+        return `<div class="gh-preview-line"><span class="gh-kw ${kwClass}">${s.keyword}</span> <span class="gh-text">${escapeHtml(s.text)}</span></div>`;
+      }).join('');
+      const more = gherkinSteps.length > 3 ? `<div class="gh-preview-more">+ ${gherkinSteps.length - 3} more Gherkin steps...</div>` : '';
+      return linesHtml + more;
+    }
+
+    function computeStepGherkinLine(kw, desc, data, expected) {
+      const isVerification = /^(verify|validate|check|confirm|ensure)/i.test(desc);
+      if (isVerification) {
+        return `Then ${expected || desc}`;
+      }
+      let line = `${kw || 'When'} ${desc || '[step description]'}`;
+      if (data && !/^\((leave blank|none|no token.*)\)$/i.test(data)) {
+        line += `\nAnd with test data "${data}"`;
+      }
+      if (expected && expected.toLowerCase() !== desc.toLowerCase()) {
+        line += `\nThen ${expected}`;
+      }
+      return line;
+    }
+
+    function updateGherkinFeatureSnippet() {
+      if (!currentEditingKey) return;
+      const tc = allTestCases.find(t => t.key === currentEditingKey) || {};
+      const stepCards = Array.from(DOM.modalStepsList.querySelectorAll('.step-card'));
+      const testSteps = stepCards.map((card, idx) => ({
+        index: idx + 1,
+        keyword: card.querySelector('.step-kw')?.value || 'When',
+        description: (card.querySelector('.step-desc')?.value || '').trim(),
+        testData: (card.querySelector('.step-data')?.value || '').trim(),
+        expectedResult: (card.querySelector('.step-expected')?.value || '').trim(),
+      }));
+
+      const syntheticTc = {
+        ...tc,
+        key: currentEditingKey,
+        name: DOM.modalTcName?.value?.trim() || tc.name,
+        type: tc.type,
+        labels: (DOM.modalTcLabels?.value || '').split(',').map(s => s.trim()).filter(Boolean),
+        objective: DOM.modalTcObjective?.value?.trim() || tc.objective,
+        testSteps
+      };
+
+      DOM.modalFeatureSnippet.textContent = buildGherkinScenarioText(syntheticTc);
+    }
 
     // ── Initialization ────────────────────────────────────────────────────
     async function init() {
@@ -1153,7 +1536,67 @@
         DOM.dimensionsGrid.appendChild(div);
       });
 
-      // 3. Review Summary Stats
+      // 3. Informational Requirements Mapping & Exclusions Advisory
+      const insights = output.informationalInsights || null;
+      const unselectedTCs = output.unselectedTestCases || insights?.unselectedTestCases || [];
+      const pendingReqs = insights?.pendingRequirements || [];
+      const hasAdvisory = (insights && (insights.unselectedCount > 0 || pendingReqs.length > 0)) || unselectedTCs.length > 0;
+
+      if (hasAdvisory && DOM.reqAdvisoryCard) {
+        DOM.reqAdvisoryCard.classList.remove('hidden');
+        if (DOM.reqAdvisorySummary) {
+          DOM.reqAdvisorySummary.innerHTML = `<strong>Advisory Notice:</strong> ${escapeHtml(insights?.summary || 'Informational observations regarding excluded test cases and requirement coverage mapping.')} <br><span style="font-style: italic; opacity: 0.85;">(Note: This advisory is non-blocking. You may proceed to approve this stage or re-include test cases in Agent 02 if full mapping is required.)</span>`;
+        }
+        if (DOM.reqAdvisoryGrid) {
+          DOM.reqAdvisoryGrid.innerHTML = '';
+
+          // Card 1: Excluded / Unselected Test Cases
+          const unselectedCard = document.createElement('div');
+          unselectedCard.className = 'advisory-item';
+          const unselectedListHtml = unselectedTCs.length > 0 
+            ? unselectedTCs.map(t => `<div style="font-family: monospace; font-size: 11px; margin-top: 3px;">• <strong style="color: var(--accent);">${escapeHtml(t.key)}</strong>: ${escapeHtml(t.name || t.key)} <span style="color: var(--text-dim);">(${escapeHtml(t.featureName || 'General Features')})</span></div>`).join('')
+            : '<div style="color: var(--text-dim); font-size: 11px;">No test cases were excluded. All generated test cases are active.</div>';
+          
+          unselectedCard.innerHTML = `
+            <div class="advisory-item-title">
+              <span>Unselected Test Cases (${unselectedTCs.length})</span>
+              <span class="findings-chip">Excluded in Agent 02</span>
+            </div>
+            <div class="advisory-item-desc">
+              These test cases were unchecked by the user during Agent 02 and were excluded from Agent 03 quality review & scoring:
+            </div>
+            <div style="margin-top: 6px; max-height: 120px; overflow-y: auto;">
+              ${unselectedListHtml}
+            </div>
+          `;
+          DOM.reqAdvisoryGrid.appendChild(unselectedCard);
+
+          // Card 2: Requirement Document Mapping Status
+          const reqCard = document.createElement('div');
+          reqCard.className = 'advisory-item';
+          const pendingListHtml = pendingReqs.length > 0
+            ? pendingReqs.map(p => `<div style="font-size: 11px; margin-top: 3px;">• <strong>${escapeHtml(p.storyId)}</strong> (${escapeHtml(p.storyTitle)}): <span style="color: #fbbf24;">${escapeHtml(p.reason || 'Pending coverage mapping')}</span></div>`).join('')
+            : '<div style="color: #4ade80; font-size: 11px;">✅ All user stories and features have at least one active test case mapped.</div>';
+          
+          reqCard.innerHTML = `
+            <div class="advisory-item-title">
+              <span>Requirement Mapping Status</span>
+              <span class="findings-chip ${pendingReqs.length > 0 ? 'warn' : ''}">${pendingReqs.length > 0 ? `${pendingReqs.length} Pending / Partial` : 'Full Coverage'}</span>
+            </div>
+            <div class="advisory-item-desc">
+              Cross-reference against Requirement Document specifications:
+            </div>
+            <div style="margin-top: 6px; max-height: 120px; overflow-y: auto;">
+              ${pendingListHtml}
+            </div>
+          `;
+          DOM.reqAdvisoryGrid.appendChild(reqCard);
+        }
+      } else if (DOM.reqAdvisoryCard) {
+        DOM.reqAdvisoryCard.classList.add('hidden');
+      }
+
+      // 4. Review Summary Stats
       allTestCases = output.reviewedZephyrExport?.testCases || [];
       DOM.statReviewed.textContent = output.originalCount || allTestCases.length;
       DOM.statApproved.textContent = output.approvedCount || allTestCases.filter(t => t.reviewStatus !== 'REJECTED').length;
@@ -1257,9 +1700,9 @@
           <td class="tc-key">${tc.key}</td>
           <td><span class="tc-type type-${typeClass}">${escapeHtml(tc.type)}</span></td>
           <td>
-            <div class="tc-name-link" data-key="${tc.key}" style="font-weight: 600; color: var(--text);" id="name-${tc.key}">${escapeHtml(tc.name)}</div>
-            <div style="font-size: 11px; color: var(--text-dim); margin-top: 4px;" id="preview-${tc.key}">
-              ${escapeHtml(firstStep)}...
+            <a href="javascript:void(0)" class="tc-name-link" data-key="${tc.key}" style="font-weight: 600; color: var(--text);" id="name-${tc.key}" title="Click to inspect & edit">${escapeHtml(tc.name)}</a>
+            <div class="tc-preview-text" id="preview-${tc.key}">
+              ${renderGherkinPreviewHtml(tc)}
             </div>
           </td>
           <td><span class="status-badge ${statusClass}" id="status-${tc.key}">${tc.reviewStatus || 'PASSED'}</span></td>
@@ -1336,6 +1779,12 @@
       DOM.modalAlert.classList.add('hidden');
       DOM.modalError.classList.add('hidden');
 
+      // Reset view tab to steps editor
+      DOM.modalTabStepsBtn.classList.add('active');
+      DOM.modalTabFeatureBtn.classList.remove('active');
+      DOM.modalStepsViewContainer.classList.remove('hidden');
+      DOM.modalFeatureViewContainer.classList.add('hidden');
+
       DOM.modalTcKey.textContent = tc.key;
       DOM.modalTcTypeBadge.textContent = tc.type || 'Positive';
       DOM.modalTcTypeBadge.className = `tc-type type-${(tc.type || '').toLowerCase()}`;
@@ -1375,6 +1824,7 @@
         DOM.modalStepsList.appendChild(createStepCardElement(step, idx));
       });
       updateStepNumbers();
+      updateGherkinFeatureSnippet();
 
       DOM.modalSaveBtn.disabled = false;
       DOM.modalSaveBtn.innerHTML = `${SVG_ICONS.save}<span>Save Changes</span>`;
@@ -1393,38 +1843,75 @@
     function createStepCardElement(step = {}, idx = 0) {
       const div = document.createElement('div');
       div.className = 'step-card';
-      const isImproved = step.description && (step.description.includes('standard_user') || !step.description.toLowerCase().includes('verify it works'));
+      const desc = step.description || '';
+      const isNav = /^(navigate|open|given|go to)/i.test(desc);
+      const isVerif = /^(verify|validate|check|confirm|ensure)/i.test(desc);
+      const defaultKw = step.keyword || ((idx === 0 && isNav) ? 'Given' : (isVerif ? 'Then' : 'When'));
 
       div.innerHTML = `
         <div class="step-card-head">
-          <div>
+          <div style="display: flex; align-items: center; gap: 8px;">
             <span class="step-num-badge">Step ${idx + 1}</span>
             ${step.rewritten ? '<span class="step-improved-badge">✨ Clarified by ARIA</span>' : ''}
+            <select class="form-select step-kw" style="width: 95px; height: 28px; padding: 2px 8px; font-weight: 700; font-family: monospace; font-size: 11px;">
+              <option value="Given" ${defaultKw === 'Given' ? 'selected' : ''}>Given</option>
+              <option value="When" ${defaultKw === 'When' ? 'selected' : ''}>When</option>
+              <option value="Then" ${defaultKw === 'Then' ? 'selected' : ''}>Then</option>
+              <option value="And" ${defaultKw === 'And' ? 'selected' : ''}>And</option>
+              <option value="But" ${defaultKw === 'But' ? 'selected' : ''}>But</option>
+            </select>
           </div>
           <button type="button" class="step-btn-remove" title="Delete this step">
             ${SVG_ICONS.trash}
             <span>Remove</span>
           </button>
         </div>
+        <div class="step-compiled-gherkin">
+          <!-- Compiled Gherkin preview rendered here -->
+        </div>
         <div class="form-field">
-          <label>Action / Description</label>
-          <textarea class="form-textarea step-desc" rows="2">${escapeHtml(step.description || '')}</textarea>
+          <label>Action / Step Statement (Gherkin clause)</label>
+          <textarea class="form-textarea step-desc" rows="2" placeholder="e.g. user enters valid credentials into username field">${escapeHtml(desc)}</textarea>
         </div>
         <div class="step-fields-grid">
           <div class="form-field">
-            <label>Test Data</label>
-            <input type="text" class="form-input step-data" value="${escapeHtml(step.testData || '')}">
+            <label>Test Data (And with test data "...")</label>
+            <input type="text" class="form-input step-data" placeholder="e.g. standard_user" value="${escapeHtml(step.testData || '')}">
           </div>
           <div class="form-field">
-            <label>Expected Result</label>
-            <input type="text" class="form-input step-expected" value="${escapeHtml(step.expectedResult || '')}">
+            <label>Expected Result (Then ...)</label>
+            <input type="text" class="form-input step-expected" placeholder="e.g. user is redirected to inventory" value="${escapeHtml(step.expectedResult || '')}">
           </div>
         </div>
       `;
 
+      const previewDiv = div.querySelector('.step-compiled-gherkin');
+      const kwSelect = div.querySelector('.step-kw');
+      const descInput = div.querySelector('.step-desc');
+      const dataInput = div.querySelector('.step-data');
+      const expInput = div.querySelector('.step-expected');
+
+      function updateCardPreview() {
+        previewDiv.textContent = computeStepGherkinLine(
+          kwSelect.value,
+          descInput.value.trim(),
+          dataInput.value.trim(),
+          expInput.value.trim()
+        );
+        updateGherkinFeatureSnippet();
+      }
+
+      [kwSelect, descInput, dataInput, expInput].forEach(el => {
+        el.addEventListener('input', updateCardPreview);
+        el.addEventListener('change', updateCardPreview);
+      });
+
+      updateCardPreview();
+
       div.querySelector('.step-btn-remove').addEventListener('click', () => {
         div.remove();
         updateStepNumbers();
+        updateGherkinFeatureSnippet();
       });
 
       return div;
@@ -1440,11 +1927,45 @@
     }
 
     DOM.modalAddStepBtn.addEventListener('click', () => {
-      const newCard = createStepCardElement({ description: '', testData: '', expectedResult: '' }, DOM.modalStepsList.children.length);
+      const newCard = createStepCardElement({ description: '', testData: '', expectedResult: '', keyword: 'When' }, DOM.modalStepsList.children.length);
       DOM.modalStepsList.appendChild(newCard);
       updateStepNumbers();
+      updateGherkinFeatureSnippet();
       const input = newCard.querySelector('.step-desc');
       if (input) input.focus();
+    });
+
+    // Tab switching & Copy Gherkin
+    DOM.modalTabStepsBtn.addEventListener('click', () => {
+      DOM.modalTabStepsBtn.classList.add('active');
+      DOM.modalTabFeatureBtn.classList.remove('active');
+      DOM.modalStepsViewContainer.classList.remove('hidden');
+      DOM.modalFeatureViewContainer.classList.add('hidden');
+    });
+
+    DOM.modalTabFeatureBtn.addEventListener('click', () => {
+      DOM.modalTabFeatureBtn.classList.add('active');
+      DOM.modalTabStepsBtn.classList.remove('active');
+      DOM.modalStepsViewContainer.classList.add('hidden');
+      DOM.modalFeatureViewContainer.classList.remove('hidden');
+      updateGherkinFeatureSnippet();
+    });
+
+    DOM.copyGherkinBtn.addEventListener('click', async () => {
+      const txt = DOM.modalFeatureSnippet.textContent;
+      if (!txt) return;
+      try {
+        await navigator.clipboard.writeText(txt);
+        const prev = DOM.copyGherkinBtn.innerHTML;
+        DOM.copyGherkinBtn.innerHTML = `${SVG_ICONS.check}<span>Copied!</span>`;
+        setTimeout(() => { DOM.copyGherkinBtn.innerHTML = prev; }, 1500);
+      } catch (_) {
+        alert('Copied to clipboard');
+      }
+    });
+
+    [DOM.modalTcName, DOM.modalTcLabels, DOM.modalTcObjective].forEach(el => {
+      el.addEventListener('input', updateGherkinFeatureSnippet);
     });
 
     async function saveInspectionOverride() {
@@ -1471,15 +1992,19 @@
       const stepCards = Array.from(DOM.modalStepsList.querySelectorAll('.step-card'));
       const testSteps = stepCards.map((card, idx) => ({
         index: idx + 1,
+        keyword: card.querySelector('.step-kw')?.value || 'When',
         description: (card.querySelector('.step-desc')?.value || '').trim(),
         testData: (card.querySelector('.step-data')?.value || '').trim(),
         expectedResult: (card.querySelector('.step-expected')?.value || '').trim()
       }));
 
+      const newLabels = DOM.modalTcLabels.value.split(',').map(s => s.trim()).filter(Boolean);
+
       const payload = {
         key: currentEditingKey,
         name: newName,
         reviewStatus: newStatus,
+        labels: newLabels,
         objective: newObjective,
         precondition: newPrecondition,
         testSteps

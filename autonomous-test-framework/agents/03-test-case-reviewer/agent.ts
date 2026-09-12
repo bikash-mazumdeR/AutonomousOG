@@ -143,38 +143,53 @@ class TestCaseReviewerAgent {
 
       const { zephyrExport, k6ScenarioIndex } = input.testCases;
       const analysis = input.analyzedRequirements || {};
+      const allTCs = zephyrExport.testCases || [];
 
-      this._logger.info('Review starting', {
-        totalTCs: zephyrExport.totalTestCases,
+      // Only review test cases selected by user during Agent 02 stage
+      const isSelected = (tc: any) => tc.status !== 'OBSOLETE' && !tc.isObsolete && tc.selected !== false;
+      const selectedTCs = allTCs.filter(isSelected);
+      const unselectedTCs = allTCs.filter((tc: any) => !isSelected(tc));
+
+      this._logger.info('Review starting with selective evaluation', {
+        totalGenerated: allTCs.length,
+        selectedForReview: selectedTCs.length,
+        unselectedExcluded: unselectedTCs.length,
         features: analysis.totalFeatures || 0,
       });
 
-      // ── Phase 1: Duplicate Detection ───────────────────────────────────
-      const dedupedTCs = this._removeDuplicates(zephyrExport.testCases);
+      // ── Informational Requirement Mapping & Exclusion Insights ─────────
+      const informationalInsights = this._analyzeRequirementMappingInsights(
+        analysis,
+        selectedTCs,
+        unselectedTCs,
+      );
+
+      // ── Phase 1: Duplicate Detection (on selected TCs only) ─────────────
+      const dedupedTCs = this._removeDuplicates(selectedTCs);
       this._logger.info('Deduplication complete', {
-        original: zephyrExport.testCases.length,
+        selected: selectedTCs.length,
         deduped: dedupedTCs.length,
-        removed: zephyrExport.testCases.length - dedupedTCs.length,
+        removed: selectedTCs.length - dedupedTCs.length,
       });
 
       // ── Phase 2: Per-TC Multi-Dimensional Review ───────────────────────
-      const reviewedTCs = dedupedTCs.map((tc) => this._reviewSingleTC(tc, analysis));
+      const reviewedTCs = dedupedTCs.map((tc: any) => this._reviewSingleTC(tc, analysis));
 
       // ── Phase 3: Coverage Adequacy Review ─────────────────────────────
-      const coverageMatrix = this._buildCoverageMatrix(reviewedTCs, analysis);
+      const coverageMatrix = this._buildCoverageMatrix(reviewedTCs, analysis, unselectedTCs);
 
       // ── Phase 4: API TC Review ─────────────────────────────────────────
-      reviewedTCs.filter((tc) => tc.type === 'API').forEach((tc) => {
+      reviewedTCs.filter((tc: any) => tc.type === 'API').forEach((tc: any) => {
         this._reviewAPITC(tc);
       });
 
       // ── Phase 5: Performance TC Review ────────────────────────────────
-      reviewedTCs.filter((tc) => tc.type === 'Performance').forEach((tc) => {
+      reviewedTCs.filter((tc: any) => tc.type === 'Performance').forEach((tc: any) => {
         this._reviewPerformanceTC(tc);
       });
 
       // ── Phase 6: Traceability Review ──────────────────────────────────
-      reviewedTCs.forEach((tc) => this._reviewTraceability(tc, analysis));
+      reviewedTCs.forEach((tc: any) => this._reviewTraceability(tc, analysis));
 
       // ── Phase 7: Apply Improvement Rules from Memory ──────────────────
       this._applyMemoryImprovements(reviewedTCs, memoryContext.improvementRules);
@@ -190,13 +205,16 @@ class TestCaseReviewerAgent {
 
       // ── Phase 11: Build Final Output ──────────────────────────────────
       const output = this._buildOutput({
-        originalTCs: zephyrExport.testCases,
+        originalTCs: allTCs,
+        selectedTCs,
+        unselectedTCs,
         reviewedTCs,
         coverageMatrix,
         qualityScore,
         decision,
         k6ScenarioIndex,
         zephyrExport,
+        informationalInsights,
       });
 
       // ── Phase 12: Persist ──────────────────────────────────────────────
@@ -236,11 +254,96 @@ class TestCaseReviewerAgent {
       );
 
       return agentResult;
-    } catch (error) {
+    } catch (error: any) {
       this._logger.error('Agent execution failed', { error: error.message });
       await stateManager.markStageFailed(STAGE_ID, error);
       throw error;
     }
+  }
+
+  // ── Informational Requirement Mapping & Exclusion Analysis ────────────────
+
+  /**
+   * Analyzes coverage gaps and pending requirement mappings strictly as informational advisory.
+   * Does NOT reject or block pipeline progress.
+   * @private
+   */
+  _analyzeRequirementMappingInsights(analysis: any, selectedTCs: any[], unselectedTCs: any[]) {
+    const features = analysis?.features || [];
+    const pendingRequirements: any[] = [];
+    const featureMap = new Map<string, string>();
+
+    for (const f of features) {
+      featureMap.set(f.id, f.name);
+      for (const s of (f.userStories || [])) {
+        const selectedForStory = selectedTCs.filter((tc: any) => {
+          const sid = tc.traceabilityLinks?.userStoryId || tc.userStoryId;
+          return sid === s.id;
+        });
+        const unselectedForStory = unselectedTCs.filter((tc: any) => {
+          const sid = tc.traceabilityLinks?.userStoryId || tc.userStoryId;
+          return sid === s.id;
+        });
+
+        if (selectedForStory.length === 0) {
+          const reason = unselectedForStory.length > 0
+            ? `All ${unselectedForStory.length} test case(s) (${unselectedForStory.map((t: any) => t.key).join(', ')}) were unselected during Agent 02 stage.`
+            : 'No test cases were generated or mapped for this user story in the Requirement Document.';
+
+          pendingRequirements.push({
+            storyId: s.id,
+            storyTitle: s.title || s.name || s.id,
+            featureId: f.id,
+            featureName: f.name,
+            riskLevel: f.riskLevel || 'MEDIUM',
+            reason,
+            unselectedKeys: unselectedForStory.map((t: any) => t.key),
+            status: 'PENDING_MAPPING',
+          });
+
+          // Add as strictly INFORMATIONAL annotation (does NOT cause rejection)
+          this._addAnnotation(
+            `REQ-${s.id}`,
+            REVIEW_DIMENSION.TRACEABILITY,
+            SEVERITY.INFO,
+            `[Informational Advisory] User Story "${s.id} — ${s.title || s.name}" has 0 active test cases. ${reason}`,
+            REVIEW_ACTION.PASSED,
+            'Advisory only: User may approve stage to proceed or re-include test cases in Agent 02 if full mapping is required.',
+          );
+        } else if (unselectedForStory.length > 0) {
+          pendingRequirements.push({
+            storyId: s.id,
+            storyTitle: s.title || s.name || s.id,
+            featureId: f.id,
+            featureName: f.name,
+            riskLevel: f.riskLevel || 'MEDIUM',
+            reason: `Partial mapping: ${selectedForStory.length} active, ${unselectedForStory.length} unselected (${unselectedForStory.map((t: any) => t.key).join(', ')}).`,
+            unselectedKeys: unselectedForStory.map((t: any) => t.key),
+            status: 'PARTIAL_MAPPING',
+          });
+        }
+      }
+    }
+
+    const unselectedTestCases = unselectedTCs.map((tc: any) => ({
+      key: tc.key,
+      name: tc.name,
+      type: tc.type,
+      userStoryId: tc.traceabilityLinks?.userStoryId || tc.userStoryId || 'US-01',
+      featureName: featureMap.get(tc.traceabilityLinks?.featureId) || 'General Features',
+      reason: 'Excluded by user during Agent 02 approval stage',
+    }));
+
+    const summary = unselectedTCs.length > 0
+      ? `${unselectedTCs.length} test case(s) were excluded during Agent 02 stage. ${pendingRequirements.length} requirement(s) have pending or partial test coverage. (Informational Advisory — user may still approve or reject).`
+      : 'All generated test cases were selected. Full requirement traceability mapped.';
+
+    return {
+      unselectedCount: unselectedTCs.length,
+      unselectedTestCases,
+      pendingRequirements,
+      summary,
+    };
   }
 
   // ── Phase 1: Duplicate Detection ─────────────────────────────────────────
@@ -531,30 +634,32 @@ class TestCaseReviewerAgent {
    * Builds a per-feature coverage matrix.
    * @private
    */
-  _buildCoverageMatrix(reviewedTCs, analysis) {
-    const features = (analysis.features || []).map((f) => {
-      const featureTCs = reviewedTCs.filter((tc) => tc.traceabilityLinks?.featureId === f.id);
-      const mins = MIN_COVERAGE[f.riskLevel] || MIN_COVERAGE.MEDIUM;
+  _buildCoverageMatrix(reviewedTCs: any[], analysis: any, unselectedTCs: any[] = []) {
+    const features = (analysis.features || []).map((f: any) => {
+      const featureTCs = reviewedTCs.filter((tc: any) => tc.traceabilityLinks?.featureId === f.id);
+      const featureUnselected = unselectedTCs.filter((tc: any) => (tc.traceabilityLinks?.featureId || tc.featureId) === f.id);
+      const isAffectedByUnselected = featureUnselected.length > 0;
+      const mins = MIN_COVERAGE[f.riskLevel as keyof typeof MIN_COVERAGE] || MIN_COVERAGE.MEDIUM;
 
       const counts = {
-        positive: featureTCs.filter((tc) => tc.type === 'Positive').length,
-        negative: featureTCs.filter((tc) => tc.type === 'Negative').length,
-        edge: featureTCs.filter((tc) => tc.type === 'Edge').length,
-        api: featureTCs.filter((tc) => tc.type === 'API').length,
-        perf: featureTCs.filter((tc) => tc.type === 'Performance').length,
+        positive: featureTCs.filter((tc: any) => tc.type === 'Positive').length,
+        negative: featureTCs.filter((tc: any) => tc.type === 'Negative').length,
+        edge: featureTCs.filter((tc: any) => tc.type === 'Edge').length,
+        api: featureTCs.filter((tc: any) => tc.type === 'API').length,
+        perf: featureTCs.filter((tc: any) => tc.type === 'Performance').length,
       };
 
-      const hasSmoke = featureTCs.some((tc) => tc.labels?.includes('Smoke'));
+      const hasSmoke = featureTCs.some((tc: any) => tc.labels?.includes('Smoke'));
 
-      // Coverage violations
+      // Coverage annotations (Informational if unselected in Agent 02)
       if (counts.positive < mins.positive) {
         this._addAnnotation(
           `FEATURE-${f.id}`,
           REVIEW_DIMENSION.COVERAGE,
-          f.riskLevel === 'CRITICAL' ? SEVERITY.BLOCKER : SEVERITY.MAJOR,
-          `Feature "${f.name}" has only ${counts.positive}/${mins.positive} positive TCs`,
+          isAffectedByUnselected ? SEVERITY.INFO : (f.riskLevel === 'CRITICAL' ? SEVERITY.MAJOR : SEVERITY.MINOR),
+          `Feature "${f.name}" has ${counts.positive}/${mins.positive} positive TCs${isAffectedByUnselected ? ` (${featureUnselected.length} were unselected in Agent 02)` : ''}`,
           REVIEW_ACTION.FLAGGED,
-          `Add ${mins.positive - counts.positive} more positive TCs for this ${f.riskLevel} risk feature`,
+          `Informational advisory: ${mins.positive - counts.positive} more positive TCs recommended for this ${f.riskLevel} risk feature`,
         );
       }
 
@@ -562,10 +667,10 @@ class TestCaseReviewerAgent {
         this._addAnnotation(
           `FEATURE-${f.id}`,
           REVIEW_DIMENSION.COVERAGE,
-          f.riskLevel === 'CRITICAL' ? SEVERITY.BLOCKER : SEVERITY.MAJOR,
-          `Feature "${f.name}" has only ${counts.negative}/${mins.negative} negative TCs`,
+          isAffectedByUnselected ? SEVERITY.INFO : (f.riskLevel === 'CRITICAL' ? SEVERITY.MAJOR : SEVERITY.MINOR),
+          `Feature "${f.name}" has ${counts.negative}/${mins.negative} negative TCs${isAffectedByUnselected ? ` (${featureUnselected.length} were unselected in Agent 02)` : ''}`,
           REVIEW_ACTION.FLAGGED,
-          `Add ${mins.negative - counts.negative} more negative TCs`,
+          `Informational advisory: ${mins.negative - counts.negative} more negative TCs recommended`,
         );
       }
 
@@ -573,10 +678,10 @@ class TestCaseReviewerAgent {
         this._addAnnotation(
           `FEATURE-${f.id}`,
           REVIEW_DIMENSION.COVERAGE,
-          SEVERITY.MAJOR,
-          `Feature "${f.name}" (${f.riskLevel}) has no Smoke-labelled TCs`,
+          isAffectedByUnselected ? SEVERITY.INFO : SEVERITY.MAJOR,
+          `Feature "${f.name}" (${f.riskLevel}) has no Smoke-labelled TCs in selected suite`,
           REVIEW_ACTION.FLAGGED,
-          'Mark at least one critical positive TC as Smoke',
+          'Mark at least one critical positive TC as Smoke if automated smoke gate is desired',
         );
       }
 
@@ -596,9 +701,12 @@ class TestCaseReviewerAgent {
         edgeCount: counts.edge,
         apiCount: counts.api,
         perfCount: counts.perf,
+        unselectedCount: featureUnselected.length,
         hasSmoke,
         coverageScore,
         status,
+        counts,
+        required: mins,
       };
     });
 
@@ -963,27 +1071,35 @@ class TestCaseReviewerAgent {
    * @private
    */
   _buildOutput({
-    originalTCs, reviewedTCs, coverageMatrix, qualityScore, decision, k6ScenarioIndex, zephyrExport,
-  }) {
-    const approvedTCs = reviewedTCs.filter((tc) => tc.reviewStatus !== 'REJECTED');
-    const rejectedTCs = reviewedTCs.filter((tc) => tc.reviewStatus === 'REJECTED');
-    const rewrittenTCs = reviewedTCs.filter((tc) => tc.rewrittenSteps > 0);
-    const blockers = this._annotations.filter((a) => a.severity === SEVERITY.BLOCKER);
+    originalTCs, selectedTCs, unselectedTCs, reviewedTCs, coverageMatrix, qualityScore, decision, k6ScenarioIndex, zephyrExport, informationalInsights,
+  }: any) {
+    const approvedTCs = reviewedTCs.filter((tc: any) => tc.reviewStatus !== 'REJECTED');
+    const rejectedTCs = reviewedTCs.filter((tc: any) => tc.reviewStatus === 'REJECTED');
+    const rewrittenTCs = reviewedTCs.filter((tc: any) => tc.rewrittenSteps > 0);
+    const blockers = this._annotations.filter((a: any) => a.severity === SEVERITY.BLOCKER);
+
+    // Keep all TCs in reviewedZephyrExport with appropriate status so unselected aren't lost
+    const finalExportTCs = [
+      ...approvedTCs,
+      ...(unselectedTCs || []).map((t: any) => ({ ...t, reviewStatus: 'EXCLUDED', status: 'OBSOLETE', isObsolete: true, selected: false })),
+    ];
 
     return {
       reviewId: `tc_review_${Date.now()}`,
       reviewedAt: new Date().toISOString(),
       reviewedBy: 'ARIA-Agent-03',
-      originalCount: originalTCs.length,
+      originalCount: (originalTCs || []).length,
+      selectedCount: (selectedTCs || []).length,
+      unselectedCount: (unselectedTCs || []).length,
       approvedCount: approvedTCs.length,
       rejectedCount: rejectedTCs.length,
       rewrittenCount: rewrittenTCs.length,
-      duplicatesRemoved: originalTCs.length - reviewedTCs.length,
+      duplicatesRemoved: (selectedTCs || []).length - reviewedTCs.length,
       reviewDecision: decision,
 
       reviewedZephyrExport: {
         ...zephyrExport,
-        testCases: approvedTCs,
+        testCases: finalExportTCs,
         totalTestCases: approvedTCs.length,
       },
 
@@ -991,35 +1107,40 @@ class TestCaseReviewerAgent {
       reviewAnnotations: this._annotations,
       coverageMatrix,
       qualityScore,
+      informationalInsights,
+      unselectedTestCases: informationalInsights?.unselectedTestCases || [],
 
-      recommendations: this._buildRecommendations(qualityScore, coverageMatrix, blockers),
-      blockers: blockers.map((b) => `[${b.tcKey}] ${b.finding}`),
+      recommendations: this._buildRecommendations(qualityScore, coverageMatrix, blockers, informationalInsights),
+      blockers: blockers.map((b: any) => `[${b.tcKey}] ${b.finding}`),
     };
   }
 
   /**
    * @private
    */
-  _buildRecommendations(qualityScore, coverageMatrix, blockers) {
+  _buildRecommendations(qualityScore: any, coverageMatrix: any, blockers: any[], informationalInsights?: any) {
     const recs = [];
 
     if (qualityScore.grade === 'A') {
-      recs.push('✅ Excellent test case quality. Proceed to test data generation.');
+      recs.push('✅ Excellent test case quality on selected suite. Proceed to test data generation.');
+    }
+    if (informationalInsights?.unselectedCount > 0) {
+      recs.push(`ℹ️ Advisory: ${informationalInsights.unselectedCount} test case(s) excluded during Agent 02. ${informationalInsights.pendingRequirements?.length || 0} requirement(s) have pending/reduced coverage.`);
     }
     if (qualityScore.coverage < 70) {
-      recs.push('⚠️ Coverage below 70%. Request Agent 02 to generate more negative and edge TCs.');
+      recs.push('⚠️ Selected test coverage below 70%. Consider generating more negative and edge TCs if broader coverage is needed.');
     }
     if (qualityScore.stepQuality < 75) {
       recs.push('⚠️ Step quality needs improvement. Review rewritten steps before proceeding.');
     }
     if (blockers.length > 0) {
-      recs.push(`🔴 ${blockers.length} BLOCKER(s) found. Must be resolved before proceeding.`);
+      recs.push(`🔴 ${blockers.length} BLOCKER(s) found in selected test cases. Must be resolved before proceeding.`);
     }
     const insufficientFeatures = coverageMatrix.features.filter(
-      (f) => f.status === COVERAGE_STATUS.INSUFFICIENT,
+      (f: any) => f.status === COVERAGE_STATUS.INSUFFICIENT,
     );
     if (insufficientFeatures.length > 0) {
-      recs.push(`⚠️ ${insufficientFeatures.length} feature(s) have insufficient test coverage.`);
+      recs.push(`⚠️ ${insufficientFeatures.length} feature(s) have reduced test coverage.`);
     }
 
     return recs;
@@ -1028,17 +1149,19 @@ class TestCaseReviewerAgent {
   /**
    * @private
    */
-  _buildApprovalSummary(output) {
+  _buildApprovalSummary(output: any) {
     return {
       'Review Decision': output.reviewDecision,
       'Quality Grade': `${output.qualityScore.grade} (${output.qualityScore.overall}/100)`,
-      'Original TCs': output.originalCount,
+      'Original Generated TCs': output.originalCount,
+      'Selected TCs Reviewed': output.selectedCount || output.approvedCount,
+      'Excluded / Unselected TCs': output.unselectedCount || 0,
       'Approved TCs': output.approvedCount,
       'Rejected TCs': output.rejectedCount,
       'Rewritten TCs': output.rewrittenCount,
       'Duplicates Removed': output.duplicatesRemoved,
       'Blockers Found': output.blockers.length,
-      'Total Annotations': output.reviewAnnotations.length,
+      'Pending Requirements': output.informationalInsights?.pendingRequirements?.length || 0,
       'Coverage Score': `${output.qualityScore.coverage}/100`,
       'Step Quality Score': `${output.qualityScore.stepQuality}/100`,
     };

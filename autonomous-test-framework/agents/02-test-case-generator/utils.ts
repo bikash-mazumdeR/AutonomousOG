@@ -443,7 +443,7 @@ export function syncFeatureFiles(analysis: any, testCases: any[], logger?: any):
               const thenText = expected || desc;
               lines.push(`    Then ${thenText}`);
             } else {
-              const keyword = (stepIdx === 0 && isNav) ? 'Given' : 'When';
+              const keyword = step.keyword || ((stepIdx === 0 && isNav) ? 'Given' : 'When');
               lines.push(`    ${keyword} ${desc}`);
 
               if (data && !/^\((leave blank|none|no token.*)\)$/i.test(data)) {
@@ -487,4 +487,88 @@ export function syncFeatureFiles(analysis: any, testCases: any[], logger?: any):
   }
 
   return savedPaths;
+}
+
+export interface GherkinStepLine {
+  keyword: 'Given' | 'When' | 'Then' | 'And' | 'But';
+  text: string;
+}
+
+/**
+ * Converts a test case's testSteps array into formal Gherkin step lines
+ * matching the format generated and saved in Cucumber .feature files.
+ */
+export function convertTestStepsToGherkin(tc: any): GherkinStepLine[] {
+  const steps = tc?.testSteps || [];
+  const result: GherkinStepLine[] = [];
+
+  if (steps.length === 0) {
+    result.push({ keyword: 'Given', text: 'the application state is prepared' });
+    result.push({ keyword: 'When', text: `the test action for "${tc?.key || 'TC'}" is executed` });
+    result.push({ keyword: 'Then', text: `the expected outcome is validated: ${tc?.objective || 'Success'}` });
+    return result;
+  }
+
+  for (let stepIdx = 0; stepIdx < steps.length; stepIdx++) {
+    const step = steps[stepIdx];
+    const desc = (step.description || '').trim();
+    const data = (step.testData || '').trim();
+    const expected = (step.expectedResult || '').trim();
+
+    const isVerification = /^(verify|validate|check|confirm|ensure)/i.test(desc);
+    const isNav = /^(navigate|open|given|go to)/i.test(desc);
+
+    if (isVerification) {
+      const thenText = expected || desc;
+      result.push({ keyword: 'Then', text: thenText });
+    } else {
+      const keyword = (stepIdx === 0 && isNav) ? 'Given' : (step.keyword || 'When');
+      result.push({ keyword: keyword as any, text: desc });
+
+      if (data && !/^\((leave blank|none|no token.*)\)$/i.test(data)) {
+        result.push({ keyword: 'And', text: `with test data "${data}"` });
+      }
+
+      if (expected && expected.toLowerCase() !== desc.toLowerCase()) {
+        result.push({ keyword: 'Then', text: expected });
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Builds the complete Gherkin Feature Scenario text for a test case
+ * as saved in the Cucumber .feature file.
+ */
+export function buildGherkinScenarioText(tc: any): string {
+  const tags: string[] = [];
+  if (tc.type) tags.push(`@${tc.type.toLowerCase()}`);
+  if (Array.isArray(tc.labels)) {
+    for (const l of tc.labels) {
+      const clean = `@${String(l).toLowerCase().replace(/[^a-z0-9_-]/g, '')}`;
+      if (!tags.includes(clean)) tags.push(clean);
+    }
+  }
+  if (tc.key) tags.push(`@${tc.key.toLowerCase()}`);
+  if (tc.status === 'OBSOLETE' || tc.isObsolete) tags.push('@obsolete');
+
+  let scenarioTitle = tc.name || tc.objective || tc.key;
+  if (scenarioTitle.includes('—')) {
+    scenarioTitle = scenarioTitle.split('—').slice(1).join('—').trim();
+  } else if (scenarioTitle.includes(' - ')) {
+    scenarioTitle = scenarioTitle.split(' - ').slice(1).join(' - ').trim();
+  } else {
+    scenarioTitle = scenarioTitle.replace(/^\[.*?\]\s*/g, '').trim();
+  }
+
+  const gherkinSteps = convertTestStepsToGherkin(tc);
+  const stepLines = gherkinSteps.map((s) => `    ${s.keyword} ${s.text}`);
+
+  return [
+    `  ${tags.join(' ')}`,
+    `  Scenario: [${tc.key}] ${scenarioTitle}`,
+    ...stepLines,
+  ].join('\n');
 }

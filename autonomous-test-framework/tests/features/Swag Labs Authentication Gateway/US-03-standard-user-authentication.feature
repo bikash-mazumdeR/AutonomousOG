@@ -1,12 +1,12 @@
 Feature: Swag Labs Authentication Gateway
-  As a user of the application,
-  I want to Allow users to authenticate securely using their credentials and receive appropriate validation feedback.
-  So that access protected functionality.
+  As a User,
+  I want to Authenticate using standard credentials
+  So that Access the inventory catalog.
 
   Background:
     Given the user is on the login page
 
-  @positive @functional @ui @smoke @regression @tc-024
+  @positive @functional @ui @smoke @regression @tc-024 @obsolete
   Scenario: [TC-024] [ui] The login page must display page title Swag Labs
     Given Navigate to the feature: Login UI, Accessibility, and Input Controls
     And with test data "{{validBaseURL}}"
@@ -19,7 +19,7 @@ Feature: Swag Labs Authentication Gateway
     Then [@ui] The login page must display page title 'Swag Labs', a centered form layout, functional branding logo, and test credentials display box across responsive viewports from 320px to 2560px width.
     Then System confirms: [@ui] The login page must display page title 'Swag Labs', a centered form layout, functional branding logo, and test credentials display box across responsive viewports from 320px to 2560px width.
 
-  @positive @functional @ui @smoke @regression @tc-025
+  @positive @functional @ui @smoke @regression @tc-025 @obsolete
   Scenario: [TC-025] [ui] The Username field must accept alphanumeric charact
     Given Navigate to the feature: Login UI, Accessibility, and Input Controls
     And with test data "{{validBaseURL}}"
@@ -32,7 +32,7 @@ Feature: Swag Labs Authentication Gateway
     Then [@ui] The Username field must accept alphanumeric characters, hyphens, and underscores up to 255 characters, trim leading and trailing spaces, and enforce case-sensitivity.
     Then System confirms: [@ui] The Username field must accept alphanumeric characters, hyphens, and underscores up to 255 characters, trim leading and trailing spaces, and enforce case-sensitivity.
 
-  @positive @functional @ui @smoke @regression @tc-026
+  @positive @functional @ui @smoke @regression @tc-026 @obsolete
   Scenario: [TC-026] [security] The Password field must mask all entered char
     Given Navigate to the feature: Login UI, Accessibility, and Input Controls
     And with test data "{{validBaseURL}}"
@@ -45,7 +45,7 @@ Feature: Swag Labs Authentication Gateway
     Then [@security] The Password field must mask all entered characters as dots or asterisks, accept up to 512 characters, and support browser default paste operations.
     Then System confirms: [@security] The Password field must mask all entered characters as dots or asterisks, accept up to 512 characters, and support browser default paste operations.
 
-  @positive @functional @ui @smoke @regression @tc-027
+  @positive @functional @ui @smoke @regression @tc-027 @obsolete
   Scenario: [TC-027] [ui] The Login submit button must remain in an enabled s
     Given Navigate to the feature: Login UI, Accessibility, and Input Controls
     And with test data "{{validBaseURL}}"
@@ -72,7 +72,7 @@ Feature: Swag Labs Authentication Gateway
     Then [@accessibility] The interface must comply with WCAG 2.1 Level AA, supporting full keyboard navigation (Tab/Enter), color contrast ratio of at least 4.5:1, input ARIA labels, and screen reader announcements for displayed error messages.
     Then System confirms: [@accessibility] The interface must comply with WCAG 2.1 Level AA, supporting full keyboard navigation (Tab/Enter), color contrast ratio of at least 4.5:1, input ARIA labels, and screen reader announcements for displayed error messages.
 
-  @negative @functional @ui @smoke @regression @tc-029
+  @negative @functional @ui @smoke @regression @tc-029 @obsolete
   Scenario: [TC-029] Submit with empty mandatory field
     Given Navigate to: Login UI, Accessibility, and Input Controls
     And with test data "{{validBaseURL}}"
@@ -91,7 +91,7 @@ Feature: Swag Labs Authentication Gateway
     Then HTTP 403 returned. Access denied message shown.
     Then HTTP 403 returned. Access denied message shown.
 
-  @negative @functional @ui @smoke @regression @tc-032
+  @negative @functional @ui @smoke @regression @tc-032 @obsolete
   Scenario: [TC-032] Enter SQL injection payload
     Given Navigate to: Login UI, Accessibility, and Input Controls
     And with test data "{{validBaseURL}}"
@@ -105,7 +105,7 @@ Feature: Swag Labs Authentication Gateway
     When Submit form and verify error handling response
     Then Input is sanitized. No SQL error exposed. Input treated as plain text.
 
-  @negative @functional @ui @smoke @regression @tc-033
+  @negative @functional @ui @smoke @regression @tc-033 @obsolete
   Scenario: [TC-033] Enter XSS payload in text field
     Given Navigate to: Login UI, Accessibility, and Input Controls
     And with test data "{{validBaseURL}}"
@@ -119,7 +119,7 @@ Feature: Swag Labs Authentication Gateway
     When Submit form and verify error handling response
     Then Script tag is escaped/rejected. No alert executes.
 
-  @negative @functional @ui @smoke @regression @tc-034
+  @negative @functional @ui @smoke @regression @tc-034 @obsolete
   Scenario: [TC-034] Use expired session token
     Given Navigate to: Login UI, Accessibility, and Input Controls
     And with test data "{{validBaseURL}}"

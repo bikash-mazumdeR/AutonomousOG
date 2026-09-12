@@ -6,6 +6,7 @@ import { memoryEngine } from '../core/project-memory/MemoryEngine';
 import { Logger } from '../core/logger/Logger';
 import path from 'path';
 import * as http from 'http';
+import { syncFeatureFiles } from '../agents/02-test-case-generator/utils';
 
 const app = express();
 const PORT = parseInt(process.env.AGENT03_UI_PORT || '3002', 10);
@@ -294,6 +295,7 @@ const updateReviewedTestCaseHandler = async (req: Request, res: Response) => {
     if (Array.isArray(testSteps)) {
       targetTC.testSteps = testSteps.map((step: any, idx: number) => ({
         index: idx + 1,
+        keyword: step.keyword || undefined,
         description: (step.description || '').trim(),
         testData: (step.testData || '').trim(),
         expectedResult: (step.expectedResult || '').trim()
@@ -306,6 +308,10 @@ const updateReviewedTestCaseHandler = async (req: Request, res: Response) => {
     reviewedOutput.rewrittenCount = allReviewedTCs.filter((tc: any) => (tc.rewrittenSteps || 0) > 0).length;
 
     await stateManager.setPipelineArtifact('reviewedTestCases', reviewedOutput);
+    try {
+      const requirements = await stateManager.getPipelineArtifact('analyzedRequirements');
+      syncFeatureFiles(requirements, allReviewedTCs, logger);
+    } catch (_) {}
     logger.info(`Reviewed test case ${key} updated via Agent 03 UI override`, { reviewStatus: targetTC.reviewStatus });
     return res.json({ ok: true, testCase: targetTC });
   } catch (err: any) {

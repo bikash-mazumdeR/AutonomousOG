@@ -1,7 +1,7 @@
 Feature: Swag Labs Authentication Gateway
-  As a user of the application,
-  I want to Ensure the system behaves correctly according to the specific test user profile used for login.
-  So that access protected functionality.
+  As a QA / Automation Engineer,
+  I want to Authenticate using specialized test accounts (problem, performance, error, visual)
+  So that Verify application behavior under specific simulated conditions.
 
   Background:
     Given the user is on the login page
@@ -81,7 +81,7 @@ Feature: Swag Labs Authentication Gateway
     Then Inline validation error shown. Form not submitted.
     Then Inline validation error shown. Form not submitted.
 
-  @negative @functional @ui @regression @tc-016
+  @negative @functional @ui @regression @tc-016 @obsolete
   Scenario: [TC-016] Submit with invalid format
     Given Navigate to: Input Validation and Error Handling
     And with test data "{{validBaseURL}}"
@@ -142,7 +142,7 @@ Feature: Swag Labs Authentication Gateway
     Then HTTP 403 returned. Access denied message shown.
     Then HTTP 403 returned. Access denied message shown.
 
-  @negative @functional @ui @regression @tc-021
+  @negative @functional @ui @regression @tc-021 @obsolete
   Scenario: [TC-021] Enter SQL injection payload
     Given Navigate to: Input Validation and Error Handling
     And with test data "{{validBaseURL}}"

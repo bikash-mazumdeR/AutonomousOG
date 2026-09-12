@@ -1,23 +1,10 @@
 Feature: Swag Labs Authentication Gateway
-  As a user of the application,
-  I want to Allow users to authenticate securely using their credentials and receive appropriate validation feedback.
-  So that access protected functionality.
+  As a User,
+  I want to Authenticate using standard credentials
+  So that Access the inventory catalog.
 
   Background:
     Given the user is on the login page
-
-  @positive @functional @ui @regression @tc-001
-  Scenario: [TC-001] [functional] Given valid credentials for standard_user
-    Given Navigate to the feature: User Authentication and Session Management
-    And with test data "{{validBaseURL}}"
-    Then Feature is accessible and loaded correctly
-    When Authenticate with valid credentials
-    And with test data "{{validUsername}} / {{validPassword}}"
-    Then User is authenticated and redirected to correct page
-    When Perform action: [@functional] Given valid credentials for 'standard_user' with password 'secret_
-    And with test data "{{validPassword}}"
-    Then System confirms: [@functional] Given valid credentials for 'standard_user' with password 'secret_sauce', when the user clicks Login, the system authenticates the user, generates and persists the session token in browser Local Storage, and redirects to '/inventory.html'.
-    Then System confirms: [@functional] Given valid credentials for 'standard_user' with password 'secret_sauce', when the user clicks Login, the system authenticates the user, generates and persists the session token in browser Local Storage, and redirects to '/inventory.html'.
 
   @positive @functional @ui @regression @tc-002
   Scenario: [TC-002] [performance] Given valid credentials for performance_g
