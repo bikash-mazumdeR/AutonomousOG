@@ -6,6 +6,7 @@
     "ui": "npm --prefix autonomous-test-framework run ui:agent01 --",
     "ui:agent01": "npm --prefix autonomous-test-framework run ui:agent01 --",
     "ui:agent02": "npm --prefix autonomous-test-framework run ui:agent02 --",
+    "ui:agent03": "npm --prefix autonomous-test-framework run ui:agent03 --",
     "pipeline:start": "npm --prefix autonomous-test-framework run pipeline:start --",
     "pipeline:status": "npm --prefix autonomous-test-framework run pipeline:status --",
     "pipeline:status:watch": "npm --prefix autonomous-test-framework run pipeline:status:watch --",

@@ -12,6 +12,7 @@
   "scripts": {
     "ui:agent01": "node -r ts-node/register ui/agent01-ui-server.ts",
     "ui:agent02": "node -r ts-node/register ui/agent02-ui-server.ts",
+    "ui:agent03": "node -r ts-node/register ui/agent03-ui-server.ts",
     "pipeline:start": "node -r ts-node/register orchestrator.ts",
     "pipeline:status": "node -r ts-node/register cli/status.ts",
     "pipeline:status:watch": "node -r ts-node/register cli/status.ts --watch",

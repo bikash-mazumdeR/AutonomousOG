@@ -1,0 +1,1656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ARIA — Agent 03: Test Case Reviewer</title>
+  <style>
+    /* ── Design tokens ───────────────────────────────────────────────────── */
+    :root {
+      --bg:           #0f172a;
+      --surface:      #1e293b;
+      --surface2:     #273449;
+      --border:       #334155;
+      --accent:       #6366f1;
+      --accent-h:     #4f46e5;
+      --success:      #22c55e;
+      --success-bg:   #14532d22;
+      --warning:      #f59e0b;
+      --warning-bg:   #78350f22;
+      --danger:       #ef4444;
+      --danger-bg:    #7f1d1d22;
+      --purple:       #a855f7;
+      --purple-bg:    #581c8722;
+      --text:         #f1f5f9;
+      --text-muted:   #94a3b8;
+      --text-dim:     #64748b;
+      --radius:       10px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ──────────────────────────────────────────────────────────── */
+    .header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 28px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .header-logo {
+      font-weight: 800;
+      font-size: 17px;
+      letter-spacing: 0.5px;
+      color: #fff;
+    }
+    .header-logo span { color: var(--accent); }
+    .header-badge {
+      font-size: 11px;
+      background: rgba(99, 102, 241, 0.18);
+      color: #a5b4fc;
+      border: 1px solid rgba(99, 102, 241, 0.35);
+      border-radius: 20px;
+      padding: 2px 10px;
+      font-weight: 600;
+    }
+
+    /* ── Pipeline Bar ────────────────────────────────────────────────────── */
+    .pipeline-bar {
+      display: flex;
+      align-items: center;
+      padding: 12px 28px;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+      overflow-x: auto;
+      gap: 8px;
+    }
+    .step-node {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      font-size: 11px;
+      font-weight: 700;
+      flex-shrink: 0;
+      transition: all 0.2s;
+    }
+    .step-node.done {
+      background: rgba(34, 197, 94, 0.2);
+      border-color: var(--success);
+      color: var(--success);
+    }
+    .step-node.active {
+      background: var(--accent);
+      border-color: var(--accent-h);
+      color: #fff;
+      box-shadow: 0 0 10px rgba(99, 102, 241, 0.5);
+    }
+    .step-connector {
+      height: 2px;
+      width: 24px;
+      background: var(--border);
+      flex-shrink: 0;
+    }
+    .step-connector.done {
+      background: var(--success);
+    }
+
+    /* ── Page Layout ─────────────────────────────────────────────────────── */
+    .page-body {
+      flex: 1;
+      padding: 24px 28px 90px;
+      max-width: 1400px;
+      width: 100%;
+      margin: 0 auto;
+    }
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 20px;
+    }
+    @media (max-width: 1080px) {
+      .main-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ── Cards ───────────────────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 22px;
+      margin-bottom: 20px;
+    }
+    .card-title {
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: var(--text);
+    }
+
+    /* ── Buttons (Standardized Hierarchy) ─────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      height: 38px;
+      min-width: 140px;
+      padding: 0 18px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1;
+      cursor: pointer;
+      border: 1px solid transparent;
+      box-sizing: border-box;
+      white-space: nowrap;
+      transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+      user-select: none;
+    }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .btn-loading { pointer-events: none; opacity: 0.8; }
+    .btn-loading::before {
+      content: ''; display: inline-block; width: 14px; height: 14px;
+      border: 2px solid currentColor; border-bottom-color: transparent;
+      border-radius: 50%; animation: spin .8s linear infinite;
+    }
+    .btn-primary  { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-h); border-color: var(--accent-h); }
+    .btn-success  { background: var(--success); color: #fff; border-color: var(--success); }
+    .btn-success:hover:not(:disabled) { opacity: 0.9; }
+    .btn-danger   { background: var(--danger);  color: #fff; border-color: var(--danger); }
+    .btn-danger:hover:not(:disabled) { opacity: 0.9; }
+    .btn-ghost    { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
+    .btn-ghost:hover:not(:disabled) { background: var(--surface2); color: var(--text); border-color: var(--text-dim); }
+
+    .btn-sm {
+      height: 32px;
+      min-width: 110px;
+      padding: 0 12px;
+      font-size: 12px;
+      gap: 6px;
+    }
+    .btn-xs {
+      height: 28px;
+      min-width: 90px;
+      padding: 0 10px;
+      font-size: 12px;
+      gap: 5px;
+    }
+    .btn-icon {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+      stroke-width: 2;
+    }
+
+    /* Table inspect button */
+    .btn-inspect-tc {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      height: 32px;
+      width: 125px;
+      min-width: 125px;
+      max-width: 125px;
+      padding: 0 12px;
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1;
+      white-space: nowrap;
+      flex-shrink: 0;
+      background: var(--surface);
+      color: var(--accent);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      box-sizing: border-box;
+      transition: all 0.15s ease;
+      user-select: none;
+    }
+    .btn-inspect-tc:hover {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+
+    .tc-name-link {
+      cursor: pointer;
+      transition: color 0.15s ease;
+    }
+    .tc-name-link:hover {
+      color: var(--accent) !important;
+      text-decoration: underline;
+    }
+
+    #runBtn {
+      height: 38px;
+      min-width: 220px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Log Stream ──────────────────────────────────────────────────────── */
+    .log-stream {
+      background: #020817; border: 1px solid var(--border); border-radius: var(--radius);
+      height: 240px; overflow-y: auto; overflow-x: hidden; padding: 12px; font-family: monospace; font-size: 12px;
+      overflow-wrap: anywhere; word-break: break-word; white-space: pre-wrap; width: 100%; max-width: 100%;
+    }
+    .log-line { color: var(--text-muted); }
+    .log-line.warn  { color: var(--warning); }
+    .log-line.error { color: var(--danger); }
+    .spinner { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-top: 10px; }
+    .spinner::before {
+      content: ''; width: 14px; height: 14px; border: 2px solid var(--border);
+      border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite;
+    }
+
+    /* ── Alerts ──────────────────────────────────────────────────────────── */
+    .alert { padding: 12px 16px; border-radius: 6px; font-size: 13px; margin-bottom: 16px; border: 1px solid transparent; }
+    .alert-warning { background: var(--warning-bg); border-color: var(--warning); color: #fbbf24; }
+    .alert-success { background: var(--success-bg); border-color: var(--success); color: #4ade80; }
+    .alert-danger { background: var(--danger-bg); border-color: var(--danger); color: #f87171; }
+    .hidden { display: none !important; }
+
+    /* ── Quality Hero Card ───────────────────────────────────────────────── */
+    .hero-quality-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(39, 52, 73, 0.95));
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px 28px;
+      margin-bottom: 20px;
+    }
+    .hero-left { display: flex; align-items: center; gap: 20px; }
+    .grade-badge {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 36px;
+      font-weight: 800;
+      border: 3px solid;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.4);
+      flex-shrink: 0;
+    }
+    .grade-A { color: #4ade80; border-color: #22c55e; background: rgba(34, 197, 94, 0.15); box-shadow: 0 0 20px rgba(34, 197, 94, 0.3); }
+    .grade-B { color: #60a5fa; border-color: #3b82f6; background: rgba(59, 130, 246, 0.15); box-shadow: 0 0 20px rgba(59, 130, 246, 0.3); }
+    .grade-C { color: #fbbf24; border-color: #f59e0b; background: rgba(245, 158, 11, 0.15); box-shadow: 0 0 20px rgba(245, 158, 11, 0.3); }
+    .grade-D, .grade-F { color: #f87171; border-color: #ef4444; background: rgba(239, 68, 68, 0.15); box-shadow: 0 0 20px rgba(239, 68, 68, 0.3); }
+
+    .hero-score-info h1 { font-size: 28px; font-weight: 800; color: #fff; margin-bottom: 4px; }
+    .hero-score-info p { font-size: 13px; color: var(--text-muted); }
+    .decision-badge {
+      display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700;
+      padding: 6px 14px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .decision-APPROVE { background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid #22c55e; }
+    .decision-APPROVE_WITH_WARNINGS { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid #f59e0b; }
+    .decision-REJECT { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid #ef4444; }
+
+    /* ── Dimension Cards Grid ────────────────────────────────────────────── */
+    .dimensions-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .dim-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .dim-header { display: flex; align-items: center; justify-content: space-between; }
+    .dim-label { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-dim); }
+    .dim-weight { font-size: 11px; color: var(--text-muted); }
+    .dim-score { font-size: 20px; font-weight: 700; color: #fff; }
+    .dim-bar-wrap { height: 6px; background: rgba(0,0,0,0.3); border-radius: 3px; overflow: hidden; }
+    .dim-bar { height: 100%; border-radius: 3px; transition: width 0.4s ease; }
+
+    /* ── Stat Grid ───────────────────────────────────────────────────────── */
+    .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .stat-item { background: var(--surface2); border-radius: 6px; padding: 12px; }
+    .stat-label { font-size: 11px; color: var(--text-dim); }
+    .stat-value { font-size: 22px; font-weight: 700; color: var(--text); }
+
+    /* ── Table & Tabs ────────────────────────────────────────────────────── */
+    .filter-tabs {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 14px; flex-wrap: wrap;
+    }
+    .tab-btn {
+      background: var(--surface2); border: 1px solid var(--border); color: var(--text-muted);
+      padding: 6px 14px; font-size: 12px; font-weight: 600; border-radius: 20px; cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .tab-btn:hover { background: var(--border); color: var(--text); }
+    .tab-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+    .search-input {
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
+      color: var(--text); padding: 7px 12px; font-size: 12px; width: 220px; margin-left: auto;
+      outline: none; transition: border-color 0.2s;
+    }
+    .search-input:focus { border-color: var(--accent); }
+
+    .table-container {
+      max-height: 520px; overflow-y: auto; border: 1px solid var(--border);
+      border-radius: var(--radius); background: var(--surface2);
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 12px 16px; border-bottom: 1px solid var(--border); text-align: left; }
+    th { position: sticky; top: 0; background: var(--surface); color: var(--text-dim); font-weight: 600; z-index: 10; }
+    tr:last-child td { border-bottom: none; }
+    .tc-row { transition: background 0.15s ease; }
+    .tc-row:hover { background: rgba(99, 102, 241, 0.08); }
+    .tc-row.unchecked { opacity: 0.5; background: rgba(0,0,0,0.2); }
+
+    .tc-key { font-family: monospace; color: var(--accent); font-weight: 600; }
+    .tc-type { font-size: 11px; padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,0.1); font-weight: 600; }
+    .tc-type.type-positive { background: rgba(34, 197, 94, 0.2); color: #4ade80; }
+    .tc-type.type-negative { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+    .tc-type.type-edge { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+    .tc-type.type-api { background: rgba(99, 102, 241, 0.2); color: #a5b4fc; }
+    .tc-type.type-perf, .tc-type.type-performance { background: rgba(168, 85, 247, 0.2); color: #c084fc; }
+
+    /* Review Status Badges */
+    .status-badge {
+      font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 4px;
+      display: inline-flex; align-items: center; gap: 4px; text-transform: uppercase;
+    }
+    .status-PASSED    { background: rgba(34, 197, 94, 0.2); color: #4ade80; }
+    .status-REWRITTEN { background: rgba(168, 85, 247, 0.2); color: #c084fc; }
+    .status-FLAGGED   { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+    .status-REJECTED  { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+
+    .findings-chip {
+      font-size: 11px; color: var(--text-dim); background: rgba(0,0,0,0.25);
+      padding: 2px 6px; border-radius: 4px; font-family: monospace;
+    }
+    .findings-chip.warn { color: #fbbf24; }
+    .findings-chip.danger { color: #f87171; }
+
+    /* ── Action bar & Modals ─────────────────────────────────────────────── */
+    .action-bar {
+      position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface);
+      border-top: 1px solid var(--border); padding: 14px 24px;
+      display: flex; gap: 12px; justify-content: flex-end; align-items: center; z-index: 50;
+    }
+    .action-bar .btn {
+      height: 38px;
+      min-width: 180px;
+    }
+
+    .modal {
+      position: fixed; inset: 0; background: rgba(0,0,0,.7);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 300; opacity: 0; pointer-events: none; transition: opacity .2s;
+    }
+    .modal.open { opacity: 1; pointer-events: all; }
+    .modal-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 24px; width: 100%; max-width: 400px;
+    }
+    .modal h2 { margin-bottom: 8px; font-size: 16px; font-weight: 700; color: var(--text); }
+    .modal p { color: var(--text-muted); margin-bottom: 16px; font-size: 13px; }
+    .modal textarea {
+      width: 100%; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text); padding: 9px 12px;
+      min-height: 80px; margin-bottom: 20px; font-family: inherit; resize: vertical; outline: none;
+    }
+    .modal-buttons { display: flex; gap: 12px; justify-content: flex-end; align-items: center; }
+    .modal-buttons .btn {
+      height: 38px;
+      min-width: 130px;
+    }
+
+    /* ── Review Inspection Modal ─────────────────────────────────────────── */
+    .tc-modal-dialog {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); width: 92%; max-width: 860px; max-height: 88vh;
+      display: flex; flex-direction: column; overflow: hidden;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.75);
+      animation: modalPop 0.2s ease-out;
+    }
+    @keyframes modalPop { from { transform: scale(0.96); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    .tc-modal-head {
+      padding: 16px 24px; border-bottom: 1px solid var(--border); display: flex;
+      align-items: center; justify-content: space-between; background: var(--surface); gap: 12px;
+    }
+    .tc-modal-head-left { display: flex; align-items: center; gap: 10px; }
+    .tc-modal-close-btn {
+      background: none; border: none; color: var(--text-muted); font-size: 22px; cursor: pointer; line-height: 1;
+      width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;
+      border-radius: 6px; transition: background 0.15s, color 0.15s;
+    }
+    .tc-modal-close-btn:hover { background: var(--surface2); color: var(--text); }
+    .tc-modal-content {
+      padding: 20px 24px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 18px;
+    }
+    .tc-modal-foot {
+      padding: 14px 24px; border-top: 1px solid var(--border); display: flex;
+      align-items: center; justify-content: flex-end; background: var(--surface); gap: 12px;
+    }
+    .tc-modal-foot .btn {
+      height: 38px;
+      min-width: 140px;
+    }
+
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .form-field { display: flex; flex-direction: column; gap: 6px; }
+    .form-field label { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px; }
+    .form-input, .form-textarea, .form-select {
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
+      color: var(--text); padding: 8px 12px; font-family: inherit; font-size: 13px;
+      outline: none; transition: border-color 0.2s; width: 100%; box-sizing: border-box;
+    }
+    .form-input:focus, .form-textarea:focus, .form-select:focus { border-color: var(--accent); }
+
+    /* Findings card in modal */
+    .finding-card {
+      border-radius: 6px; padding: 10px 14px; margin-bottom: 8px; font-size: 12px;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .finding-BLOCKER { background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; color: #fca5a5; }
+    .finding-MAJOR   { background: rgba(245, 158, 11, 0.15); border: 1px solid #f59e0b; color: #fde68a; }
+    .finding-MINOR   { background: rgba(59, 130, 246, 0.15); border: 1px solid #3b82f6; color: #93c5fd; }
+    .finding-INFO    { background: rgba(100, 116, 139, 0.15); border: 1px solid var(--border); color: var(--text-muted); }
+
+    .step-card {
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+      padding: 14px; display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px;
+    }
+    .step-card-head { display: flex; align-items: center; justify-content: space-between; }
+    .step-num-badge {
+      font-size: 11px; font-weight: 700; background: rgba(99, 102, 241, 0.25);
+      color: #a5b4fc; padding: 2px 8px; border-radius: 4px;
+    }
+    .step-improved-badge {
+      font-size: 11px; font-weight: 600; background: rgba(168, 85, 247, 0.2);
+      color: #c084fc; padding: 2px 8px; border-radius: 4px; margin-left: 8px;
+    }
+    .step-btn-remove {
+      background: transparent; border: 1px solid var(--border); color: var(--text-dim); cursor: pointer;
+      font-size: 12px; font-weight: 500; display: inline-flex; align-items: center; justify-content: center;
+      gap: 5px; height: 28px; min-width: 90px; padding: 0 10px; border-radius: 4px; box-sizing: border-box;
+      transition: all 0.15s ease; user-select: none;
+    }
+    .step-btn-remove:hover { color: var(--danger); border-color: var(--danger); background: rgba(239, 68, 68, 0.1); }
+    .step-fields-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    /* Chat Drawer */
+    .chat-drawer {
+      position: fixed; right: 0; top: 0; bottom: 0; width: 420px;
+      background: var(--surface); border-left: 1px solid var(--border);
+      display: flex; flex-direction: column; z-index: 201;
+      transform: translateX(100%); transition: transform .25s;
+    }
+    .chat-drawer.open { transform: translateX(0); }
+    .chat-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; font-weight: 700; }
+    .chat-close {
+      margin-left: auto; background: none; border: none; color: var(--text-muted); font-size: 20px;
+      width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;
+      border-radius: 6px; cursor: pointer; line-height: 1; transition: background 0.15s, color 0.15s;
+    }
+    .chat-close:hover { background: var(--surface2); color: var(--text); }
+    .chat-messages { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
+    .chat-bubble { max-width: 85%; padding: 10px 14px; border-radius: 8px; font-size: 13px; white-space: pre-wrap; }
+    .chat-bubble.user { background: var(--accent); color: #fff; align-self: flex-end; }
+    .chat-bubble.aria { background: var(--surface2); color: var(--text); align-self: flex-start; border: 1px solid var(--border); }
+    .chat-input-area { padding: 16px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; align-items: center; }
+    .chat-input-area input { flex: 1; height: 38px; box-sizing: border-box; background: var(--surface2); border: 1px solid var(--border); padding: 0 12px; border-radius: 6px; color: var(--text); }
+    .chat-input-area .btn { height: 38px; min-width: 90px; }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-logo">ARIA <span>/</span> Agent 03</div>
+    <div class="header-badge">Test Case Reviewer</div>
+  </header>
+
+  <!-- Pipeline Progress Bar -->
+  <div class="pipeline-bar" id="pipelineBar">
+    <!-- Injected by JS -->
+  </div>
+
+  <div class="page-body">
+    
+    <div class="alert alert-success hidden" id="successAlert"></div>
+    <div class="alert alert-danger hidden" id="errorAlert"></div>
+
+    <!-- Phase 1: Input / Pre-run -->
+    <div class="card" id="inputPhase">
+      <div class="card-title">Review Configuration</div>
+      <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
+        Agent 03 will perform a multi-dimensional quality review on the test cases produced by Agent 02.
+        It detects duplicates, rewrites vague steps, validates risk-based coverage against user stories, and scores overall quality.
+      </p>
+
+      <input type="text" id="projectNameInput" placeholder="Project Name (defaults to active pipeline run)" style="width: 100%; background: var(--surface2); border: 1px solid var(--border); padding: 9px 12px; border-radius: 6px; color: var(--text); margin-bottom: 14px;">
+
+      <div class="stat-grid" style="margin-bottom: 16px;">
+        <div class="stat-item">
+          <div class="stat-label">Generated Test Cases (from Agent 02)</div>
+          <div class="stat-value" id="inputTcCount">—</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">User Stories / Features (from Agent 01)</div>
+          <div class="stat-value" id="inputFeatureCount">—</div>
+        </div>
+      </div>
+
+      <button id="runBtn" class="btn btn-primary">
+        <span>Start Quality Review</span>
+        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+          <polyline points="12 5 19 12 12 19"></polyline>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Phase 2: Running Progress -->
+    <div class="card hidden" id="runningPhase">
+      <div class="card-title">Review Execution</div>
+      <div class="log-stream" id="logStream"></div>
+      <div class="spinner">Agent 03 is reviewing test cases, checking coverage, and scoring quality...</div>
+    </div>
+
+    <!-- Phase 3: Results Workspace -->
+    <div id="resultsPhase" class="hidden">
+      
+      <!-- Hero Quality Score Card -->
+      <div class="hero-quality-card" id="heroQualityCard">
+        <div class="hero-left">
+          <div class="grade-badge grade-A" id="gradeBadge">A</div>
+          <div class="hero-score-info">
+            <h1 id="heroScoreVal">92 <span style="font-size: 16px; font-weight: 500; color: var(--text-muted);">/ 100</span></h1>
+            <p>Overall Test Case Quality Score</p>
+          </div>
+        </div>
+        <div style="text-align: right;">
+          <div class="decision-badge decision-APPROVE" id="decisionBadge">Approved</div>
+          <div style="font-size: 11px; color: var(--text-dim); margin-top: 6px;" id="decisionSub">Ready for Test Data Generation</div>
+        </div>
+      </div>
+
+      <!-- 5-Dimension Progress Cards -->
+      <div class="dimensions-grid" id="dimensionsGrid">
+        <!-- Injected by JS -->
+      </div>
+
+      <!-- Main Results Grid -->
+      <div class="main-grid">
+        
+        <!-- Left Main: Coverage Matrix & Reviewed Test Cases -->
+        <div class="col-main">
+          
+          <!-- Coverage Adequacy Matrix -->
+          <div class="card">
+            <div class="card-title">
+              <span>Coverage Adequacy Matrix</span>
+              <span id="coverageSummaryPill" style="font-size: 11px; font-weight: 600; color: var(--text-dim);">By Risk Tier</span>
+            </div>
+            <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
+              Evaluates test case distribution against minimum required Positive, Negative, Edge, and Smoke targets.
+            </p>
+            <div class="table-container" style="max-height: 280px;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Feature</th>
+                    <th>Risk Tier</th>
+                    <th>Status</th>
+                    <th>Coverage (Pos / Neg / Edge / Smoke)</th>
+                    <th>Score</th>
+                  </tr>
+                </thead>
+                <tbody id="coverageTableBody">
+                  <!-- Injected by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Reviewed Test Cases -->
+          <div class="card">
+            <div class="card-title">
+              <span>Reviewed Test Cases</span>
+              <span id="tcCountPill" style="font-size: 12px; color: var(--text-muted);">Showing 0 test cases</span>
+            </div>
+
+            <div class="filter-tabs">
+              <button type="button" class="tab-btn active" data-filter="ALL">All (<span id="countAll">0</span>)</button>
+              <button type="button" class="tab-btn" data-filter="PASSED">Passed (<span id="countPassed">0</span>)</button>
+              <button type="button" class="tab-btn" data-filter="REWRITTEN">Rewritten (<span id="countRewritten">0</span>)</button>
+              <button type="button" class="tab-btn" data-filter="FLAGGED">Flagged (<span id="countFlagged">0</span>)</button>
+              <button type="button" class="tab-btn" data-filter="REJECTED">Rejected (<span id="countRejected">0</span>)</button>
+              
+              <input type="text" id="tcSearchInput" class="search-input" placeholder="Search test cases...">
+            </div>
+
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th style="width: 40px;"><input type="checkbox" id="selectAllTc" checked title="Toggle All"></th>
+                    <th>Key</th>
+                    <th>Type</th>
+                    <th>Scenario & Preview</th>
+                    <th>Review Status</th>
+                    <th>Findings</th>
+                    <th style="width: 140px;">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="tcTableBody">
+                  <!-- Injected by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Right Side: Metrics & Recommendations -->
+        <div class="col-side">
+          
+          <div class="card">
+            <div class="card-title">Review Summary</div>
+            <div class="stat-grid">
+              <div class="stat-item">
+                <div class="stat-label">Total Reviewed</div>
+                <div class="stat-value" id="statReviewed">—</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-label">Approved</div>
+                <div class="stat-value" id="statApproved" style="color: #4ade80;">—</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-label">Rewritten Steps</div>
+                <div class="stat-value" id="statRewritten" style="color: #c084fc;">—</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-label">Duplicates Removed</div>
+                <div class="stat-value" id="statDeduped">—</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Recommendations & Insights</div>
+            <div id="recommendationsList" style="display: flex; flex-direction: column; gap: 8px; font-size: 12px;">
+              <!-- Injected by JS -->
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Bottom Action Bar -->
+  <div class="action-bar hidden" id="actionBar">
+    <div class="hint" style="font-size: 13px; color: var(--text-muted); margin-right: auto;">Review quality report and approve to proceed to Test Data Generation.</div>
+    <button id="reRunBtn" class="btn btn-ghost" style="height: 38px;">
+      <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="23 4 23 10 17 10"></polyline>
+        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+      </svg>
+      <span>Re-run Review</span>
+    </button>
+    <button id="chatBtn" class="btn btn-ghost">
+      <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+      </svg>
+      <span>Chat with ARIA</span>
+    </button>
+    <button id="proceedBtn" class="btn btn-primary">
+      <span>Proceed to Agent 04</span>
+      <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="5" y1="12" x2="19" y2="12"></line>
+        <polyline points="12 5 19 12 12 19"></polyline>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Test Case Review & Override Modal -->
+  <div id="tcReviewModal" class="modal">
+    <div class="tc-modal-dialog">
+      <div class="tc-modal-head">
+        <div class="tc-modal-head-left">
+          <span id="modalTcKey" class="tc-key" style="font-size: 14px;">TC-000</span>
+          <span id="modalTcTypeBadge" class="tc-type">Positive</span>
+          <span id="modalTcStatusBadge" class="status-badge status-PASSED">Passed</span>
+          <h2>Test Case Quality Inspection</h2>
+        </div>
+        <button type="button" class="tc-modal-close-btn" id="modalCloseXBtn" title="Close without saving">&times;</button>
+      </div>
+      
+      <div class="tc-modal-content">
+        <div id="modalAlert" class="alert alert-success hidden"></div>
+        <div id="modalError" class="alert alert-danger hidden"></div>
+
+        <!-- Findings Banner (if any) -->
+        <div id="modalFindingsContainer"></div>
+
+        <div class="form-row">
+          <div class="form-field" style="grid-column: span 2;">
+            <label for="modalTcName">Scenario Name / Title</label>
+            <input type="text" id="modalTcName" class="form-input">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-field">
+            <label for="modalTcStatusSelect">Review Status Override</label>
+            <select id="modalTcStatusSelect" class="form-select">
+              <option value="PASSED">PASSED (Approved)</option>
+              <option value="REWRITTEN">REWRITTEN (Auto-Improved)</option>
+              <option value="FLAGGED">FLAGGED (Needs Attention)</option>
+              <option value="REJECTED">REJECTED (Do not execute)</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label for="modalTcLabels">Tags / Labels</label>
+            <input type="text" id="modalTcLabels" class="form-input" placeholder="e.g. Smoke, Functional">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-field">
+            <label for="modalTcPrecondition">Preconditions</label>
+            <textarea id="modalTcPrecondition" class="form-textarea" rows="2"></textarea>
+          </div>
+          <div class="form-field">
+            <label for="modalTcObjective">Objective</label>
+            <textarea id="modalTcObjective" class="form-textarea" rows="2"></textarea>
+          </div>
+        </div>
+
+        <div class="steps-header-row" style="display: flex; align-items: center; justify-content: space-between; margin-top: 4px;">
+          <span style="font-size: 13px; font-weight: 600; color: var(--text); text-transform: uppercase;">Reviewed Test Steps (<span id="modalStepsCount">0</span>)</span>
+          <button type="button" class="btn btn-ghost btn-sm" id="modalAddStepBtn">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            <span>Add Step</span>
+          </button>
+        </div>
+
+        <div id="modalStepsList">
+          <!-- Step cards injected here -->
+        </div>
+      </div>
+
+      <div class="tc-modal-foot">
+        <button type="button" class="btn btn-ghost" id="modalCancelBtn">Close</button>
+        <button type="button" class="btn btn-primary" id="modalSaveBtn">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+            <polyline points="17 21 17 13 7 13 7 21"></polyline>
+            <polyline points="7 3 7 8 15 8"></polyline>
+          </svg>
+          <span>Save Changes</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Approval Modal -->
+  <div id="approvalModal" class="modal">
+    <div class="modal-card">
+      <h2>Stage Approval</h2>
+      <p>Approve reviewed test cases? Checked test cases will proceed to Agent 04 (Test Data Generator).</p>
+      <textarea id="approvalComment" placeholder="Optional comment for the approval gate..."></textarea>
+      <div class="modal-buttons">
+        <button id="rejectBtn" class="btn btn-danger">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+          <span>Reject</span>
+        </button>
+        <button id="approveBtn" class="btn btn-success">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+          <span>Approve</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Chat Drawer -->
+  <div id="chatDrawer" class="chat-drawer">
+    <div class="chat-header">
+      ARIA Quality Assistant
+      <button class="chat-close" id="chatCloseBtn">&times;</button>
+    </div>
+    <div class="chat-messages" id="chatMessages">
+      <div class="chat-bubble aria">I have reviewed the test cases. What questions do you have about quality scores, rewritten steps, or coverage?</div>
+    </div>
+    <div class="chat-input-area">
+      <input type="text" id="chatInput" placeholder="Ask about quality review..." autocomplete="off">
+      <button id="chatSendBtn" class="btn btn-primary">Send</button>
+    </div>
+  </div>
+
+  <script>
+    // ── Pipeline Bar ──────────────────────────────────────────────────────
+    const STAGES = [
+      'Req Analyzer','Test Generator','Test Reviewer','Data Generator',
+      'Script Generator','Code Reviewer','Test Runner','Bug Reporter',
+      'Report Generator','Auto Healer','Re-Test Agent',
+    ];
+    (function renderPipeline() {
+      const bar = document.getElementById('pipelineBar');
+      STAGES.forEach((name, i) => {
+        const node = document.createElement('div');
+        if (i < 2) node.className = 'step-node done';
+        else if (i === 2) node.className = 'step-node active';
+        else node.className = 'step-node';
+        
+        node.title = `Agent ${String(i+1).padStart(2,'0')}: ${name}`;
+        node.textContent = i + 1;
+        bar.appendChild(node);
+        if (i < STAGES.length - 1) {
+          const conn = document.createElement('div');
+          conn.className = 'step-connector' + (i < 2 ? ' done' : '');
+          bar.appendChild(conn);
+        }
+      });
+    })();
+
+    // ── SVG Icons ─────────────────────────────────────────────────────────
+    const SVG_ICONS = {
+      edit: '<svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>',
+      save: '<svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>',
+      trash: '<svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>',
+      check: '<svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>'
+    };
+
+    // ── HTML Escaping ─────────────────────────────────────────────────────
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    // ── State ─────────────────────────────────────────────────────────────
+    let pollInterval = null;
+    let eventSource = null;
+    let reviewedOutput = null;
+    let allTestCases = [];
+    let currentFilter = 'ALL';
+    let currentEditingKey = null;
+    let chatHistory = [];
+
+    const DOM = {
+      inputPhase: document.getElementById('inputPhase'),
+      runningPhase: document.getElementById('runningPhase'),
+      resultsPhase: document.getElementById('resultsPhase'),
+      actionBar: document.getElementById('actionBar'),
+      logStream: document.getElementById('logStream'),
+      runBtn: document.getElementById('runBtn'),
+      projectNameInput: document.getElementById('projectNameInput'),
+      inputTcCount: document.getElementById('inputTcCount'),
+      inputFeatureCount: document.getElementById('inputFeatureCount'),
+      successAlert: document.getElementById('successAlert'),
+      errorAlert: document.getElementById('errorAlert'),
+
+      // Hero
+      gradeBadge: document.getElementById('gradeBadge'),
+      heroScoreVal: document.getElementById('heroScoreVal'),
+      decisionBadge: document.getElementById('decisionBadge'),
+      decisionSub: document.getElementById('decisionSub'),
+      dimensionsGrid: document.getElementById('dimensionsGrid'),
+
+      // Tables
+      coverageTableBody: document.getElementById('coverageTableBody'),
+      tcTableBody: document.getElementById('tcTableBody'),
+      selectAllTc: document.getElementById('selectAllTc'),
+      tcSearchInput: document.getElementById('tcSearchInput'),
+      tcCountPill: document.getElementById('tcCountPill'),
+
+      // Metrics
+      statReviewed: document.getElementById('statReviewed'),
+      statApproved: document.getElementById('statApproved'),
+      statRewritten: document.getElementById('statRewritten'),
+      statDeduped: document.getElementById('statDeduped'),
+      recommendationsList: document.getElementById('recommendationsList'),
+
+      // Modal
+      tcReviewModal: document.getElementById('tcReviewModal'),
+      modalTcKey: document.getElementById('modalTcKey'),
+      modalTcTypeBadge: document.getElementById('modalTcTypeBadge'),
+      modalTcStatusBadge: document.getElementById('modalTcStatusBadge'),
+      modalFindingsContainer: document.getElementById('modalFindingsContainer'),
+      modalTcName: document.getElementById('modalTcName'),
+      modalTcStatusSelect: document.getElementById('modalTcStatusSelect'),
+      modalTcLabels: document.getElementById('modalTcLabels'),
+      modalTcPrecondition: document.getElementById('modalTcPrecondition'),
+      modalTcObjective: document.getElementById('modalTcObjective'),
+      modalStepsList: document.getElementById('modalStepsList'),
+      modalStepsCount: document.getElementById('modalStepsCount'),
+      modalCloseXBtn: document.getElementById('modalCloseXBtn'),
+      modalCancelBtn: document.getElementById('modalCancelBtn'),
+      modalSaveBtn: document.getElementById('modalSaveBtn'),
+      modalAddStepBtn: document.getElementById('modalAddStepBtn'),
+      modalAlert: document.getElementById('modalAlert'),
+      modalError: document.getElementById('modalError'),
+
+      // Approvals
+      proceedBtn: document.getElementById('proceedBtn'),
+      reRunBtn: document.getElementById('reRunBtn'),
+      approvalModal: document.getElementById('approvalModal'),
+      approveBtn: document.getElementById('approveBtn'),
+      rejectBtn: document.getElementById('rejectBtn'),
+      approvalComment: document.getElementById('approvalComment'),
+
+      // Chat
+      chatBtn: document.getElementById('chatBtn'),
+      chatDrawer: document.getElementById('chatDrawer'),
+      chatCloseBtn: document.getElementById('chatCloseBtn'),
+      chatMessages: document.getElementById('chatMessages'),
+      chatInput: document.getElementById('chatInput'),
+      chatSendBtn: document.getElementById('chatSendBtn')
+    };
+
+    // ── Initialization ────────────────────────────────────────────────────
+    async function init() {
+      try {
+        const res = await fetch('/api/agent03/state');
+        const data = await res.json();
+
+        // Populate input phase previews
+        if (data.testCases?.zephyrExport?.totalTestCases) {
+          DOM.inputTcCount.textContent = data.testCases.zephyrExport.totalTestCases;
+        }
+        if (data.requirements?.totalFeatures) {
+          DOM.inputFeatureCount.textContent = data.requirements.totalFeatures;
+        }
+
+        if (data.running) {
+          showPhase('running');
+          startLogStream();
+          startPolling();
+        } else if ((data.stage && data.stage.status === 'COMPLETED' && data.reviewedTestCases) || data.reviewedTestCases) {
+          showPhase('results');
+          renderReviewReport(data.reviewedTestCases);
+        } else {
+          showPhase('input');
+        }
+      } catch (e) {
+        console.error('Agent 03 init error:', e);
+      }
+    }
+
+    function showPhase(phase) {
+      DOM.inputPhase.classList.add('hidden');
+      DOM.runningPhase.classList.add('hidden');
+      DOM.resultsPhase.classList.add('hidden');
+      DOM.actionBar.classList.add('hidden');
+
+      if (phase === 'input') DOM.inputPhase.classList.remove('hidden');
+      if (phase === 'running') DOM.runningPhase.classList.remove('hidden');
+      if (phase === 'results') {
+        DOM.resultsPhase.classList.remove('hidden');
+        DOM.actionBar.classList.remove('hidden');
+      }
+    }
+
+    // ── Run Trigger ───────────────────────────────────────────────────────
+    DOM.runBtn.addEventListener('click', async () => {
+      DOM.runBtn.classList.add('btn-loading');
+      DOM.runBtn.disabled = true;
+      DOM.errorAlert.classList.add('hidden');
+
+      const payload = {
+        projectName: DOM.projectNameInput.value.trim()
+      };
+
+      try {
+        const resp = await fetch('/api/agent03/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.error || 'Failed to start Agent 03');
+        }
+
+        showPhase('running');
+        DOM.logStream.innerHTML = '';
+        startLogStream();
+        startPolling();
+      } catch (err) {
+        DOM.errorAlert.textContent = err.message;
+        DOM.errorAlert.classList.remove('hidden');
+      } finally {
+        DOM.runBtn.classList.remove('btn-loading');
+        DOM.runBtn.disabled = false;
+      }
+    });
+
+    // ── Logs SSE & Polling ────────────────────────────────────────────────
+    function startLogStream() {
+      if (eventSource) eventSource.close();
+      eventSource = new EventSource('/api/agent03/logs');
+      eventSource.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data.type === 'log') {
+            const div = document.createElement('div');
+            div.className = `log-line ${data.level || 'info'}`;
+            div.textContent = data.message;
+            DOM.logStream.appendChild(div);
+            DOM.logStream.scrollTop = DOM.logStream.scrollHeight;
+          }
+        } catch (_) {}
+      };
+    }
+
+    function startPolling() {
+      if (pollInterval) clearInterval(pollInterval);
+      pollInterval = setInterval(async () => {
+        try {
+          const res = await fetch('/api/agent03/state');
+          const data = await res.json();
+          if (data.stage && data.stage.status === 'COMPLETED' && data.reviewedTestCases) {
+            clearInterval(pollInterval);
+            if (eventSource) eventSource.close();
+            showPhase('results');
+            renderReviewReport(data.reviewedTestCases);
+          } else if (data.stage && data.stage.status === 'FAILED') {
+            clearInterval(pollInterval);
+            if (eventSource) eventSource.close();
+            DOM.errorAlert.textContent = 'Agent 03 failed. Check logs.';
+            DOM.errorAlert.classList.remove('hidden');
+            showPhase('input');
+          }
+        } catch (e) { console.error('Poll error:', e); }
+      }, 500);
+    }
+
+    // ── Render Review Report ──────────────────────────────────────────────
+    function renderReviewReport(output) {
+      reviewedOutput = output;
+      const score = output.qualityScore || {};
+      const grade = score.grade || 'B';
+      const overall = score.overall !== undefined ? score.overall : 85;
+      const decision = output.reviewDecision || 'APPROVE';
+
+      // 1. Hero Card
+      DOM.gradeBadge.textContent = grade;
+      DOM.gradeBadge.className = `grade-badge grade-${grade}`;
+      DOM.heroScoreVal.innerHTML = `${overall} <span style="font-size: 16px; font-weight: 500; color: var(--text-muted);">/ 100</span>`;
+      
+      DOM.decisionBadge.textContent = decision.replace(/_/g, ' ');
+      DOM.decisionBadge.className = `decision-badge decision-${decision}`;
+      DOM.decisionSub.textContent = decision === 'APPROVE' 
+        ? 'High quality test suite ready for generation' 
+        : (decision === 'APPROVE_WITH_WARNINGS' ? 'Approved with minor quality warnings' : 'Review blockers detected');
+
+      // 2. Dimension Breakdown Cards
+      const dims = [
+        { label: 'Completeness', weight: '25%', val: score.completeness || 90, color: '#22c55e' },
+        { label: 'Coverage', weight: '25%', val: score.coverage || 85, color: '#3b82f6' },
+        { label: 'Step Quality', weight: '20%', val: score.stepQuality || 92, color: '#a855f7' },
+        { label: 'Traceability', weight: '15%', val: score.traceability || 100, color: '#06b6d4' },
+        { label: 'Data Quality', weight: '15%', val: score.dataQuality || 95, color: '#f59e0b' }
+      ];
+
+      DOM.dimensionsGrid.innerHTML = '';
+      dims.forEach(d => {
+        const div = document.createElement('div');
+        div.className = 'dim-card';
+        div.innerHTML = `
+          <div class="dim-header">
+            <span class="dim-label">${d.label}</span>
+            <span class="dim-weight">Wt: ${d.weight}</span>
+          </div>
+          <div class="dim-score">${d.val}%</div>
+          <div class="dim-bar-wrap">
+            <div class="dim-bar" style="width: ${d.val}%; background: ${d.color};"></div>
+          </div>
+        `;
+        DOM.dimensionsGrid.appendChild(div);
+      });
+
+      // 3. Review Summary Stats
+      allTestCases = output.reviewedZephyrExport?.testCases || [];
+      DOM.statReviewed.textContent = output.originalCount || allTestCases.length;
+      DOM.statApproved.textContent = output.approvedCount || allTestCases.filter(t => t.reviewStatus !== 'REJECTED').length;
+      DOM.statRewritten.textContent = output.rewrittenCount || allTestCases.filter(t => (t.rewrittenSteps || 0) > 0).length;
+      DOM.statDeduped.textContent = output.duplicatesRemoved || 0;
+
+      // Filter counts
+      document.getElementById('countAll').textContent = allTestCases.length;
+      document.getElementById('countPassed').textContent = allTestCases.filter(t => t.reviewStatus === 'PASSED').length;
+      document.getElementById('countRewritten').textContent = allTestCases.filter(t => (t.rewrittenSteps || 0) > 0 || t.reviewStatus === 'REWRITTEN').length;
+      document.getElementById('countFlagged').textContent = allTestCases.filter(t => t.reviewStatus === 'FLAGGED').length;
+      document.getElementById('countRejected').textContent = allTestCases.filter(t => t.reviewStatus === 'REJECTED').length;
+
+      // 4. Coverage Matrix Table
+      DOM.coverageTableBody.innerHTML = '';
+      const features = output.coverageMatrix?.features || [];
+      features.forEach(f => {
+        const tr = document.createElement('tr');
+        const statusClass = f.status === 'ADEQUATE' ? 'status-PASSED' : (f.status === 'PARTIAL' ? 'status-FLAGGED' : 'status-REJECTED');
+        const counts = f.counts || {};
+        const req = f.required || {};
+        
+        tr.innerHTML = `
+          <td><strong>${escapeHtml(f.featureName)}</strong></td>
+          <td><span class="tc-type">${escapeHtml(f.riskLevel || 'MEDIUM')}</span></td>
+          <td><span class="status-badge ${statusClass}">${f.status}</span></td>
+          <td>
+            <span title="Positive">✅ ${counts.positive || 0}/${req.positive || 0}</span> &nbsp;|&nbsp; 
+            <span title="Negative">❌ ${counts.negative || 0}/${req.negative || 0}</span> &nbsp;|&nbsp; 
+            <span title="Edge">⚠️ ${counts.edge || 0}/${req.edge || 0}</span> &nbsp;|&nbsp; 
+            <span title="Smoke">${counts.smoke ? '🔥 Yes' : '—'}</span>
+          </td>
+          <td><strong>${f.coverageScore || 90}%</strong></td>
+        `;
+        DOM.coverageTableBody.appendChild(tr);
+      });
+
+      // 5. Recommendations List
+      DOM.recommendationsList.innerHTML = '';
+      const recs = output.recommendations || [];
+      recs.forEach(r => {
+        const item = document.createElement('div');
+        item.style.padding = '8px 10px';
+        item.style.borderRadius = '6px';
+        item.style.background = 'var(--surface2)';
+        item.style.border = '1px solid var(--border)';
+        item.textContent = r;
+        DOM.recommendationsList.appendChild(item);
+      });
+      if (recs.length === 0) {
+        DOM.recommendationsList.innerHTML = '<div style="color: var(--text-dim);">No special recommendations. Test cases meet quality guidelines.</div>';
+      }
+
+      // 6. Reviewed Test Cases Table
+      renderFilteredTable();
+    }
+
+    // ── Table Filtering & Search ──────────────────────────────────────────
+    function renderFilteredTable() {
+      DOM.tcTableBody.innerHTML = '';
+      const query = DOM.tcSearchInput.value.trim().toLowerCase();
+
+      const filtered = allTestCases.filter(tc => {
+        // Status filter
+        if (currentFilter === 'PASSED' && tc.reviewStatus !== 'PASSED') return false;
+        if (currentFilter === 'REWRITTEN' && ((tc.rewrittenSteps || 0) === 0 && tc.reviewStatus !== 'REWRITTEN')) return false;
+        if (currentFilter === 'FLAGGED' && tc.reviewStatus !== 'FLAGGED') return false;
+        if (currentFilter === 'REJECTED' && tc.reviewStatus !== 'REJECTED') return false;
+
+        // Query search
+        if (query) {
+          const matchKey = (tc.key || '').toLowerCase().includes(query);
+          const matchName = (tc.name || '').toLowerCase().includes(query);
+          const matchType = (tc.type || '').toLowerCase().includes(query);
+          return matchKey || matchName || matchType;
+        }
+        return true;
+      });
+
+      DOM.tcCountPill.textContent = `Showing ${filtered.length} of ${allTestCases.length} test cases`;
+
+      filtered.forEach(tc => {
+        const tr = document.createElement('tr');
+        tr.className = 'tc-row';
+        tr.id = `row-${tc.key}`;
+        
+        const typeClass = (tc.type || '').toLowerCase();
+        const statusClass = `status-${tc.reviewStatus || 'PASSED'}`;
+        const annotations = (reviewedOutput?.reviewAnnotations || []).filter(a => a.tcKey === tc.key);
+        const firstStep = tc.testSteps?.[0]?.description || 'No steps generated';
+
+        let findingsHtml = '<span class="findings-chip">Clean</span>';
+        if (annotations.length > 0) {
+          const hasBlocker = annotations.some(a => a.severity === 'BLOCKER');
+          const chipClass = hasBlocker ? 'findings-chip danger' : 'findings-chip warn';
+          findingsHtml = `<span class="${chipClass}">⚠️ ${annotations.length} findings</span>`;
+        }
+
+        tr.innerHTML = `
+          <td><input type="checkbox" class="tc-checkbox" data-key="${tc.key}" ${tc.reviewStatus === 'REJECTED' ? '' : 'checked'}></td>
+          <td class="tc-key">${tc.key}</td>
+          <td><span class="tc-type type-${typeClass}">${escapeHtml(tc.type)}</span></td>
+          <td>
+            <div class="tc-name-link" data-key="${tc.key}" style="font-weight: 600; color: var(--text);" id="name-${tc.key}">${escapeHtml(tc.name)}</div>
+            <div style="font-size: 11px; color: var(--text-dim); margin-top: 4px;" id="preview-${tc.key}">
+              ${escapeHtml(firstStep)}...
+            </div>
+          </td>
+          <td><span class="status-badge ${statusClass}" id="status-${tc.key}">${tc.reviewStatus || 'PASSED'}</span></td>
+          <td>${findingsHtml}</td>
+          <td>
+            <button type="button" class="btn-inspect-tc" data-key="${tc.key}" title="Inspect review and edit steps">
+              ${SVG_ICONS.edit}
+              <span>Inspect & Edit</span>
+            </button>
+          </td>
+        `;
+
+        DOM.tcTableBody.appendChild(tr);
+      });
+
+      // Bind Inspect & Edit buttons and Name clicks
+      DOM.tcTableBody.querySelectorAll('.tc-name-link, .btn-inspect-tc').forEach(el => {
+        el.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const key = el.dataset.key;
+          if (key) openInspectionModal(key);
+        });
+      });
+
+      // Bind row checkboxes
+      DOM.tcTableBody.querySelectorAll('.tc-checkbox').forEach(cb => {
+        cb.addEventListener('click', e => e.stopPropagation());
+        cb.addEventListener('change', e => {
+          const row = document.getElementById(`row-${e.target.dataset.key}`);
+          if (row) row.classList.toggle('unchecked', !e.target.checked);
+          updateSelectAllState();
+        });
+      });
+    }
+
+    // Filter tabs listener
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentFilter = btn.dataset.filter;
+        renderFilteredTable();
+      });
+    });
+
+    DOM.tcSearchInput.addEventListener('input', () => {
+      renderFilteredTable();
+    });
+
+    DOM.selectAllTc.addEventListener('change', (e) => {
+      const checked = e.target.checked;
+      document.querySelectorAll('.tc-checkbox').forEach(cb => {
+        cb.checked = checked;
+        const row = document.getElementById(`row-${cb.dataset.key}`);
+        if (row) row.classList.toggle('unchecked', !checked);
+      });
+    });
+
+    function updateSelectAllState() {
+      const allCb = Array.from(document.querySelectorAll('.tc-checkbox'));
+      const allChecked = allCb.every(cb => cb.checked);
+      const someChecked = allCb.some(cb => cb.checked);
+      DOM.selectAllTc.checked = allChecked;
+      DOM.selectAllTc.indeterminate = someChecked && !allChecked;
+    }
+
+    // ── Inspection & Override Modal ───────────────────────────────────────
+    function openInspectionModal(key) {
+      const tc = allTestCases.find(t => t.key === key);
+      if (!tc) return;
+
+      currentEditingKey = key;
+      DOM.modalAlert.classList.add('hidden');
+      DOM.modalError.classList.add('hidden');
+
+      DOM.modalTcKey.textContent = tc.key;
+      DOM.modalTcTypeBadge.textContent = tc.type || 'Positive';
+      DOM.modalTcTypeBadge.className = `tc-type type-${(tc.type || '').toLowerCase()}`;
+
+      DOM.modalTcStatusBadge.textContent = tc.reviewStatus || 'PASSED';
+      DOM.modalTcStatusBadge.className = `status-badge status-${tc.reviewStatus || 'PASSED'}`;
+
+      DOM.modalTcName.value = tc.name || '';
+      DOM.modalTcStatusSelect.value = tc.reviewStatus || 'PASSED';
+      DOM.modalTcLabels.value = Array.isArray(tc.labels) ? tc.labels.join(', ') : (tc.labels || '');
+      DOM.modalTcPrecondition.value = tc.precondition || '';
+      DOM.modalTcObjective.value = tc.objective || '';
+
+      // Annotations/Findings for this test case
+      const annotations = (reviewedOutput?.reviewAnnotations || []).filter(a => a.tcKey === tc.key);
+      DOM.modalFindingsContainer.innerHTML = '';
+      if (annotations.length > 0) {
+        annotations.forEach(a => {
+          const card = document.createElement('div');
+          card.className = `finding-card finding-${a.severity || 'INFO'}`;
+          card.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <strong>[${a.severity}] ${a.dimension} Finding</strong>
+              <span style="font-weight: 600;">Action: ${a.action || 'REVIEWED'}</span>
+            </div>
+            <div>${escapeHtml(a.finding)}</div>
+            ${a.suggestion ? `<div style="font-style: italic; opacity: 0.9;">💡 Suggestion: ${escapeHtml(a.suggestion)}</div>` : ''}
+          `;
+          DOM.modalFindingsContainer.appendChild(card);
+        });
+      }
+
+      // Populate Steps
+      DOM.modalStepsList.innerHTML = '';
+      const steps = Array.isArray(tc.testSteps) ? tc.testSteps : [];
+      steps.forEach((step, idx) => {
+        DOM.modalStepsList.appendChild(createStepCardElement(step, idx));
+      });
+      updateStepNumbers();
+
+      DOM.modalSaveBtn.disabled = false;
+      DOM.modalSaveBtn.innerHTML = `${SVG_ICONS.save}<span>Save Changes</span>`;
+      DOM.modalSaveBtn.classList.remove('btn-loading');
+
+      DOM.tcReviewModal.classList.add('open');
+    }
+
+    function closeInspectionModal() {
+      DOM.tcReviewModal.classList.remove('open');
+      DOM.modalAlert.classList.add('hidden');
+      DOM.modalError.classList.add('hidden');
+      currentEditingKey = null;
+    }
+
+    function createStepCardElement(step = {}, idx = 0) {
+      const div = document.createElement('div');
+      div.className = 'step-card';
+      const isImproved = step.description && (step.description.includes('standard_user') || !step.description.toLowerCase().includes('verify it works'));
+
+      div.innerHTML = `
+        <div class="step-card-head">
+          <div>
+            <span class="step-num-badge">Step ${idx + 1}</span>
+            ${step.rewritten ? '<span class="step-improved-badge">✨ Clarified by ARIA</span>' : ''}
+          </div>
+          <button type="button" class="step-btn-remove" title="Delete this step">
+            ${SVG_ICONS.trash}
+            <span>Remove</span>
+          </button>
+        </div>
+        <div class="form-field">
+          <label>Action / Description</label>
+          <textarea class="form-textarea step-desc" rows="2">${escapeHtml(step.description || '')}</textarea>
+        </div>
+        <div class="step-fields-grid">
+          <div class="form-field">
+            <label>Test Data</label>
+            <input type="text" class="form-input step-data" value="${escapeHtml(step.testData || '')}">
+          </div>
+          <div class="form-field">
+            <label>Expected Result</label>
+            <input type="text" class="form-input step-expected" value="${escapeHtml(step.expectedResult || '')}">
+          </div>
+        </div>
+      `;
+
+      div.querySelector('.step-btn-remove').addEventListener('click', () => {
+        div.remove();
+        updateStepNumbers();
+      });
+
+      return div;
+    }
+
+    function updateStepNumbers() {
+      const cards = DOM.modalStepsList.querySelectorAll('.step-card');
+      cards.forEach((card, idx) => {
+        const badge = card.querySelector('.step-num-badge');
+        if (badge) badge.textContent = `Step ${idx + 1}`;
+      });
+      DOM.modalStepsCount.textContent = cards.length;
+    }
+
+    DOM.modalAddStepBtn.addEventListener('click', () => {
+      const newCard = createStepCardElement({ description: '', testData: '', expectedResult: '' }, DOM.modalStepsList.children.length);
+      DOM.modalStepsList.appendChild(newCard);
+      updateStepNumbers();
+      const input = newCard.querySelector('.step-desc');
+      if (input) input.focus();
+    });
+
+    async function saveInspectionOverride() {
+      if (!currentEditingKey) return;
+
+      const newName = DOM.modalTcName.value.trim();
+      if (!newName) {
+        DOM.modalError.textContent = 'Scenario Name / Title cannot be empty.';
+        DOM.modalError.classList.remove('hidden');
+        DOM.modalTcName.focus();
+        return;
+      }
+
+      DOM.modalError.classList.add('hidden');
+      DOM.modalAlert.classList.add('hidden');
+      DOM.modalSaveBtn.disabled = true;
+      DOM.modalSaveBtn.classList.add('btn-loading');
+      DOM.modalSaveBtn.textContent = 'Saving...';
+
+      const newStatus = DOM.modalTcStatusSelect.value;
+      const newObjective = DOM.modalTcObjective.value.trim();
+      const newPrecondition = DOM.modalTcPrecondition.value.trim();
+
+      const stepCards = Array.from(DOM.modalStepsList.querySelectorAll('.step-card'));
+      const testSteps = stepCards.map((card, idx) => ({
+        index: idx + 1,
+        description: (card.querySelector('.step-desc')?.value || '').trim(),
+        testData: (card.querySelector('.step-data')?.value || '').trim(),
+        expectedResult: (card.querySelector('.step-expected')?.value || '').trim()
+      }));
+
+      const payload = {
+        key: currentEditingKey,
+        name: newName,
+        reviewStatus: newStatus,
+        objective: newObjective,
+        precondition: newPrecondition,
+        testSteps
+      };
+
+      try {
+        const resp = await fetch('/api/agent03/testcase', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.error || `Failed to update test case (HTTP ${resp.status})`);
+        }
+
+        const data = await resp.json();
+        const updated = data.testCase || payload;
+
+        // Update in-memory allTestCases
+        const targetIdx = allTestCases.findIndex(t => t.key === currentEditingKey);
+        if (targetIdx !== -1) {
+          allTestCases[targetIdx] = { ...allTestCases[targetIdx], ...updated };
+        }
+
+        renderFilteredTable();
+
+        DOM.modalAlert.textContent = '✅ Test case reviewed and saved successfully in state!';
+        DOM.modalAlert.classList.remove('hidden');
+
+        setTimeout(() => {
+          closeInspectionModal();
+        }, 800);
+      } catch (err) {
+        DOM.modalError.textContent = `❌ ${err.message}`;
+        DOM.modalError.classList.remove('hidden');
+      } finally {
+        DOM.modalSaveBtn.disabled = false;
+        DOM.modalSaveBtn.classList.remove('btn-loading');
+        DOM.modalSaveBtn.innerHTML = `${SVG_ICONS.save}<span>Save Changes</span>`;
+      }
+    }
+
+    DOM.modalSaveBtn.addEventListener('click', saveInspectionOverride);
+    DOM.modalCloseXBtn.addEventListener('click', closeInspectionModal);
+    DOM.modalCancelBtn.addEventListener('click', closeInspectionModal);
+    DOM.tcReviewModal.addEventListener('click', (e) => {
+      if (e.target === DOM.tcReviewModal) closeInspectionModal();
+    });
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && DOM.tcReviewModal.classList.contains('open')) {
+        closeInspectionModal();
+      }
+    });
+
+    // ── Approval Logic ────────────────────────────────────────────────────
+    DOM.reRunBtn.addEventListener('click', () => {
+      showPhase('input');
+    });
+
+    DOM.proceedBtn.addEventListener('click', () => {
+      DOM.approvalModal.classList.add('open');
+    });
+
+    async function submitApproval(action) {
+      const btn = action === 'approve' ? DOM.approveBtn : DOM.rejectBtn;
+      btn.classList.add('btn-loading');
+      btn.disabled = true;
+
+      const uncheckedKeys = Array.from(document.querySelectorAll('.tc-checkbox'))
+        .filter(cb => !cb.checked)
+        .map(cb => cb.dataset.key);
+
+      const payload = {
+        comment: DOM.approvalComment.value.trim() || `Approved Agent 03 review`,
+        uncheckedKeys
+      };
+
+      try {
+        const res = await fetch(`/api/agent03/${action}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || 'Approval request failed');
+        }
+
+        DOM.approvalModal.classList.remove('open');
+
+        if (action === 'approve') {
+          DOM.successAlert.innerHTML = '✅ Stage 03 Approved! <br><small>Navigating to Agent 04 (Test Data Generator)...</small>';
+          DOM.successAlert.classList.remove('hidden');
+          DOM.proceedBtn.disabled = true;
+          DOM.proceedBtn.innerHTML = `${SVG_ICONS.check}<span>Approved</span>`;
+          DOM.actionBar.style.borderTopColor = 'var(--success)';
+          document.querySelectorAll('.step-node')[2].classList.add('done');
+
+          setTimeout(() => {
+            window.location.href = '/agent04.html';
+          }, 2000);
+        } else {
+          DOM.errorAlert.textContent = '❌ Stage rejected. Modify or re-run review.';
+          DOM.errorAlert.classList.remove('hidden');
+          showPhase('input');
+        }
+      } catch (err) {
+        alert('Approval Error: ' + err.message);
+      } finally {
+        btn.classList.remove('btn-loading');
+        btn.disabled = false;
+      }
+    }
+
+    DOM.approveBtn.addEventListener('click', () => submitApproval('approve'));
+    DOM.rejectBtn.addEventListener('click', () => submitApproval('reject'));
+
+    // ── Chat Drawer ───────────────────────────────────────────────────────
+    DOM.chatBtn.addEventListener('click', () => DOM.chatDrawer.classList.add('open'));
+    DOM.chatCloseBtn.addEventListener('click', () => DOM.chatDrawer.classList.remove('open'));
+
+    function appendChatBubble(role, text) {
+      const msg = document.createElement('div');
+      msg.className = `chat-bubble ${role}`;
+      msg.textContent = text;
+      DOM.chatMessages.appendChild(msg);
+      msg.scrollIntoView({ behavior: 'smooth' });
+      return msg;
+    }
+
+    DOM.chatSendBtn.addEventListener('click', sendChatMessage);
+    DOM.chatInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') sendChatMessage();
+    });
+
+    async function sendChatMessage() {
+      const msg = DOM.chatInput.value.trim();
+      if (!msg) return;
+
+      DOM.chatSendBtn.disabled = true;
+      DOM.chatSendBtn.classList.add('btn-loading');
+      DOM.chatInput.value = '';
+
+      appendChatBubble('user', msg);
+      chatHistory.push({ role: 'user', content: msg });
+      const typing = appendChatBubble('aria', '…');
+
+      try {
+        const resp = await fetch('/api/agent03/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: msg, history: chatHistory.slice(-10) })
+        });
+        const data = await resp.json();
+        typing.remove();
+        const reply = data.reply || data.error || 'No response from assistant.';
+        appendChatBubble('aria', reply);
+        chatHistory.push({ role: 'assistant', content: reply });
+      } catch (err) {
+        typing.remove();
+        appendChatBubble('aria', '⚠️ Error: ' + err.message);
+      } finally {
+        DOM.chatSendBtn.disabled = false;
+        DOM.chatSendBtn.classList.remove('btn-loading');
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>

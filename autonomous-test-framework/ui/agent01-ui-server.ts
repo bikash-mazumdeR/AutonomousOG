@@ -618,6 +618,234 @@ const updateTestCaseHandler = async (req: Request, res: Response) => {
 app.put('/api/agent02/testcase', updateTestCaseHandler);
 app.post('/api/agent02/testcase', updateTestCaseHandler);
 
+// ── Agent 03 (Test Case Reviewer) Routes ────────────────────────────────────
+
+let activeProcess03: ChildProcess | null = null;
+const sseClients03: Set<Response> = new Set();
+
+function broadcastSSE03(data: any) {
+  const payload = `data: ${JSON.stringify(data)}\n\n`;
+  for (const client of sseClients03) {
+    client.write(payload);
+  }
+}
+
+// ── GET /api/agent03/state ──────────────────────────────────────────────────
+app.get('/api/agent03/state', async (_req: Request, res: Response) => {
+  try {
+    if (!(stateManager as any)._initialized) {
+      try { await stateManager.initialize(); } catch (_) {}
+    }
+
+    const stage = await stateManager.get('stages.03-test-case-reviewer');
+    const requirements = await stateManager.getPipelineArtifact('analyzedRequirements');
+    const testCases = await stateManager.getPipelineArtifact('testCases');
+    const reviewedTestCases = await stateManager.getPipelineArtifact('reviewedTestCases');
+    res.json({
+      stage,
+      requirements,
+      testCases,
+      reviewedTestCases,
+      running: !!activeProcess03
+    });
+  } catch (err: any) {
+    logger.error('Error fetching Agent 03 state', { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /api/agent03/run ───────────────────────────────────────────────────
+app.post('/api/agent03/run', async (req: Request, res: Response) => {
+  if (activeProcess03) {
+    logger.info('Killing existing Agent 03 process to start a new run');
+    activeProcess03.removeAllListeners('close');
+    activeProcess03.kill('SIGKILL');
+    activeProcess03 = null;
+  }
+
+  let projectName = (req.body?.projectName as string || '').trim();
+  if (!projectName) {
+    try {
+      const stateDb = stateManager.getDatabase();
+      const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get() as any;
+      if (latestRun?.project_id) projectName = latestRun.project_id;
+    } catch (_) {}
+  }
+  projectName = projectName || 'ARIA Project';
+
+  try {
+    await stateManager.initialize(projectName);
+    await memoryEngine.initialize(projectName);
+    await stateManager.markStageRunning('03-test-case-reviewer');
+  } catch (_) { /* non-fatal */ }
+
+  const args = [
+    '-r', 'ts-node/register',
+    path.join(FRAMEWORK_DIR, 'agents', '03-test-case-reviewer', 'agent.ts'),
+    `--project=${projectName}`
+  ];
+
+  logger.info('Spawning Agent 03', { project: projectName, args: args.join(' ') });
+  activeProcess03 = spawn(process.execPath, args, {
+    cwd: FRAMEWORK_DIR,
+    env: { ...process.env },
+    stdio: ['pipe', 'pipe', 'pipe']
+  });
+
+  activeProcess03.stdout?.on('data', (chunk: Buffer) => {
+    chunk.toString().split('\n').filter(Boolean).forEach((line: string) => {
+      broadcastSSE03({ type: 'log', level: 'info', message: line });
+    });
+  });
+
+  activeProcess03.stderr?.on('data', (chunk: Buffer) => {
+    chunk.toString().split('\n').filter(Boolean).forEach((line: string) => {
+      broadcastSSE03({ type: 'log', level: 'error', message: line });
+    });
+  });
+
+  activeProcess03.on('close', (code: number) => {
+    logger.info('Agent 03 process exited', { code });
+    activeProcess03 = null;
+    broadcastSSE03({ type: 'exit', code });
+  });
+
+  res.json({ ok: true, message: 'Agent 03 started' });
+});
+
+// ── GET /api/agent03/logs ───────────────────────────────────────────────────
+app.get('/api/agent03/logs', (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+
+  sseClients03.add(res);
+  res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`);
+
+  req.on('close', () => {
+    sseClients03.delete(res);
+  });
+});
+
+// ── Approvals for Agent 03 ──────────────────────────────────────────────────
+app.post('/api/agent03/approve', handleApproval('03-test-case-reviewer', 'approve'));
+app.post('/api/agent03/reject',  handleApproval('03-test-case-reviewer', 'reject'));
+
+// ── POST /api/agent03/chat ──────────────────────────────────────────────────
+app.post('/api/agent03/chat', async (req: Request, res: Response) => {
+  const { message, history = [] } = req.body as {
+    message: string;
+    history: Array<{ role: 'user' | 'assistant'; content: string }>;
+  };
+
+  if (!message?.trim()) {
+    return res.status(400).json({ error: 'message is required' });
+  }
+
+  try {
+    const reviewedReport = await stateManager.getPipelineArtifact('reviewedTestCases');
+    const testCases = await stateManager.getPipelineArtifact('testCases');
+
+    const systemPrompt = [
+      'You are ARIA, an AI Test Case Quality Reviewer and QA Architect.',
+      'The user wants to verify your review findings, quality score breakdown, coverage matrix, and recommendations.',
+      'Answer questions accurately based on the review results artifact and the original test cases.',
+      'If a detail is not present in the review report, state that clearly — do NOT invent facts.',
+      'Be concise, analytical, and structured in your explanations.',
+      '',
+      '=== REVIEW REPORT SUMMARY ===',
+      reviewedReport ? JSON.stringify({
+        qualityScore: reviewedReport.qualityScore,
+        decision: reviewedReport.reviewDecision,
+        approvedCount: reviewedReport.approvedCount,
+        rejectedCount: reviewedReport.rejectedCount,
+        rewrittenCount: reviewedReport.rewrittenCount,
+        duplicatesRemoved: reviewedReport.duplicatesRemoved,
+        recommendations: reviewedReport.recommendations,
+        blockers: reviewedReport.blockers,
+        annotationsSample: (reviewedReport.reviewAnnotations || []).slice(0, 20)
+      }, null, 2) : '(No review report available yet)',
+      '',
+      '=== INPUT TEST CASES SUMMARY ===',
+      testCases?.zephyrExport ? `Total Generated Test Cases: ${testCases.zephyrExport.totalTestCases}` : '(No test cases available)'
+    ].join('\n');
+
+    const messages = [
+      { role: 'system' as const, content: systemPrompt },
+      ...history.map(m => ({ role: m.role, content: m.content })),
+      { role: 'user' as const, content: message }
+    ];
+
+    const reply = await llmClient.chat(messages, {
+      model: process.env.LITELLM_MODEL || 'gemini/gemini-2.5-flash',
+      temperature: 0.2,
+      maxTokens: 1000
+    });
+
+    res.json({ reply });
+  } catch (err: any) {
+    logger.error('Agent 03 chat failed', { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PUT / POST /api/agent03/testcase (Human Override) ───────────────────────
+const updateReviewedTestCaseHandler = async (req: Request, res: Response) => {
+  const { key, reviewStatus, name, objective, precondition, testSteps, reviewNotes } = req.body || {};
+  if (!key) {
+    return res.status(400).json({ error: 'Test case key is required.' });
+  }
+
+  try {
+    if (!(stateManager as any)._initialized) {
+      try { await stateManager.initialize(); } catch (_) {}
+    }
+
+    const reviewedOutput = await stateManager.getPipelineArtifact('reviewedTestCases');
+    if (!reviewedOutput?.reviewedZephyrExport?.testCases) {
+      return res.status(404).json({ error: 'No reviewed test cases artifact found in state.' });
+    }
+
+    const allReviewedTCs = reviewedOutput.reviewedZephyrExport.testCases;
+    const targetTC = allReviewedTCs.find((tc: any) => tc.key === key);
+    if (!targetTC) {
+      return res.status(404).json({ error: `Reviewed test case ${key} not found.` });
+    }
+
+    if (typeof reviewStatus === 'string' && reviewStatus.trim()) {
+      targetTC.reviewStatus = reviewStatus.trim().toUpperCase();
+    }
+    if (typeof name === 'string' && name.trim()) targetTC.name = name.trim();
+    if (typeof objective === 'string') targetTC.objective = objective.trim();
+    if (typeof precondition === 'string') targetTC.precondition = precondition.trim();
+    if (Array.isArray(reviewNotes)) targetTC.reviewNotes = reviewNotes;
+    if (Array.isArray(testSteps)) {
+      targetTC.testSteps = testSteps.map((step: any, idx: number) => ({
+        index: idx + 1,
+        description: (step.description || '').trim(),
+        testData: (step.testData || '').trim(),
+        expectedResult: (step.expectedResult || '').trim()
+      }));
+    }
+
+    // Recompute approved / rejected / rewritten counts
+    reviewedOutput.approvedCount = allReviewedTCs.filter((tc: any) => tc.reviewStatus !== 'REJECTED').length;
+    reviewedOutput.rejectedCount = allReviewedTCs.filter((tc: any) => tc.reviewStatus === 'REJECTED').length;
+    reviewedOutput.rewrittenCount = allReviewedTCs.filter((tc: any) => (tc.rewrittenSteps || 0) > 0).length;
+
+    await stateManager.setPipelineArtifact('reviewedTestCases', reviewedOutput);
+    logger.info(`Reviewed test case ${key} updated via Agent 03 UI override`, { reviewStatus: targetTC.reviewStatus });
+    return res.json({ ok: true, testCase: targetTC });
+  } catch (err: any) {
+    logger.error('Error overriding reviewed test case', { error: err.message });
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+app.put('/api/agent03/testcase', updateReviewedTestCaseHandler);
+app.post('/api/agent03/testcase', updateReviewedTestCaseHandler);
+
 // ── Start ─────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`\n╔══════════════════════════════════════════════╗`);
@@ -627,7 +855,7 @@ app.listen(PORT, () => {
   logger.info(`Agent UI server started`, { port: PORT });
 });
 
-// Also listen on port 3001 if available so navigation to :3001 works transparently
+// Also listen on port 3001 and 3002 if available
 const ALT_PORT = parseInt(process.env.AGENT02_UI_PORT || '3001', 10);
 if (ALT_PORT !== PORT) {
   try {
@@ -636,6 +864,18 @@ if (ALT_PORT !== PORT) {
     });
     altServer.on('error', (err: any) => {
       logger.info(`Secondary port ${ALT_PORT} not bound: ${err.message}`);
+    });
+  } catch (_) {}
+}
+
+const AGENT03_PORT = parseInt(process.env.AGENT03_UI_PORT || '3002', 10);
+if (AGENT03_PORT !== PORT && AGENT03_PORT !== ALT_PORT) {
+  try {
+    const port03Server = app.listen(AGENT03_PORT, () => {
+      logger.info(`Agent UI also listening on Agent 03 port ${AGENT03_PORT} (http://localhost:${AGENT03_PORT}/agent03.html)`);
+    });
+    port03Server.on('error', (err: any) => {
+      logger.info(`Agent 03 port ${AGENT03_PORT} not bound: ${err.message}`);
     });
   } catch (_) {}
 }

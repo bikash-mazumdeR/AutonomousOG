@@ -1106,15 +1106,39 @@ export { TestCaseReviewerAgent };
 
 if (require.main === module) {
   (async () => {
-    await stateManager.initialize(FRAMEWORK_CONFIG.projectId);
-    await memoryEngine.initialize(FRAMEWORK_CONFIG.projectId);
+    const args = process.argv.slice(2);
+    const opts: any = {};
+    for (let i = 0; i < args.length; i++) {
+      const arg = args[i];
+      if (arg === '--') continue;
+      if (arg.startsWith('--')) {
+        const [key, val] = arg.slice(2).split('=');
+        opts[key] = val || args[i + 1];
+        if (!val) i++;
+      }
+    }
+
+    let activeProjectId = opts.project;
+    if (!activeProjectId) {
+      try {
+        const stateDb = stateManager.getDatabase();
+        const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get() as any;
+        if (latestRun?.project_id) {
+          activeProjectId = latestRun.project_id;
+        }
+      } catch (_) {}
+    }
+    activeProjectId = activeProjectId || FRAMEWORK_CONFIG.projectId;
+
+    await stateManager.initialize(activeProjectId);
+    await memoryEngine.initialize(activeProjectId);
 
     const agent = new TestCaseReviewerAgent();
     const testCases = await stateManager.getPipelineArtifact('testCases');
     const analyzedRequirements = await stateManager.getPipelineArtifact('analyzedRequirements');
 
     if (!testCases) {
-      console.error('❌ No test cases found. Run Agent 02 first.');
+      console.error(`❌ No test cases found for project "${activeProjectId}". Run Agent 02 first.`);
       process.exit(1);
     }
 
