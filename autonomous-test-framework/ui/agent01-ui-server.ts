@@ -852,6 +852,275 @@ const updateReviewedTestCaseHandler = async (req: Request, res: Response) => {
 app.put('/api/agent03/testcase', updateReviewedTestCaseHandler);
 app.post('/api/agent03/testcase', updateReviewedTestCaseHandler);
 
+// ── Agent 04 (Test Data Generator) Routes ───────────────────────────────────
+
+let activeProcess04: ChildProcess | null = null;
+const sseClients04: Set<Response> = new Set();
+const FIXTURES_PATH = path.join(FRAMEWORK_DIR, 'tests', 'fixtures', 'test-data.json');
+
+function broadcastSSE04(data: any) {
+  const payload = `data: ${JSON.stringify(data)}\n\n`;
+  for (const client of sseClients04) {
+    client.write(payload);
+  }
+}
+
+// ── GET /api/agent04/state ──────────────────────────────────────────────────
+app.get('/api/agent04/state', async (_req: Request, res: Response) => {
+  try {
+    if (!(stateManager as any)._initialized) {
+      try { await stateManager.initialize(); } catch (_) {}
+    }
+
+    const stage = await stateManager.get('stages.04-test-data-generator');
+    const requirements = await stateManager.getPipelineArtifact('analyzedRequirements');
+    const reviewedTestCases = await stateManager.getPipelineArtifact('reviewedTestCases');
+    const testData = await stateManager.getPipelineArtifact('testData');
+
+    let flatTestData: Record<string, any> = {};
+    if (fs.existsSync(FIXTURES_PATH)) {
+      try {
+        flatTestData = JSON.parse(fs.readFileSync(FIXTURES_PATH, 'utf-8'));
+      } catch (_) {}
+    }
+
+    res.json({
+      stage,
+      requirements,
+      reviewedTestCases,
+      testData,
+      flatTestData,
+      running: !!activeProcess04
+    });
+  } catch (err: any) {
+    logger.error('Error fetching Agent 04 state', { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /api/agent04/run ───────────────────────────────────────────────────
+app.post('/api/agent04/run', async (req: Request, res: Response) => {
+  if (activeProcess04) {
+    logger.info('Killing existing Agent 04 process to start a new run');
+    activeProcess04.removeAllListeners('close');
+    activeProcess04.kill('SIGKILL');
+    activeProcess04 = null;
+  }
+
+  let projectName = (req.body?.projectName as string || '').trim();
+  if (!projectName) {
+    try {
+      const stateDb = stateManager.getDatabase();
+      const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get() as any;
+      if (latestRun?.project_id) projectName = latestRun.project_id;
+    } catch (_) {}
+  }
+  projectName = projectName || 'ARIA Project';
+
+  try {
+    await stateManager.initialize(projectName);
+    await memoryEngine.initialize(projectName);
+    await stateManager.markStageRunning('04-test-data-generator');
+  } catch (_) { /* non-fatal */ }
+
+  const args = [
+    '-r', 'ts-node/register',
+    path.join(FRAMEWORK_DIR, 'agents', '04-test-data-generator', 'agent.ts'),
+    `--project=${projectName}`
+  ];
+
+  logger.info('Spawning Agent 04', { project: projectName, args: args.join(' ') });
+  activeProcess04 = spawn(process.execPath, args, {
+    cwd: FRAMEWORK_DIR,
+    env: { ...process.env },
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+
+  activeProcess04.stdout?.on('data', (chunk: Buffer) => {
+    chunk.toString().split('\n').filter(Boolean).forEach((line: string) =>
+      broadcastSSE04({ type: 'log', level: 'info', message: line }),
+    );
+  });
+
+  activeProcess04.stderr?.on('data', (chunk: Buffer) => {
+    chunk.toString().split('\n').filter(Boolean).forEach((line: string) =>
+      broadcastSSE04({ type: 'log', level: 'error', message: line }),
+    );
+  });
+
+  activeProcess04.on('close', (code: number) => {
+    logger.info('Agent 04 process exited', { code });
+    activeProcess04 = null;
+    broadcastSSE04({ type: 'exit', code });
+  });
+
+  res.json({ ok: true, message: 'Agent 04 started' });
+});
+
+// ── GET /api/agent04/logs ───────────────────────────────────────────────────
+app.get('/api/agent04/logs', (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+
+  sseClients04.add(res);
+  res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`);
+
+  req.on('close', () => {
+    sseClients04.delete(res);
+  });
+});
+
+// ── Approvals for Agent 04 ──────────────────────────────────────────────────
+app.post('/api/agent04/approve', handleApproval('04-test-data-generator', 'approve'));
+app.post('/api/agent04/reject',  handleApproval('04-test-data-generator', 'reject'));
+
+// ── POST /api/agent04/chat ──────────────────────────────────────────────────
+app.post('/api/agent04/chat', async (req: Request, res: Response) => {
+  const { message, history = [] } = req.body as {
+    message: string;
+    history: Array<{ role: 'user' | 'assistant'; content: string }>;
+  };
+
+  if (!message?.trim()) {
+    return res.status(400).json({ error: 'message is required' });
+  }
+
+  try {
+    const testDataOutput = await stateManager.getPipelineArtifact('testData');
+    const reviewedReport = await stateManager.getPipelineArtifact('reviewedTestCases');
+
+    const systemPrompt = [
+      'You are ARIA, an AI Test Data Architect and Fixture Engineer.',
+      'The user wants to inspect generated test data, boundary test vectors, environment configurations, and Playwright fixture mapping.',
+      'Answer questions accurately based on the testData artifact and the reviewed test cases.',
+      'If a detail is not present in the manifest, state that clearly — do NOT invent facts.',
+      'Be concise, analytical, and structured in your explanations.',
+      '',
+      '=== TEST DATA MANIFEST SUMMARY ===',
+      testDataOutput ? JSON.stringify({
+        summary: testDataOutput.summary,
+        approvedCount: testDataOutput.manifest?.approvedCount,
+        excludedCount: testDataOutput.manifest?.excludedCount,
+        resolvedCount: testDataOutput.manifest?.resolvedCount,
+        unresolvedCount: testDataOutput.manifest?.unresolvedCount,
+        sensitiveRefsCount: testDataOutput.manifest?.sensitiveDataVault?.refs?.length,
+        globalFixtures: testDataOutput.manifest?.globalFixtures,
+        apiPayloadEndpoints: Object.keys(testDataOutput.manifest?.apiPayloadLibrary || {})
+      }, null, 2) : '(No test data available yet)',
+      '',
+      '=== APPROVED TEST CASES INPUT ===',
+      reviewedReport?.approvedCount ? `Approved test cases: ${reviewedReport.approvedCount}` : '(No reviewed cases found)'
+    ].join('\n');
+
+    const messages = [
+      { role: 'system' as const, content: systemPrompt },
+      ...history.map(m => ({ role: m.role, content: m.content })),
+      { role: 'user' as const, content: message }
+    ];
+
+    const reply = await llmClient.chat(messages, {
+      model: process.env.LITELLM_MODEL || 'gemini/gemini-2.5-flash',
+      temperature: 0.2,
+      maxTokens: 1000
+    });
+
+    res.json({ reply });
+  } catch (err: any) {
+    logger.error('Agent 04 chat failed', { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PUT / POST /api/agent04/data (Human Test Data Override) ─────────────────
+const updateTestDataHandler04 = async (req: Request, res: Response) => {
+  const { type, tcKey, inputs, globalFixtures, flatTestData } = req.body || {};
+
+  try {
+    if (!(stateManager as any)._initialized) {
+      try { await stateManager.initialize(); } catch (_) {}
+    }
+
+    const testDataOutput = await stateManager.getPipelineArtifact('testData');
+    if (!testDataOutput?.manifest) {
+      return res.status(404).json({ error: 'No testData artifact found in state.' });
+    }
+
+    const manifest = testDataOutput.manifest;
+
+    let diskFlat: Record<string, any> = {};
+    if (fs.existsSync(FIXTURES_PATH)) {
+      try {
+        diskFlat = JSON.parse(fs.readFileSync(FIXTURES_PATH, 'utf-8'));
+      } catch (_) {}
+    }
+
+    if (type === 'full_flat' && flatTestData && typeof flatTestData === 'object') {
+      diskFlat = { ...flatTestData };
+      if (flatTestData.baseURL) {
+        if (!manifest.globalCtx) manifest.globalCtx = {};
+        manifest.globalCtx.baseURL = flatTestData.baseURL;
+      }
+      if (flatTestData.standardUsername && manifest.globalFixtures?.adminCredentials) {
+        manifest.globalFixtures.adminCredentials.username = flatTestData.standardUsername;
+      }
+      if (flatTestData.password && manifest.globalFixtures?.adminCredentials) {
+        manifest.globalFixtures.adminCredentials.password = flatTestData.password;
+      }
+    } else if (type === 'global' && globalFixtures && typeof globalFixtures === 'object') {
+      manifest.globalFixtures = { ...manifest.globalFixtures, ...globalFixtures };
+      if (globalFixtures.baseURL) diskFlat.baseURL = globalFixtures.baseURL;
+      if (globalFixtures.adminCredentials?.username) diskFlat.standardUsername = globalFixtures.adminCredentials.username;
+      if (globalFixtures.adminCredentials?.password) diskFlat.password = globalFixtures.adminCredentials.password;
+    } else if (tcKey && inputs && typeof inputs === 'object') {
+      if (!manifest.perTCData) manifest.perTCData = {};
+      if (!manifest.perTCData[tcKey]) manifest.perTCData[tcKey] = { inputs: {} };
+      
+      const tcEntry = manifest.perTCData[tcKey];
+      for (const [key, item] of Object.entries(inputs)) {
+        const val = typeof item === 'object' && item !== null && 'value' in item ? (item as any).value : item;
+        const cleanKey = key.replace(/^\{\{|\}\}$/g, '');
+        const phKey = key.startsWith('{{') ? key : `{{${key}}}`;
+        
+        tcEntry.inputs[phKey] = {
+          placeholder: phKey,
+          value: val,
+          type: typeof item === 'object' && (item as any).type ? (item as any).type : (typeof val),
+          source: 'user_override',
+          sensitive: false,
+        };
+
+        const flatKey = `${tcKey.replace(/[^a-zA-Z0-9]/g, '')}_${cleanKey}`;
+        diskFlat[flatKey] = val;
+      }
+    } else {
+      return res.status(400).json({ error: 'Invalid update payload. Must provide type (full_flat, global, or per-TC inputs).' });
+    }
+
+    await stateManager.setPipelineArtifact('testData', testDataOutput);
+
+    const fixturesDir = path.dirname(FIXTURES_PATH);
+    if (!fs.existsSync(fixturesDir)) fs.mkdirSync(fixturesDir, { recursive: true });
+    fs.writeFileSync(FIXTURES_PATH, JSON.stringify(diskFlat, null, 2), 'utf-8');
+
+    logger.info('Test data updated and synced to disk via Agent 04 UI', {
+      type: type || 'single_tc',
+      tcKey,
+      fixturesPath: FIXTURES_PATH,
+      keysCount: Object.keys(diskFlat).length
+    });
+
+    return res.json({ ok: true, manifest, flatTestData: diskFlat });
+  } catch (err: any) {
+    logger.error('Error updating test data', { error: err.message });
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+app.put('/api/agent04/data', updateTestDataHandler04);
+app.post('/api/agent04/data', updateTestDataHandler04);
+
 // ── Start ─────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`\n╔══════════════════════════════════════════════╗`);
@@ -861,7 +1130,7 @@ app.listen(PORT, () => {
   logger.info(`Agent UI server started`, { port: PORT });
 });
 
-// Also listen on port 3001 and 3002 if available
+// Also listen on port 3001, 3002, and 3003 if available
 const ALT_PORT = parseInt(process.env.AGENT02_UI_PORT || '3001', 10);
 if (ALT_PORT !== PORT) {
   try {
@@ -882,6 +1151,18 @@ if (AGENT03_PORT !== PORT && AGENT03_PORT !== ALT_PORT) {
     });
     port03Server.on('error', (err: any) => {
       logger.info(`Agent 03 port ${AGENT03_PORT} not bound: ${err.message}`);
+    });
+  } catch (_) {}
+}
+
+const AGENT04_PORT = parseInt(process.env.AGENT04_UI_PORT || '3003', 10);
+if (AGENT04_PORT !== PORT && AGENT04_PORT !== ALT_PORT && AGENT04_PORT !== AGENT03_PORT) {
+  try {
+    const port04Server = app.listen(AGENT04_PORT, () => {
+      logger.info(`Agent UI also listening on Agent 04 port ${AGENT04_PORT} (http://localhost:${AGENT04_PORT}/agent04.html)`);
+    });
+    port04Server.on('error', (err: any) => {
+      logger.info(`Agent 04 port ${AGENT04_PORT} not bound: ${err.message}`);
     });
   } catch (_) {}
 }

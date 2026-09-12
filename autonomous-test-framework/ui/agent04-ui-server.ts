@@ -1,0 +1,378 @@
+import express, { Request, Response } from 'express';
+import { spawn, ChildProcess } from 'child_process';
+import { stateManager } from '../core/state-manager/StateManager';
+import { llmClient } from '../core/llm/LLMClient';
+import { memoryEngine } from '../core/project-memory/MemoryEngine';
+import { Logger } from '../core/logger/Logger';
+import path from 'path';
+import fs from 'fs';
+import * as http from 'http';
+
+const app = express();
+const PORT = parseInt(process.env.AGENT04_UI_PORT || '3003', 10);
+const APPROVAL_PORT = parseInt(process.env.APPROVAL_WEBHOOK_PORT || '8081', 10);
+const logger = new Logger('Agent04UI');
+
+const FRAMEWORK_DIR = path.resolve(__dirname, '..');
+const FIXTURES_PATH = path.join(FRAMEWORK_DIR, 'tests', 'fixtures', 'test-data.json');
+
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'static')));
+
+// Redirect root to agent04.html
+app.get('/', (_req: Request, res: Response) => {
+  res.sendFile(path.join(__dirname, 'static', 'agent04.html'));
+});
+
+// ── Agent process management ──────────────────────────────────────────────────
+let activeProcess: ChildProcess | null = null;
+const sseClients: Set<Response> = new Set();
+
+/** Broadcasts an SSE event to all connected clients. */
+function broadcastSSE(data: any) {
+  const payload = `data: ${JSON.stringify(data)}\n\n`;
+  for (const client of sseClients) {
+    client.write(payload);
+  }
+}
+
+// ── GET /api/agent04/state ────────────────────────────────────────────────────
+app.get('/api/agent04/state', async (_req: Request, res: Response) => {
+  try {
+    if (!(stateManager as any)._initialized) {
+      try { await stateManager.initialize(); } catch (_) {}
+    }
+
+    const stage = await stateManager.get('stages.04-test-data-generator');
+    const requirements = await stateManager.getPipelineArtifact('analyzedRequirements');
+    const reviewedTestCases = await stateManager.getPipelineArtifact('reviewedTestCases');
+    const testData = await stateManager.getPipelineArtifact('testData');
+
+    let flatTestData: Record<string, any> = {};
+    if (fs.existsSync(FIXTURES_PATH)) {
+      try {
+        flatTestData = JSON.parse(fs.readFileSync(FIXTURES_PATH, 'utf-8'));
+      } catch (_) {}
+    }
+
+    res.json({
+      stage,
+      requirements,
+      reviewedTestCases,
+      testData,
+      flatTestData,
+      running: !!activeProcess
+    });
+  } catch (err: any) {
+    logger.error('Error fetching Agent 04 state', { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /api/agent04/run ─────────────────────────────────────────────────────
+app.post('/api/agent04/run', async (req: Request, res: Response) => {
+  if (activeProcess) {
+    logger.info('Killing existing Agent 04 process to start a new run');
+    activeProcess.removeAllListeners('close');
+    activeProcess.kill('SIGKILL');
+    activeProcess = null;
+  }
+
+  let projectName = (req.body?.projectName as string || '').trim();
+  if (!projectName) {
+    try {
+      const stateDb = stateManager.getDatabase();
+      const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get() as any;
+      if (latestRun?.project_id) projectName = latestRun.project_id;
+    } catch (_) {}
+  }
+  projectName = projectName || 'ARIA Project';
+
+  try {
+    await stateManager.initialize(projectName);
+    await memoryEngine.initialize(projectName);
+    await stateManager.markStageRunning('04-test-data-generator');
+  } catch (_) { /* non-fatal */ }
+
+  const args = [
+    '-r', 'ts-node/register',
+    path.join(FRAMEWORK_DIR, 'agents', '04-test-data-generator', 'agent.ts'),
+    `--project=${projectName}`
+  ];
+
+  logger.info('Spawning Agent 04', { project: projectName, args: args.join(' ') });
+  activeProcess = spawn(process.execPath, args, {
+    cwd: FRAMEWORK_DIR,
+    env: { ...process.env },
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+
+  activeProcess.stdout?.on('data', (chunk: Buffer) => {
+    chunk.toString().split('\n').filter(Boolean).forEach((line: string) =>
+      broadcastSSE({ type: 'log', level: 'info', message: line }),
+    );
+  });
+
+  activeProcess.stderr?.on('data', (chunk: Buffer) => {
+    chunk.toString().split('\n').filter(Boolean).forEach((line: string) =>
+      broadcastSSE({ type: 'log', level: 'error', message: line }),
+    );
+  });
+
+  activeProcess.on('close', (code: number) => {
+    logger.info('Agent 04 process exited', { code });
+    activeProcess = null;
+    broadcastSSE({ type: 'exit', code });
+  });
+
+  res.json({ ok: true, message: 'Agent 04 started' });
+});
+
+// ── GET /api/agent04/logs ─────────────────────────────────────────────────────
+app.get('/api/agent04/logs', (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+
+  sseClients.add(res);
+  res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`);
+
+  req.on('close', () => {
+    sseClients.delete(res);
+  });
+});
+
+// ── POST /api/agent04/approve / reject ────────────────────────────────────────
+function handleApproval(stageId: string, action: 'approve' | 'reject') {
+  return async (req: Request, res: Response) => {
+    const comment = ((req.body?.comment as string) || `Approved via Agent UI`).trim();
+    const isApproval = action === 'approve';
+    const body = JSON.stringify({ comment });
+
+    const options = {
+      hostname: 'localhost',
+      port: APPROVAL_PORT,
+      path: `/${action}`,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+      },
+      timeout: 3000,
+    };
+
+    let responded = false;
+
+    const fallbackDirect = async () => {
+      if (responded) return;
+      responded = true;
+      try {
+        if (isApproval) {
+          await stateManager.markStageApproved(stageId, comment);
+          await memoryEngine.recordApprovalFeedback(stageId, 'APPROVED', comment);
+        } else {
+          await stateManager.markStageRejected(stageId, comment);
+          await memoryEngine.recordApprovalFeedback(stageId, 'REJECTED', comment);
+        }
+        logger.info(`Stage ${stageId} ${action}d directly via StateManager (webhook not active)`);
+        res.json({ ok: true, status: isApproval ? 'APPROVED' : 'REJECTED', direct: true });
+      } catch (err: any) {
+        logger.error(`Direct state update failed for ${stageId}`, { error: err.message });
+        res.status(500).json({ error: err.message });
+      }
+    };
+
+    const proxyReq = http.request(options, (proxyRes) => {
+      let data = '';
+      proxyRes.on('data', chunk => { data += chunk; });
+      proxyRes.on('end', () => {
+        if (!responded) {
+          responded = true;
+          try { res.status(proxyRes.statusCode || 200).json(JSON.parse(data)); }
+          catch { res.status(proxyRes.statusCode || 200).send(data); }
+        }
+      });
+    });
+
+    proxyReq.on('error', (_err) => {
+      logger.warn(`Approval webhook port ${APPROVAL_PORT} unreachable for ${stageId}; using direct StateManager fallback`);
+      fallbackDirect();
+    });
+
+    proxyReq.on('timeout', () => {
+      proxyReq.destroy();
+      logger.warn(`Approval webhook timed out for ${stageId}; using direct StateManager fallback`);
+      fallbackDirect();
+    });
+
+    proxyReq.write(body);
+    proxyReq.end();
+  };
+}
+
+app.post('/api/agent04/approve', handleApproval('04-test-data-generator', 'approve'));
+app.post('/api/agent04/reject',  handleApproval('04-test-data-generator', 'reject'));
+
+// ── POST /api/agent04/chat ────────────────────────────────────────────────────
+app.post('/api/agent04/chat', async (req: Request, res: Response) => {
+  const { message, history = [] } = req.body as {
+    message: string;
+    history: Array<{ role: 'user' | 'assistant'; content: string }>;
+  };
+
+  if (!message?.trim()) {
+    return res.status(400).json({ error: 'message is required' });
+  }
+
+  try {
+    const testDataOutput = await stateManager.getPipelineArtifact('testData');
+    const reviewedReport = await stateManager.getPipelineArtifact('reviewedTestCases');
+
+    const systemPrompt = [
+      'You are ARIA, an AI Test Data Architect and Fixture Engineer.',
+      'The user wants to inspect generated test data, boundary test vectors, environment configurations, and Playwright fixture mapping.',
+      'Answer questions accurately based on the testData artifact and the reviewed test cases.',
+      'If a detail is not present in the manifest, state that clearly — do NOT invent facts.',
+      'Be concise, analytical, and structured in your explanations.',
+      '',
+      '=== TEST DATA MANIFEST SUMMARY ===',
+      testDataOutput ? JSON.stringify({
+        summary: testDataOutput.summary,
+        approvedCount: testDataOutput.manifest?.approvedCount,
+        excludedCount: testDataOutput.manifest?.excludedCount,
+        resolvedCount: testDataOutput.manifest?.resolvedCount,
+        unresolvedCount: testDataOutput.manifest?.unresolvedCount,
+        sensitiveRefsCount: testDataOutput.manifest?.sensitiveDataVault?.refs?.length,
+        globalFixtures: testDataOutput.manifest?.globalFixtures,
+        apiPayloadEndpoints: Object.keys(testDataOutput.manifest?.apiPayloadLibrary || {})
+      }, null, 2) : '(No test data available yet)',
+      '',
+      '=== APPROVED TEST CASES INPUT ===',
+      reviewedReport?.approvedCount ? `Approved test cases: ${reviewedReport.approvedCount}` : '(No reviewed cases found)'
+    ].join('\n');
+
+    const messages = [
+      { role: 'system' as const, content: systemPrompt },
+      ...history.map(m => ({ role: m.role, content: m.content })),
+      { role: 'user' as const, content: message }
+    ];
+
+    const reply = await llmClient.chat(messages, {
+      model: process.env.LITELLM_MODEL || 'gemini/gemini-2.5-flash',
+      temperature: 0.2,
+      maxTokens: 1000
+    });
+
+    res.json({ reply });
+  } catch (err: any) {
+    logger.error('Agent 04 chat failed', { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PUT / POST /api/agent04/data (Human Test Data Override) ───────────────────
+const updateTestDataHandler = async (req: Request, res: Response) => {
+  const { type, tcKey, inputs, globalFixtures, flatTestData } = req.body || {};
+
+  try {
+    if (!(stateManager as any)._initialized) {
+      try { await stateManager.initialize(); } catch (_) {}
+    }
+
+    const testDataOutput = await stateManager.getPipelineArtifact('testData');
+    if (!testDataOutput?.manifest) {
+      return res.status(404).json({ error: 'No testData artifact found in state.' });
+    }
+
+    const manifest = testDataOutput.manifest;
+
+    // Load existing flat fixtures from disk if available
+    let diskFlat: Record<string, any> = {};
+    if (fs.existsSync(FIXTURES_PATH)) {
+      try {
+        diskFlat = JSON.parse(fs.readFileSync(FIXTURES_PATH, 'utf-8'));
+      } catch (_) {}
+    }
+
+    if (type === 'full_flat' && flatTestData && typeof flatTestData === 'object') {
+      // Overwrite flat test data directly
+      diskFlat = { ...flatTestData };
+
+      // Also sync back to globalFixtures where applicable
+      if (flatTestData.baseURL) {
+        if (!manifest.globalCtx) manifest.globalCtx = {};
+        manifest.globalCtx.baseURL = flatTestData.baseURL;
+      }
+      if (flatTestData.standardUsername && manifest.globalFixtures?.adminCredentials) {
+        manifest.globalFixtures.adminCredentials.username = flatTestData.standardUsername;
+      }
+      if (flatTestData.password && manifest.globalFixtures?.adminCredentials) {
+        manifest.globalFixtures.adminCredentials.password = flatTestData.password;
+      }
+    } else if (type === 'global' && globalFixtures && typeof globalFixtures === 'object') {
+      manifest.globalFixtures = { ...manifest.globalFixtures, ...globalFixtures };
+      // Sync into flat test data
+      if (globalFixtures.baseURL) diskFlat.baseURL = globalFixtures.baseURL;
+      if (globalFixtures.adminCredentials?.username) diskFlat.standardUsername = globalFixtures.adminCredentials.username;
+      if (globalFixtures.adminCredentials?.password) diskFlat.password = globalFixtures.adminCredentials.password;
+    } else if (tcKey && inputs && typeof inputs === 'object') {
+      // Update per-TC inputs
+      if (!manifest.perTCData) manifest.perTCData = {};
+      if (!manifest.perTCData[tcKey]) manifest.perTCData[tcKey] = { inputs: {} };
+      
+      const tcEntry = manifest.perTCData[tcKey];
+      for (const [key, item] of Object.entries(inputs)) {
+        const val = typeof item === 'object' && item !== null && 'value' in item ? (item as any).value : item;
+        const cleanKey = key.replace(/^\{\{|\}\}$/g, '');
+        const phKey = key.startsWith('{{') ? key : `{{${key}}}`;
+        
+        tcEntry.inputs[phKey] = {
+          placeholder: phKey,
+          value: val,
+          type: typeof item === 'object' && (item as any).type ? (item as any).type : (typeof val),
+          source: 'user_override',
+          sensitive: false,
+        };
+
+        // Also update flat disk fixture for Playwright
+        const flatKey = `${tcKey.replace(/[^a-zA-Z0-9]/g, '')}_${cleanKey}`;
+        diskFlat[flatKey] = val;
+      }
+    } else {
+      return res.status(400).json({ error: 'Invalid update payload. Must provide type (full_flat, global, or per-TC inputs).' });
+    }
+
+    // Save updated artifact to state
+    await stateManager.setPipelineArtifact('testData', testDataOutput);
+
+    // Save updated flat fixtures to disk
+    const fixturesDir = path.dirname(FIXTURES_PATH);
+    if (!fs.existsSync(fixturesDir)) fs.mkdirSync(fixturesDir, { recursive: true });
+    fs.writeFileSync(FIXTURES_PATH, JSON.stringify(diskFlat, null, 2), 'utf-8');
+
+    logger.info('Test data updated and synced to disk via Agent 04 UI', {
+      type: type || 'single_tc',
+      tcKey,
+      fixturesPath: FIXTURES_PATH,
+      keysCount: Object.keys(diskFlat).length
+    });
+
+    return res.json({ ok: true, manifest, flatTestData: diskFlat });
+  } catch (err: any) {
+    logger.error('Error updating test data', { error: err.message });
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+app.put('/api/agent04/data', updateTestDataHandler);
+app.post('/api/agent04/data', updateTestDataHandler);
+
+// ── Start ─────────────────────────────────────────────────────────────────────
+app.listen(PORT, () => {
+  console.log(`\n╔══════════════════════════════════════════════╗`);
+  console.log(`║  🤖 ARIA Agent 04 UI Server                  ║`);
+  console.log(`║  http://localhost:${PORT}                        ║`);
+  console.log(`╚══════════════════════════════════════════════╝\n`);
+  logger.info(`Agent 04 UI server started`, { port: PORT });
+});

@@ -178,11 +178,24 @@ class TestDataGeneratorAgent {
 
       const { reviewedZephyrExport, k6ScenarioIndex } = input.reviewedTestCases;
       const analysis = input.analyzedRequirements || {};
-      const testCases = reviewedZephyrExport?.testCases || [];
+      const allTestCases = reviewedZephyrExport?.testCases || [];
       const { projectId } = FRAMEWORK_CONFIG;
 
-      this._logger.info('Generating test data', {
-        tcCount: testCases.length,
+      // ── Approved Scope Enforcement ──────────────────────────────────────────
+      // Test data is strictly generated ONLY for approved test cases
+      const isApproved = (tc: any) =>
+        tc.reviewStatus !== 'REJECTED' &&
+        tc.status !== 'OBSOLETE' &&
+        !tc.isObsolete &&
+        tc.selected !== false;
+
+      const approvedTestCases = allTestCases.filter(isApproved);
+      const excludedTestCases = allTestCases.filter((tc: any) => !isApproved(tc));
+
+      this._logger.info('Generating test data for approved test cases', {
+        totalReviewed: allTestCases.length,
+        approvedForDataGen: approvedTestCases.length,
+        excludedSkipped: excludedTestCases.length,
         env: FRAMEWORK_CONFIG.environment,
       });
 
@@ -196,12 +209,12 @@ class TestDataGeneratorAgent {
       // ── 3. Restore known patterns from memory & requirement ────────────
       const knownPatterns = { ...requirementData, ...this._loadMemoryPatterns(memoryContext) };
 
-      // ── 3. Resolve per-TC data ─────────────────────────────────────────
+      // ── 4. Resolve per-TC data (only for approved test cases) ───────────
       const perTCData = {};
       const unresolved = [];
       const sensitiveRefs = new Set();
 
-      for (const tc of testCases) {
+      for (const tc of approvedTestCases) {
         const tcCtx = this._buildTCContext(tc, globalCtx, projectId);
         const result = this._resolveTC(tc, tcCtx, knownPatterns);
 
@@ -210,13 +223,13 @@ class TestDataGeneratorAgent {
         result.sensitiveRefs.forEach((r) => sensitiveRefs.add(r));
       }
 
-      // ── 4. Build API payload library ───────────────────────────────────
-      const apiPayloadLibrary = this._buildAPIPayloadLibrary(testCases, globalCtx);
+      // ── 5. Build API payload library ───────────────────────────────────
+      const apiPayloadLibrary = this._buildAPIPayloadLibrary(approvedTestCases, globalCtx);
 
-      // ── 5. Build environment overrides ────────────────────────────────
+      // ── 6. Build environment overrides ────────────────────────────────
       const environmentOverrides = this._buildEnvironmentOverrides(globalCtx);
 
-      // ── 6. Build manifest ──────────────────────────────────────────────
+      // ── 7. Build manifest ──────────────────────────────────────────────
       const manifest = this._buildManifest({
         projectId,
         globalCtx,
@@ -225,20 +238,29 @@ class TestDataGeneratorAgent {
         environmentOverrides,
         unresolved,
         sensitiveRefs: [...sensitiveRefs],
-        totalTCs: testCases.length,
+        totalTCs: approvedTestCases.length,
+        totalReviewed: allTestCases.length,
+        approvedCount: approvedTestCases.length,
+        excludedCount: excludedTestCases.length,
+        excludedTestCases: excludedTestCases.map((tc: any) => ({
+          key: tc.key,
+          name: tc.name,
+          type: tc.type,
+          reason: tc.reviewStatus === 'REJECTED' ? 'Rejected in Agent 03 review' : 'Excluded by user selection'
+        }))
       });
 
-      // ── 7. Persist patterns to memory ─────────────────────────────────
+      // ── 8. Persist patterns to memory ─────────────────────────────────
       await this._persistPatternsToMemory(perTCData);
 
-      // ── 8. Inject resolved data into test cases ────────────────────────
-      const enrichedTestCases = this._injectDataIntoTestCases(testCases, perTCData);
+      // ── 9. Inject resolved data into approved test cases ───────────────
+      const enrichedApprovedTestCases = this._injectDataIntoTestCases(approvedTestCases, perTCData);
 
       const output = {
         manifest,
         enrichedZephyrExport: {
           ...reviewedZephyrExport,
-          testCases: enrichedTestCases,
+          testCases: enrichedApprovedTestCases,
         },
         k6ScenarioIndex,
         summary: this._buildSummary(manifest),
@@ -247,7 +269,7 @@ class TestDataGeneratorAgent {
       // ── 9. Persist to state & disk ────────────────────────────────────
       await stateManager.setPipelineArtifact('testData', output);
       await stateManager.markStageCompleted(STAGE_ID, output);
-      this._saveToDisk(manifest, enrichedTestCases);
+      this._saveToDisk(manifest, enrichedApprovedTestCases);
 
       const durationMs = Date.now() - startMs;
       this._logger.stage('COMPLETE', STAGE_ID, {
@@ -673,10 +695,11 @@ class TestDataGeneratorAgent {
   _buildManifest({
     projectId, globalCtx, perTCData, apiPayloadLibrary,
     environmentOverrides, unresolved, sensitiveRefs, totalTCs,
-  }) {
+    totalReviewed, approvedCount, excludedCount, excludedTestCases,
+  }: any) {
     const resolvedCount = Object.values(perTCData)
-      .reduce((sum, tc) => sum + Object.values(tc.inputs)
-        .filter((i) => i.source !== 'unresolved').length, 0);
+      .reduce((sum: number, tc: any) => sum + Object.values(tc.inputs)
+        .filter((i: any) => i.source !== 'unresolved').length, 0);
 
     const unresolvedCount = unresolved.length;
 
@@ -686,7 +709,11 @@ class TestDataGeneratorAgent {
       generatedAt: new Date().toISOString(),
       seed: globalCtx.seed,
       environment: FRAMEWORK_CONFIG.environment,
-      totalTCs,
+      totalTCs: approvedCount ?? totalTCs,
+      totalReviewed: totalReviewed ?? totalTCs,
+      approvedCount: approvedCount ?? totalTCs,
+      excludedCount: excludedCount ?? 0,
+      excludedTestCases: excludedTestCases || [],
       resolvedCount,
       unresolvedCount,
 
@@ -784,9 +811,12 @@ class TestDataGeneratorAgent {
   }
 
   /** @private */
-  _buildSummary(manifest) {
+  _buildSummary(manifest: any) {
     return {
       totalTCs: manifest.totalTCs,
+      totalReviewed: manifest.totalReviewed || manifest.totalTCs,
+      approvedTCs: manifest.approvedCount || manifest.totalTCs,
+      excludedTCs: manifest.excludedCount || 0,
       resolvedCount: manifest.resolvedCount,
       unresolvedCount: manifest.unresolvedCount,
       sensitiveRefs: manifest.sensitiveDataVault.refs.length,
@@ -796,9 +826,10 @@ class TestDataGeneratorAgent {
   }
 
   /** @private */
-  _buildApprovalSummary(manifest) {
+  _buildApprovalSummary(manifest: any) {
     return {
-      'Total TCs': manifest.totalTCs,
+      'Approved TCs': manifest.approvedCount || manifest.totalTCs,
+      'Excluded TCs': manifest.excludedCount || 0,
       'Resolved Placeholders': manifest.resolvedCount,
       Unresolved: manifest.unresolvedCount,
       'Runtime-Only Refs': manifest.sensitiveDataVault.refs.length,
@@ -1057,15 +1088,39 @@ export { TestDataGeneratorAgent };
 
 if (require.main === module) {
   (async () => {
-    await stateManager.initialize(FRAMEWORK_CONFIG.projectId);
-    await memoryEngine.initialize(FRAMEWORK_CONFIG.projectId);
+    const args = process.argv.slice(2);
+    const opts: any = {};
+    for (let i = 0; i < args.length; i++) {
+      const arg = args[i];
+      if (arg === '--') continue;
+      if (arg.startsWith('--')) {
+        const [key, val] = arg.slice(2).split('=');
+        opts[key] = val || args[i + 1];
+        if (!val) i++;
+      }
+    }
+
+    let activeProjectId = opts.project;
+    if (!activeProjectId) {
+      try {
+        const stateDb = stateManager.getDatabase();
+        const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get() as any;
+        if (latestRun?.project_id) {
+          activeProjectId = latestRun.project_id;
+        }
+      } catch (_) {}
+    }
+    activeProjectId = activeProjectId || FRAMEWORK_CONFIG.projectId;
+
+    await stateManager.initialize(activeProjectId);
+    await memoryEngine.initialize(activeProjectId);
 
     const agent = new TestDataGeneratorAgent();
     const reviewedTestCases = await stateManager.getPipelineArtifact('reviewedTestCases');
     const analyzedRequirements = await stateManager.getPipelineArtifact('analyzedRequirements');
 
     if (!reviewedTestCases) {
-      console.error('❌ No reviewed test cases found. Run Agent 03 first.');
+      console.error(`❌ No reviewed test cases found for project "${activeProjectId}". Run Agent 03 first.`);
       process.exit(1);
     }
 

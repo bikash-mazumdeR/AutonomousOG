@@ -1,0 +1,1794 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ARIA — Agent 04: Test Data Generator</title>
+  <style>
+    /* ── Design tokens ───────────────────────────────────────────────────── */
+    :root {
+      --bg:           #0f172a;
+      --surface:      #1e293b;
+      --surface2:     #273449;
+      --border:       #334155;
+      --accent:       #6366f1;
+      --accent-h:     #4f46e5;
+      --success:      #22c55e;
+      --success-bg:   #14532d22;
+      --warning:      #f59e0b;
+      --warning-bg:   #78350f22;
+      --danger:       #ef4444;
+      --danger-bg:    #7f1d1d22;
+      --purple:       #a855f7;
+      --purple-bg:    #581c8722;
+      --cyan:         #06b6d4;
+      --cyan-bg:      #0891b222;
+      --text:         #f1f5f9;
+      --text-muted:   #94a3b8;
+      --text-dim:     #64748b;
+      --radius:       10px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ──────────────────────────────────────────────────────────── */
+    .header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 28px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .header-logo {
+      font-weight: 800;
+      font-size: 17px;
+      letter-spacing: 0.5px;
+      color: #fff;
+    }
+    .header-logo span { color: var(--accent); }
+    .header-badge {
+      font-size: 11px;
+      background: rgba(99, 102, 241, 0.18);
+      color: #a5b4fc;
+      border: 1px solid rgba(99, 102, 241, 0.35);
+      border-radius: 20px;
+      padding: 2px 10px;
+      font-weight: 600;
+    }
+
+    /* ── Pipeline Bar ────────────────────────────────────────────────────── */
+    .pipeline-bar {
+      display: flex;
+      align-items: center;
+      padding: 12px 28px;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+      overflow-x: auto;
+      gap: 8px;
+    }
+    .step-node {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      font-size: 11px;
+      font-weight: 700;
+      flex-shrink: 0;
+      transition: all 0.2s;
+    }
+    .step-node.done {
+      background: rgba(34, 197, 94, 0.2);
+      border-color: var(--success);
+      color: var(--success);
+    }
+    .step-node.active {
+      background: var(--accent);
+      border-color: var(--accent-h);
+      color: #fff;
+      box-shadow: 0 0 10px rgba(99, 102, 241, 0.5);
+    }
+    .step-connector {
+      height: 2px;
+      width: 24px;
+      background: var(--border);
+      flex-shrink: 0;
+    }
+    .step-connector.done {
+      background: var(--success);
+    }
+
+    /* ── Page Layout ─────────────────────────────────────────────────────── */
+    .page-body {
+      flex: 1;
+      padding: 24px 28px 90px;
+      max-width: 1400px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    /* ── Card ────────────────────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    .card-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* ── Stat Grid ───────────────────────────────────────────────────────── */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .stat-item {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+    }
+    .stat-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: 4px;
+      letter-spacing: 0.5px;
+    }
+    .stat-value {
+      font-size: 24px;
+      font-weight: 800;
+      color: var(--text);
+    }
+    .stat-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* ── Advisory Banner (Amber / Blue) ──────────────────────────────────── */
+    .advisory-card {
+      background: rgba(30, 41, 59, 0.75);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      border-left: 4px solid var(--warning);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      margin-bottom: 20px;
+    }
+    .advisory-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .advisory-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #fbbf24;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .advisory-badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 12px;
+      background: rgba(245, 158, 11, 0.18);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      color: #fbbf24;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .advisory-body {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .advisory-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .advisory-chip {
+      font-size: 11px;
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #fca5a5;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-family: monospace;
+    }
+
+    /* ── Buttons ─────────────────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 8px 18px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.15s ease;
+      text-decoration: none;
+      user-select: none;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-h); }
+    .btn-success { background: var(--success); color: #022c22; font-weight: 700; }
+    .btn-success:hover { background: #16a34a; }
+    .btn-danger { background: var(--danger); color: #fff; }
+    .btn-danger:hover { background: #dc2626; }
+    .btn-secondary { background: var(--surface2); border: 1px solid var(--border); color: var(--text); }
+    .btn-secondary:hover { background: var(--border); }
+    .btn-sm { padding: 5px 12px; font-size: 12px; }
+
+    /* ── Tabs ────────────────────────────────────────────────────────────── */
+    .filter-tabs {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .tab-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 7px 16px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 20px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .tab-btn:hover { background: var(--border); color: var(--text); }
+    .tab-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .search-input {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 7px 12px;
+      font-size: 12px;
+      width: 240px;
+      margin-left: auto;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .search-input:focus { border-color: var(--accent); }
+
+    /* ── Table ───────────────────────────────────────────────────────────── */
+    .table-container {
+      max-height: 520px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface2);
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 12px 16px; border-bottom: 1px solid var(--border); text-align: left; }
+    th {
+      position: sticky;
+      top: 0;
+      background: var(--surface);
+      color: var(--text-dim);
+      font-weight: 600;
+      z-index: 10;
+      font-size: 12px;
+    }
+    tr:last-child td { border-bottom: none; }
+    .tc-row { transition: background 0.15s ease; }
+    .tc-row:hover { background: rgba(99, 102, 241, 0.08); }
+
+    .tc-key { font-family: monospace; color: var(--accent); font-weight: 600; }
+    .tc-type {
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(255,255,255,0.1);
+      font-weight: 600;
+    }
+    .type-positive { background: rgba(34, 197, 94, 0.2); color: #4ade80; }
+    .type-negative { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+    .type-edge     { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+    .type-api      { background: rgba(99, 102, 241, 0.2); color: #a5b4fc; }
+
+    .var-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-size: 11px;
+      font-family: monospace;
+      margin: 2px 4px 2px 0;
+    }
+    .var-pill .k { color: #93c5fd; }
+    .var-pill .v { color: #4ade80; }
+
+    /* ── Log stream ──────────────────────────────────────────────────────── */
+    .log-stream {
+      background: #020817;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      font-family: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 12px;
+      line-height: 1.5;
+      color: #94a3b8;
+      max-height: 380px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .log-info  { color: #93c5fd; }
+    .log-warn  { color: #fde68a; }
+    .log-error { color: #fca5a5; }
+
+    /* ── Code / Pre Box ──────────────────────────────────────────────────── */
+    .code-box {
+      background: #020817;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      font-family: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 12px;
+      line-height: 1.5;
+      color: #e2e8f0;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      max-height: 480px;
+    }
+
+    /* ── Action bar ──────────────────────────────────────────────────────── */
+    .action-bar {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      padding: 14px 28px;
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+      align-items: center;
+      z-index: 50;
+    }
+    .action-bar .btn {
+      height: 38px;
+      min-width: 180px;
+    }
+
+    /* ── Base Modal ──────────────────────────────────────────────────────── */
+    .modal {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.75);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 300; opacity: 0; pointer-events: none; transition: opacity .2s;
+    }
+    .modal.open { opacity: 1; pointer-events: all; }
+    .modal-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      width: 100%;
+      max-width: 440px;
+    }
+    .modal h2 { margin-bottom: 8px; font-size: 16px; font-weight: 700; color: var(--text); }
+    .modal p { color: var(--text-muted); margin-bottom: 16px; font-size: 13px; }
+    .modal textarea {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 10px 12px;
+      min-height: 80px;
+      margin-bottom: 20px;
+      font-family: inherit;
+      font-size: 13px;
+      resize: vertical;
+      outline: none;
+    }
+    .modal-buttons { display: flex; gap: 12px; justify-content: flex-end; align-items: center; }
+    .modal-buttons .btn { height: 38px; min-width: 130px; }
+
+    /* ── Test Data Dedicated Modal Window (View, Edit, Save, Close) ──────── */
+    .data-modal-dialog {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      width: 92%;
+      max-width: 960px;
+      max-height: 88vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.85);
+      animation: modalPop 0.2s ease-out;
+    }
+    @keyframes modalPop { from { transform: scale(0.96); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+    .data-modal-head {
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--surface);
+      gap: 12px;
+    }
+    .data-modal-head-left { display: flex; align-items: center; gap: 10px; }
+    .data-modal-title { font-size: 16px; font-weight: 700; color: #fff; }
+    .data-modal-badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+      border: 1px solid rgba(99, 102, 241, 0.4);
+    }
+    .data-modal-close-btn {
+      background: none; border: none; color: var(--text-muted); font-size: 22px; cursor: pointer; line-height: 1;
+      width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;
+      border-radius: 6px; transition: background 0.15s, color 0.15s;
+    }
+    .data-modal-close-btn:hover { background: var(--surface2); color: var(--text); }
+
+    .data-modal-tabs {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 24px;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+    }
+    .data-modal-tab-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      padding: 6px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+    .data-modal-tab-btn.active {
+      background: var(--surface);
+      border-color: var(--border);
+      color: #fff;
+    }
+
+    .data-modal-body {
+      padding: 20px 24px;
+      overflow-y: auto;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .data-modal-foot {
+      padding: 14px 24px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      background: var(--surface);
+      gap: 12px;
+    }
+    .data-modal-foot .btn {
+      height: 38px;
+      min-width: 140px;
+    }
+
+    /* Key-Value Row in Field Editor */
+    .field-row {
+      display: grid;
+      grid-template-columns: 220px 1fr 100px 36px;
+      gap: 10px;
+      align-items: center;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 12px;
+    }
+    .field-key {
+      font-family: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 12px;
+      color: #93c5fd;
+      font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .field-val-input {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      padding: 6px 10px;
+      font-family: inherit;
+      font-size: 12px;
+      outline: none;
+      transition: border-color 0.2s;
+      width: 100%;
+    }
+    .field-val-input:focus { border-color: var(--accent); }
+    .field-type-badge {
+      font-size: 10px;
+      text-align: center;
+      padding: 3px 6px;
+      border-radius: 4px;
+      background: rgba(255,255,255,0.06);
+      color: var(--text-dim);
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .field-del-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-dim);
+      cursor: pointer;
+      width: 28px;
+      height: 28px;
+      border-radius: 4px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .field-del-btn:hover { color: var(--danger); background: rgba(239, 68, 68, 0.15); }
+
+    /* Raw JSON Textarea inside modal */
+    .json-editor-textarea {
+      width: 100%;
+      height: 380px;
+      background: #020817;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: #38bdf8;
+      font-family: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 12px;
+      line-height: 1.5;
+      padding: 14px;
+      outline: none;
+      resize: vertical;
+      white-space: pre;
+    }
+    .json-editor-textarea:focus { border-color: var(--accent); }
+    .json-syntax-indicator {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+    .json-syntax-valid { color: #4ade80; background: rgba(34, 197, 94, 0.1); }
+    .json-syntax-invalid { color: #f87171; background: rgba(239, 68, 68, 0.1); }
+
+    /* ── Floating Chat Button & Drawer ───────────────────────────────────── */
+    .chat-toggle-btn {
+      position: fixed;
+      bottom: 24px;
+      right: 28px;
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
+      z-index: 100;
+      transition: transform 0.2s, background 0.2s;
+    }
+    .chat-toggle-btn:hover { background: var(--accent-h); transform: scale(1.05); }
+
+    .chat-drawer {
+      position: fixed;
+      right: 0; top: 0; bottom: 0;
+      width: 420px;
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      z-index: 201;
+      transform: translateX(100%);
+      transition: transform .25s ease;
+    }
+    .chat-drawer.open { transform: translateX(0); }
+    .chat-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      font-weight: 700;
+      font-size: 14px;
+    }
+    .chat-close {
+      margin-left: auto;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 20px;
+      width: 32px;
+      height: 32px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .chat-close:hover { background: var(--surface2); color: var(--text); }
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .chat-bubble {
+      max-width: 85%;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      white-space: pre-wrap;
+      line-height: 1.45;
+    }
+    .chat-bubble.user { background: var(--accent); color: #fff; align-self: flex-end; }
+    .chat-bubble.aria { background: var(--surface2); color: var(--text); align-self: flex-start; border: 1px solid var(--border); }
+    .chat-input-area {
+      padding: 14px 20px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .chat-input-area input {
+      flex: 1;
+      height: 38px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      padding: 0 12px;
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 13px;
+      outline: none;
+    }
+    .chat-input-area input:focus { border-color: var(--accent); }
+    .chat-input-area .btn { height: 38px; min-width: 80px; }
+
+    /* ── Alerts & Toasts ─────────────────────────────────────────────────── */
+    .alert {
+      padding: 12px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      margin-bottom: 16px;
+    }
+    .alert-success { background: var(--success-bg); border: 1px solid var(--success); color: #4ade80; }
+    .alert-danger  { background: var(--danger-bg);  border: 1px solid var(--danger);  color: #f87171; }
+    .hidden { display: none !important; }
+
+    .toast {
+      position: fixed;
+      top: 20px;
+      right: 28px;
+      background: #1e293b;
+      border: 1px solid var(--success);
+      color: #4ade80;
+      padding: 10px 18px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+      z-index: 400;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      opacity: 0;
+      transform: translateY(-10px);
+      transition: all 0.25s ease;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-logo">ARIA <span>/</span> Agent 04</div>
+    <div class="header-badge">Test Data Generator & Synthesizer</div>
+  </header>
+
+  <!-- Pipeline Progress Bar (11 Stages) -->
+  <div class="pipeline-bar" id="pipelineBar"></div>
+
+  <!-- Toast notification -->
+  <div class="toast" id="toastNotification">✓ Changes saved successfully!</div>
+
+  <div class="page-body">
+    
+    <div class="alert alert-success hidden" id="successAlert"></div>
+    <div class="alert alert-danger hidden" id="errorAlert"></div>
+
+    <!-- Phase 1: Pre-run Configuration -->
+    <div class="card" id="inputPhase">
+      <div class="card-title">Test Data Generation Scope</div>
+      <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px; line-height: 1.5;">
+        Agent 04 resolves dynamic test variables, boundary sets, and centralized Playwright fixtures.
+        In accordance with framework mandates, test data is synthesized <strong>strictly for approved test cases</strong>.
+      </p>
+
+      <div class="stat-grid" style="margin-bottom: 16px;">
+        <div class="stat-item">
+          <div class="stat-label">Approved Test Cases (Target Scope)</div>
+          <div class="stat-value" id="inputApprovedCount" style="color: #4ade80;">—</div>
+          <div class="stat-sub">From Agent 03 review & selection</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Excluded Test Cases (Skipped)</div>
+          <div class="stat-value" id="inputExcludedCount" style="color: #fca5a5;">—</div>
+          <div class="stat-sub">Rejected or unselected (omitted)</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Execution Environment</div>
+          <div class="stat-value" id="inputEnvVal" style="font-size: 20px; color: #93c5fd;">staging</div>
+          <div class="stat-sub">Rule 0 requirement priority active</div>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 12px; align-items: center; margin-top: 8px;">
+        <input type="text" id="projectNameInput" placeholder="Project ID (defaults to latest active pipeline run)" style="flex: 1; background: var(--surface2); border: 1px solid var(--border); padding: 9px 12px; border-radius: 6px; color: var(--text); font-size: 13px; outline: none;">
+        <button id="runBtn" class="btn btn-primary" style="min-width: 240px; height: 38px;">
+          <span>Generate Test Data & Fixtures</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Phase 2: Running Progress & SSE Logs -->
+    <div class="card hidden" id="runningPhase">
+      <div class="card-title">Synthesizing Deterministic Test Data</div>
+      <div class="log-stream" id="logStream"></div>
+      <div style="margin-top: 14px; font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 8px;">
+        <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); animation: pulse 1s infinite alternate;"></span>
+        Generating fixtures, boundary values, and syncing tests/fixtures/test-data.json...
+      </div>
+    </div>
+
+    <!-- Phase 3: Results Workspace -->
+    <div id="resultsPhase" class="hidden">
+      
+      <!-- Metrics Scorecard -->
+      <div class="stat-grid" style="margin-bottom: 20px;">
+        <div class="stat-item">
+          <div class="stat-label">Approved TCs Data Generated</div>
+          <div class="stat-value" id="resApprovedTcs" style="color: #4ade80;">—</div>
+          <div class="stat-sub">100% covered in fixtures</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Excluded Cases Omitted</div>
+          <div class="stat-value" id="resExcludedTcs" style="color: #fca5a5;">—</div>
+          <div class="stat-sub">Clean fixtures guarantee</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Placeholders Resolved</div>
+          <div class="stat-value" id="resResolvedCount" style="color: #93c5fd;">—</div>
+          <div class="stat-sub">Deterministic values</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Centralized Fixtures</div>
+          <div class="stat-value" style="font-size: 16px; color: #4ade80; margin-top: 4px;">SYNCED</div>
+          <div class="stat-sub">tests/fixtures/test-data.json</div>
+        </div>
+      </div>
+
+      <!-- Scope Advisory Banner (Only shown if excluded TCs exist) -->
+      <div class="advisory-card hidden" id="scopeAdvisoryCard">
+        <div class="advisory-header">
+          <div class="advisory-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+            Approved Scope Enforcement Advisory
+          </div>
+          <span class="advisory-badge">APPROVED SCOPE ONLY</span>
+        </div>
+        <div class="advisory-body" id="scopeAdvisoryBody">
+          Test data was synthesized exclusively for approved test cases. The excluded test cases below were omitted from test data generation:
+        </div>
+        <div class="advisory-chips" id="scopeAdvisoryChips"></div>
+      </div>
+
+      <!-- Tabbed Explorer -->
+      <div class="filter-tabs">
+        <button class="tab-btn active" data-tab="tabPerTc" id="tabPerTcBtn">Per-TC Test Data Matrix</button>
+        <button class="tab-btn" data-tab="tabGlobal" id="tabGlobalBtn">Global Fixtures & Credentials</button>
+        <button class="tab-btn" data-tab="tabBoundary" id="tabBoundaryBtn">Boundary Value Catalog</button>
+        <button class="tab-btn" data-tab="tabRawJson" id="tabRawJsonBtn">Centralized test-data.json</button>
+
+        <input type="text" class="search-input" id="tcSearchInput" placeholder="Filter test cases or variables...">
+      </div>
+
+      <!-- Tab 1: Per-TC Test Data Matrix -->
+      <div id="tabPerTc" class="tab-pane">
+        <div class="table-container">
+          <table id="tcDataTable">
+            <thead>
+              <tr>
+                <th style="width: 100px;">TC Key</th>
+                <th style="width: 220px;">Name</th>
+                <th style="width: 90px;">Type</th>
+                <th style="width: 120px;">Variables</th>
+                <th>Resolved Inputs Preview</th>
+                <th style="width: 130px; text-align: right;">Action</th>
+              </tr>
+            </thead>
+            <tbody id="tcDataTableBody">
+              <!-- Injected by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Tab 2: Global Fixtures & Credentials -->
+      <div id="tabGlobal" class="tab-pane hidden">
+        <div class="card" style="margin-bottom: 0;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <div>
+              <h3 style="font-size: 15px; font-weight: 700; color: #fff;">Shared Environment Fixtures</h3>
+              <p style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
+                Centralized variables shared across all Playwright automation scripts.
+              </p>
+            </div>
+            <button class="btn btn-secondary btn-sm" id="editGlobalFixturesBtn">
+              <span>✏ Edit Global Fixtures</span>
+            </button>
+          </div>
+          <div class="table-container" style="max-height: 400px;">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 260px;">Fixture Property</th>
+                  <th>Value</th>
+                  <th style="width: 120px;">Category</th>
+                </tr>
+              </thead>
+              <tbody id="globalFixturesTableBody">
+                <!-- Injected by JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 3: Boundary Value Catalog -->
+      <div id="tabBoundary" class="tab-pane hidden">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+          <div class="card" style="margin-bottom: 0;">
+            <div class="card-title">String Boundary Primitives</div>
+            <div class="code-box" id="stringBoundariesBox"></div>
+          </div>
+          <div class="card" style="margin-bottom: 0;">
+            <div class="card-title">Numeric Boundary Primitives</div>
+            <div class="code-box" id="numericBoundariesBox"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 4: Centralized test-data.json -->
+      <div id="tabRawJson" class="tab-pane hidden">
+        <div class="card" style="margin-bottom: 0;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <div>
+              <h3 style="font-size: 15px; font-weight: 700; color: #fff;">tests/fixtures/test-data.json</h3>
+              <p style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
+                Flat key-value JSON file consumed directly by Playwright tests.
+              </p>
+            </div>
+            <button class="btn btn-primary btn-sm" id="openFullJsonEditorBtn">
+              <span>✏ Edit Full test-data.json</span>
+            </button>
+          </div>
+          <pre class="code-box" id="flatJsonBox"></pre>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- ── Fixed Action Bar (Approval / Progression) ────────────────────────── -->
+  <div class="action-bar hidden" id="actionBar">
+    <div style="margin-right: auto; font-size: 13px; color: var(--text-muted);">
+      Stage 04: <strong style="color: var(--text);">Test Data Generated & Centralized</strong>
+    </div>
+    <button class="btn btn-danger" id="rejectBtn">Reject / Re-run</button>
+    <button class="btn btn-success" id="approveBtn">Approve & Proceed to Agent 05</button>
+  </div>
+
+  <!-- ── Interactive Test Data Modal Window (View, Edit, Save, Close) ─────── -->
+  <div class="modal" id="dataModal">
+    <div class="data-modal-dialog">
+      <div class="data-modal-head">
+        <div class="data-modal-head-left">
+          <div class="data-modal-title" id="dataModalTitle">Test Data Editor</div>
+          <div class="data-modal-badge" id="dataModalBadge">APPROVED SCOPE</div>
+        </div>
+        <button class="data-modal-close-btn" id="dataModalCloseTopBtn" title="Close without saving">✕</button>
+      </div>
+
+      <!-- Modal Tabs: Field Editor vs Raw JSON Editor -->
+      <div class="data-modal-tabs">
+        <button class="data-modal-tab-btn active" id="modalTabFieldsBtn">
+          <span>📋 Field Editor</span>
+        </button>
+        <button class="data-modal-tab-btn" id="modalTabJsonBtn">
+          <span>{ } Raw JSON Editor</span>
+        </button>
+        <div style="margin-left: auto; font-size: 11px; color: var(--text-dim);" id="modalScopeNote">
+          Syncs to tests/fixtures/test-data.json
+        </div>
+      </div>
+
+      <div class="data-modal-body">
+        
+        <!-- View 1: Field Editor -->
+        <div id="modalFieldsView">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <div style="font-size: 12px; color: var(--text-muted);">
+              Edit existing variables or add custom keys for this test case.
+            </div>
+            <button class="btn btn-secondary btn-sm" id="modalAddFieldBtn">
+              + Add Variable
+            </button>
+          </div>
+          <div id="modalFieldsContainer" style="display: flex; flex-direction: column; gap: 8px;">
+            <!-- Injected by JS -->
+          </div>
+        </div>
+
+        <!-- View 2: Raw JSON Editor -->
+        <div id="modalJsonView" class="hidden">
+          <div class="json-syntax-indicator json-syntax-valid" id="jsonSyntaxStatus" style="margin-bottom: 8px;">
+            <span id="jsonSyntaxText">✓ Valid JSON format</span>
+            <button class="btn btn-secondary btn-sm" id="formatJsonBtn" style="padding: 2px 8px; font-size: 11px;">
+              Format / Beautify
+            </button>
+          </div>
+          <textarea class="json-editor-textarea" id="modalJsonTextarea" spellcheck="false"></textarea>
+        </div>
+
+      </div>
+
+      <div class="data-modal-foot">
+        <button class="btn btn-secondary" id="modalCloseBtn">✕ Close</button>
+        <button class="btn btn-primary" id="modalSaveBtn">💾 Save Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Stage Approval Modal ─────────────────────────────────────────────── -->
+  <div class="modal" id="approvalModal">
+    <div class="modal-card">
+      <h2>Approve Stage 04 Test Data</h2>
+      <p>Confirm approval of synthesized test data and proceed to Agent 05 (Playwright Script Generator).</p>
+      <textarea id="approvalComment" placeholder="Approval notes (optional)...">Approved test data synthesis and centralized fixtures.</textarea>
+      <div class="modal-buttons">
+        <button class="btn btn-secondary" id="cancelApprovalBtn">Cancel</button>
+        <button class="btn btn-success" id="confirmApprovalBtn">Confirm & Advance</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Stage Rejection Modal ─────────────────────────────────────────────── -->
+  <div class="modal" id="rejectionModal">
+    <div class="modal-card">
+      <h2>Reject Stage 04 Results</h2>
+      <p>Provide a reason for rejection. Agent 04 state will be flagged for re-generation.</p>
+      <textarea id="rejectionComment" placeholder="Rejection rationale (required)..."></textarea>
+      <div class="modal-buttons">
+        <button class="btn btn-secondary" id="cancelRejectionBtn">Cancel</button>
+        <button class="btn btn-danger" id="confirmRejectionBtn">Reject Stage</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Floating AI Chat Toggle & Drawer ─────────────────────────────────── -->
+  <button class="chat-toggle-btn" id="chatToggleBtn" title="Ask ARIA Test Data Architect">
+    💬
+  </button>
+
+  <div class="chat-drawer" id="chatDrawer">
+    <div class="chat-header">
+      <span>ARIA AI Test Data Architect</span>
+      <button class="chat-close" id="chatCloseBtn">✕</button>
+    </div>
+    <div class="chat-messages" id="chatMessages">
+      <div class="chat-bubble aria">
+        Hello! I'm ARIA, your Test Data Architect. Ask me about generated fixtures, boundary test vectors, sensitive vault references, or Playwright data bindings.
+      </div>
+    </div>
+    <div class="chat-input-area">
+      <input type="text" id="chatInput" placeholder="Ask about test data or boundary vectors...">
+      <button class="btn btn-primary" id="chatSendBtn">Send</button>
+    </div>
+  </div>
+
+  <!-- ── Scripts ─────────────────────────────────────────────────────────── -->
+  <script>
+    // ── Global State ──────────────────────────────────────────────────────────
+    let stateData = null;
+    let sseSource = null;
+    let currentModalMode = 'single_tc'; // 'single_tc' | 'global' | 'full_flat'
+    let currentModalTcKey = null;
+    let currentWorkingObj = {};
+    const chatHistory = [];
+
+    // ── Pipeline Bar Definition (11 Agents) ───────────────────────────────────
+    const PIPELINE_STAGES = [
+      { num: '01', name: 'Requirement Analyzer' },
+      { num: '02', name: 'Test Case Generator' },
+      { num: '03', name: 'Test Case Reviewer' },
+      { num: '04', name: 'Test Data Generator' },
+      { num: '05', name: 'Script Generator' },
+      { num: '06', name: 'Script Reviewer' },
+      { num: '07', name: 'Test Runner' },
+      { num: '08', name: 'Bug Reporter' },
+      { num: '09', name: 'Report Generator' },
+      { num: '10', name: 'Auto Healer' },
+      { num: '11', name: 'Retest Agent' },
+    ];
+
+    function renderPipelineBar() {
+      const container = document.getElementById('pipelineBar');
+      container.innerHTML = '';
+
+      PIPELINE_STAGES.forEach((st, idx) => {
+        const node = document.createElement('div');
+        node.className = 'step-node';
+        const numInt = parseInt(st.num, 10);
+
+        if (numInt < 4) {
+          node.classList.add('done');
+          node.innerHTML = '✓';
+          node.title = `Stage ${st.num}: ${st.name} (Completed)`;
+        } else if (numInt === 4) {
+          node.classList.add('active');
+          node.innerHTML = st.num;
+          node.title = `Stage ${st.num}: ${st.name} (Active)`;
+        } else {
+          node.innerHTML = st.num;
+          node.title = `Stage ${st.num}: ${st.name}`;
+        }
+        container.appendChild(node);
+
+        if (idx < PIPELINE_STAGES.length - 1) {
+          const connector = document.createElement('div');
+          connector.className = 'step-connector' + (numInt < 4 ? ' done' : '');
+          container.appendChild(connector);
+        }
+      });
+    }
+
+    // ── Toast Utility ─────────────────────────────────────────────────────────
+    function showToast(msg) {
+      const t = document.getElementById('toastNotification');
+      t.textContent = msg || '✓ Saved successfully!';
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    // ── Fetch & Apply State ───────────────────────────────────────────────────
+    async function fetchState() {
+      try {
+        const res = await fetch('/api/agent04/state');
+        if (!res.ok) throw new Error(`Failed to fetch state: ${res.statusText}`);
+        stateData = await res.json();
+        applyState(stateData);
+      } catch (err) {
+        console.error('Error fetching state:', err);
+      }
+    }
+
+    function applyState(data) {
+      if (!data) return;
+
+      const reviewedTCs = data.reviewedTestCases?.reviewedZephyrExport?.testCases || 
+                          data.reviewedTestCases?.testCases || [];
+      
+      const isApproved = (tc) => tc.reviewStatus !== 'REJECTED' && tc.status !== 'OBSOLETE' && !tc.isObsolete && tc.selected !== false;
+      const approvedCount = reviewedTCs.filter(isApproved).length;
+      const excludedCount = reviewedTCs.filter(tc => !isApproved(tc)).length;
+
+      document.getElementById('inputApprovedCount').textContent = approvedCount || '—';
+      document.getElementById('inputExcludedCount').textContent = excludedCount || '0';
+
+      const manifest = data.testData?.manifest;
+      const stageCompleted = data.stage?.status === 'COMPLETED' || !!manifest;
+
+      if (stageCompleted && manifest) {
+        document.getElementById('inputPhase').classList.add('hidden');
+        document.getElementById('runningPhase').classList.add('hidden');
+        document.getElementById('resultsPhase').classList.remove('hidden');
+        document.getElementById('actionBar').classList.remove('hidden');
+
+        renderResults(data);
+      } else if (data.running) {
+        document.getElementById('inputPhase').classList.add('hidden');
+        document.getElementById('runningPhase').classList.remove('hidden');
+        document.getElementById('resultsPhase').classList.add('hidden');
+        document.getElementById('actionBar').classList.add('hidden');
+        connectSSE();
+      } else {
+        document.getElementById('inputPhase').classList.remove('hidden');
+        document.getElementById('runningPhase').classList.add('hidden');
+        document.getElementById('resultsPhase').classList.add('hidden');
+        document.getElementById('actionBar').classList.add('hidden');
+      }
+    }
+
+    // ── Render Results View ───────────────────────────────────────────────────
+    function renderResults(data) {
+      const manifest = data.testData?.manifest || {};
+      const flat = data.flatTestData || {};
+      const reviewedTCs = data.reviewedTestCases?.reviewedZephyrExport?.testCases || [];
+
+      // Scorecard
+      const approvedCount = manifest.approvedCount || Object.keys(manifest.perTCData || {}).length;
+      const excludedCount = manifest.excludedCount || 0;
+      document.getElementById('resApprovedTcs').textContent = approvedCount;
+      document.getElementById('resExcludedTcs').textContent = excludedCount;
+      document.getElementById('resResolvedCount').textContent = manifest.resolvedCount ?? '—';
+
+      // Scope Advisory Banner
+      const advisoryCard = document.getElementById('scopeAdvisoryCard');
+      const advisoryChips = document.getElementById('scopeAdvisoryChips');
+      if (excludedCount > 0 && manifest.excludedTestCases?.length) {
+        advisoryCard.classList.remove('hidden');
+        advisoryChips.innerHTML = manifest.excludedTestCases.map(tc => `
+          <span class="advisory-chip" title="${tc.reason}">${tc.key}: ${tc.reason}</span>
+        `).join('');
+      } else {
+        advisoryCard.classList.add('hidden');
+      }
+
+      // Render Per-TC Table
+      renderPerTcTable(manifest, reviewedTCs);
+
+      // Render Global Fixtures Table
+      renderGlobalFixturesTable(manifest.globalFixtures || {}, flat);
+
+      // Render Boundary Boxes
+      renderBoundaryBoxes(manifest.boundaryCatalog || {});
+
+      // Render Raw Flat JSON
+      document.getElementById('flatJsonBox').textContent = JSON.stringify(flat, null, 2);
+    }
+
+    function renderPerTcTable(manifest, reviewedTCs) {
+      const tbody = document.getElementById('tcDataTableBody');
+      tbody.innerHTML = '';
+
+      const perTCData = manifest.perTCData || {};
+      const tcKeys = Object.keys(perTCData);
+
+      if (!tcKeys.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--text-dim); padding: 24px;">No per-TC test data available.</td></tr>';
+        return;
+      }
+
+      tcKeys.forEach(tcKey => {
+        const item = perTCData[tcKey] || {};
+        const tcMeta = reviewedTCs.find(t => t.key === tcKey) || {};
+        const inputs = item.inputs || {};
+        const inputKeys = Object.keys(inputs);
+
+        const row = document.createElement('tr');
+        row.className = 'tc-row';
+        row.dataset.key = tcKey;
+        row.dataset.name = tcMeta.name || '';
+
+        const pills = inputKeys.slice(0, 4).map(ph => {
+          const val = inputs[ph]?.value;
+          const displayVal = typeof val === 'object' ? JSON.stringify(val) : String(val);
+          const cleanPh = ph.replace(/^\{\{|\}\}$/g, '');
+          return `<span class="var-pill"><span class="k">${cleanPh}:</span> <span class="v">${escapeHtml(displayVal)}</span></span>`;
+        }).join('');
+
+        const moreBadge = inputKeys.length > 4 ? `<span style="font-size: 11px; color: var(--text-dim);">+${inputKeys.length - 4} more</span>` : '';
+
+        row.innerHTML = `
+          <td><span class="tc-key">${tcKey}</span></td>
+          <td style="font-weight: 600;">${escapeHtml(tcMeta.name || 'Test Case ' + tcKey)}</td>
+          <td><span class="tc-type ${getTypeClass(tcMeta.type)}">${tcMeta.type || 'Positive'}</span></td>
+          <td><span style="font-size: 12px; color: var(--text-muted);">${inputKeys.length} items</span></td>
+          <td><div style="display: flex; flex-wrap: wrap; align-items: center;">${pills} ${moreBadge}</div></td>
+          <td style="text-align: right;">
+            <button class="btn btn-secondary btn-sm edit-tc-data-btn" data-tckey="${tcKey}">
+              👁 View / ✏ Edit
+            </button>
+          </td>
+        `;
+
+        tbody.appendChild(row);
+      });
+
+      // Bind button events
+      document.querySelectorAll('.edit-tc-data-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const key = e.currentTarget.dataset.tckey;
+          openModalForTestCase(key);
+        });
+      });
+    }
+
+    function renderGlobalFixturesTable(globalFixtures, flat) {
+      const tbody = document.getElementById('globalFixturesTableBody');
+      tbody.innerHTML = '';
+
+      const items = [
+        { prop: 'Base URL', key: 'baseURL', val: flat.baseURL || globalFixtures.baseURL, cat: 'Network' },
+        { prop: 'Standard Username', key: 'standardUsername', val: flat.standardUsername || globalFixtures.adminCredentials?.username, cat: 'Credential' },
+        { prop: 'Default Password', key: 'password', val: flat.password ? '••••••••' : 'secret_sauce', cat: 'Credential' },
+        { prop: 'Locked Out User', key: 'lockedOutUsername', val: flat.lockedOutUsername, cat: 'Credential' },
+        { prop: 'Problem User', key: 'problemUsername', val: flat.problemUsername, cat: 'Credential' },
+        { prop: 'Performance Glitch User', key: 'performanceGlitchUsername', val: flat.performanceGlitchUsername, cat: 'Credential' },
+        { prop: 'Visual User', key: 'visualUsername', val: flat.visualUsername, cat: 'Credential' },
+        { prop: 'Error Invalid Credentials', key: 'errorInvalidCredentials', val: flat.errorInvalidCredentials, cat: 'Validation' },
+        { prop: 'Error Username Required', key: 'errorUsernameRequired', val: flat.errorUsernameRequired, cat: 'Validation' },
+        { prop: 'Error Password Required', key: 'errorPasswordRequired', val: flat.errorPasswordRequired, cat: 'Validation' },
+      ];
+
+      items.forEach(it => {
+        if (!it.val) return;
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td><code style="color: #93c5fd; font-size: 12px;">${it.prop} (${it.key})</code></td>
+          <td style="font-family: monospace; font-size: 12px; color: #4ade80;">${escapeHtml(String(it.val))}</td>
+          <td><span class="tc-type">${it.cat}</span></td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    function renderBoundaryBoxes(catalog) {
+      const sBox = document.getElementById('stringBoundariesBox');
+      const nBox = document.getElementById('numericBoundariesBox');
+
+      const strings = catalog.strings || {
+        min: 1, max: 255, underMin: "'' (empty)", overMax: '256 chars',
+        specialChars: '#%&<>!@$^*()', unicode: '🚀 中文 العربية Ñ',
+        sqlInject: "' OR '1'='1'; DROP TABLE users;--",
+        xssPayload: "<script>alert('aria-xss-test')<\/script>"
+      };
+
+      const numbers = catalog.numbers || {
+        min: 0, max: 2147483647, underMin: -1, overMax: 2147483648,
+        zero: 0, negative: -999, decimal: 0.001
+      };
+
+      sBox.textContent = JSON.stringify(strings, null, 2);
+      nBox.textContent = JSON.stringify(numbers, null, 2);
+    }
+
+    // ── Filter Test Cases ─────────────────────────────────────────────────────
+    document.getElementById('tcSearchInput').addEventListener('input', (e) => {
+      const query = e.target.value.toLowerCase().trim();
+      const rows = document.querySelectorAll('#tcDataTableBody tr');
+      rows.forEach(row => {
+        const key = (row.dataset.key || '').toLowerCase();
+        const name = (row.dataset.name || '').toLowerCase();
+        const text = row.innerText.toLowerCase();
+        if (key.includes(query) || name.includes(query) || text.includes(query)) {
+          row.style.display = '';
+        } else {
+          row.style.display = 'none';
+        }
+      });
+    });
+
+    // ── Tab Switching ─────────────────────────────────────────────────────────
+    document.querySelectorAll('.filter-tabs .tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.filter-tabs .tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        const targetId = btn.dataset.tab;
+        document.querySelectorAll('.tab-pane').forEach(p => p.classList.add('hidden'));
+        document.getElementById(targetId)?.classList.remove('hidden');
+      });
+    });
+
+    // ── Test Data Dedicated Modal Logic (View, Edit, Save, Close) ─────────────
+    const dataModal = document.getElementById('dataModal');
+    const modalTitle = document.getElementById('dataModalTitle');
+    const modalBadge = document.getElementById('dataModalBadge');
+    const modalFieldsContainer = document.getElementById('modalFieldsContainer');
+    const modalJsonTextarea = document.getElementById('modalJsonTextarea');
+    const jsonSyntaxStatus = document.getElementById('jsonSyntaxStatus');
+    const jsonSyntaxText = document.getElementById('jsonSyntaxText');
+
+    function openModalForTestCase(tcKey) {
+      currentModalMode = 'single_tc';
+      currentModalTcKey = tcKey;
+
+      const manifest = stateData?.testData?.manifest || {};
+      const tcEntry = manifest.perTCData?.[tcKey] || { inputs: {} };
+      
+      // Clone working inputs object
+      currentWorkingObj = {};
+      for (const [ph, meta] of Object.entries(tcEntry.inputs || {})) {
+        const cleanK = ph.replace(/^\{\{|\}\}$/g, '');
+        currentWorkingObj[cleanK] = meta?.value ?? '';
+      }
+
+      modalTitle.textContent = `Test Data — [${tcKey}]`;
+      modalBadge.textContent = 'APPROVED TEST CASE';
+      document.getElementById('modalScopeNote').textContent = `Syncs to ${tcKey}_* in test-data.json`;
+
+      populateModalViews();
+      setModalTab('fields');
+      dataModal.classList.add('open');
+    }
+
+    function openModalForGlobalFixtures() {
+      currentModalMode = 'global';
+      currentModalTcKey = null;
+
+      const flat = stateData?.flatTestData || {};
+      const manifest = stateData?.testData?.manifest || {};
+      const gf = manifest.globalFixtures || {};
+
+      currentWorkingObj = {
+        baseURL: flat.baseURL || gf.baseURL || 'https://www.saucedemo.com/',
+        standardUsername: flat.standardUsername || gf.adminCredentials?.username || 'standard_user',
+        password: flat.password || gf.adminCredentials?.password || 'secret_sauce',
+        lockedOutUsername: flat.lockedOutUsername || 'locked_out_user',
+        problemUsername: flat.problemUsername || 'problem_user',
+        errorInvalidCredentials: flat.errorInvalidCredentials || 'Epic sadface: Username and password do not match any user in this service'
+      };
+
+      modalTitle.textContent = 'Global Fixtures & Credentials';
+      modalBadge.textContent = 'CENTRALIZED FIXTURES';
+      document.getElementById('modalScopeNote').textContent = 'Directly modifies root fixtures';
+
+      populateModalViews();
+      setModalTab('fields');
+      dataModal.classList.add('open');
+    }
+
+    function openModalForFullJson() {
+      currentModalMode = 'full_flat';
+      currentModalTcKey = null;
+
+      currentWorkingObj = JSON.parse(JSON.stringify(stateData?.flatTestData || {}));
+
+      modalTitle.textContent = 'tests/fixtures/test-data.json';
+      modalBadge.textContent = 'FLAT KEY-VALUE FIXTURES';
+      document.getElementById('modalScopeNote').textContent = 'Playwright Master Fixture File';
+
+      populateModalViews();
+      setModalTab('json'); // default to JSON tab for full file
+      dataModal.classList.add('open');
+    }
+
+    function populateModalViews() {
+      // 1. Populate Field Editor
+      modalFieldsContainer.innerHTML = '';
+      const keys = Object.keys(currentWorkingObj);
+
+      if (!keys.length) {
+        modalFieldsContainer.innerHTML = '<div style="color: var(--text-dim); font-size: 13px; padding: 12px 0;">No variables currently defined. Click "+ Add Variable" to add one.</div>';
+      } else {
+        keys.forEach(key => {
+          addFieldRow(key, currentWorkingObj[key]);
+        });
+      }
+
+      // 2. Populate Raw JSON Editor
+      modalJsonTextarea.value = JSON.stringify(currentWorkingObj, null, 2);
+      validateJsonSyntax();
+    }
+
+    function addFieldRow(key, val) {
+      const row = document.createElement('div');
+      row.className = 'field-row';
+      const valStr = typeof val === 'object' ? JSON.stringify(val) : String(val ?? '');
+
+      row.innerHTML = `
+        <input type="text" class="field-val-input field-key-input" value="${escapeHtml(key)}" placeholder="variableKey">
+        <input type="text" class="field-val-input field-val-input-elem" value="${escapeHtml(valStr)}" placeholder="value">
+        <span class="field-type-badge">${typeof val}</span>
+        <button class="field-del-btn" title="Delete variable">✕</button>
+      `;
+
+      row.querySelector('.field-del-btn').addEventListener('click', () => {
+        row.remove();
+        syncFieldsToJson();
+      });
+
+      row.querySelectorAll('input').forEach(input => {
+        input.addEventListener('input', () => {
+          syncFieldsToJson();
+        });
+      });
+
+      modalFieldsContainer.appendChild(row);
+    }
+
+    document.getElementById('modalAddFieldBtn').addEventListener('click', () => {
+      addFieldRow('newVariable', 'defaultValue');
+      syncFieldsToJson();
+    });
+
+    function syncFieldsToJson() {
+      const updated = {};
+      modalFieldsContainer.querySelectorAll('.field-row').forEach(row => {
+        const k = row.querySelector('.field-key-input').value.trim();
+        const v = row.querySelector('.field-val-input-elem').value;
+        if (k) {
+          updated[k] = v;
+        }
+      });
+      currentWorkingObj = updated;
+      modalJsonTextarea.value = JSON.stringify(updated, null, 2);
+      validateJsonSyntax();
+    }
+
+    function syncJsonToFields() {
+      try {
+        const parsed = JSON.parse(modalJsonTextarea.value);
+        currentWorkingObj = parsed;
+        modalFieldsContainer.innerHTML = '';
+        Object.keys(parsed).forEach(k => {
+          addFieldRow(k, parsed[k]);
+        });
+      } catch (_) {}
+    }
+
+    function validateJsonSyntax() {
+      try {
+        JSON.parse(modalJsonTextarea.value);
+        jsonSyntaxStatus.className = 'json-syntax-indicator json-syntax-valid';
+        jsonSyntaxText.textContent = '✓ Valid JSON syntax';
+        return true;
+      } catch (err) {
+        jsonSyntaxStatus.className = 'json-syntax-indicator json-syntax-invalid';
+        jsonSyntaxText.textContent = '✗ Syntax Error: ' + err.message;
+        return false;
+      }
+    }
+
+    modalJsonTextarea.addEventListener('input', () => {
+      if (validateJsonSyntax()) {
+        syncJsonToFields();
+      }
+    });
+
+    document.getElementById('formatJsonBtn').addEventListener('click', () => {
+      try {
+        const parsed = JSON.parse(modalJsonTextarea.value);
+        modalJsonTextarea.value = JSON.stringify(parsed, null, 2);
+        validateJsonSyntax();
+      } catch (_) {}
+    });
+
+    // Tab switching inside modal
+    function setModalTab(tab) {
+      if (tab === 'fields') {
+        document.getElementById('modalTabFieldsBtn').classList.add('active');
+        document.getElementById('modalTabJsonBtn').classList.remove('active');
+        document.getElementById('modalFieldsView').classList.remove('hidden');
+        document.getElementById('modalJsonView').classList.add('hidden');
+      } else {
+        document.getElementById('modalTabFieldsBtn').classList.remove('active');
+        document.getElementById('modalTabJsonBtn').classList.add('active');
+        document.getElementById('modalFieldsView').classList.add('hidden');
+        document.getElementById('modalJsonView').classList.remove('hidden');
+      }
+    }
+
+    document.getElementById('modalTabFieldsBtn').addEventListener('click', () => {
+      syncJsonToFields();
+      setModalTab('fields');
+    });
+
+    document.getElementById('modalTabJsonBtn').addEventListener('click', () => {
+      syncFieldsToJson();
+      setModalTab('json');
+    });
+
+    // Close Modal without saving
+    function closeModal() {
+      dataModal.classList.remove('open');
+    }
+    document.getElementById('modalCloseBtn').addEventListener('click', closeModal);
+    document.getElementById('dataModalCloseTopBtn').addEventListener('click', closeModal);
+
+    // Save Modal changes
+    document.getElementById('modalSaveBtn').addEventListener('click', async () => {
+      if (!validateJsonSyntax()) {
+        alert('Cannot save: Invalid JSON syntax in editor.');
+        return;
+      }
+
+      // Sync latest values
+      syncJsonToFields();
+
+      let payload = {};
+      if (currentModalMode === 'single_tc') {
+        payload = {
+          type: 'single_tc',
+          tcKey: currentModalTcKey,
+          inputs: currentWorkingObj
+        };
+      } else if (currentModalMode === 'global') {
+        payload = {
+          type: 'global',
+          globalFixtures: currentWorkingObj
+        };
+      } else if (currentModalMode === 'full_flat') {
+        payload = {
+          type: 'full_flat',
+          flatTestData: currentWorkingObj
+        };
+      }
+
+      try {
+        const res = await fetch('/api/agent04/data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const result = await res.json();
+        if (!res.ok || result.error) throw new Error(result.error || 'Save failed');
+
+        closeModal();
+        showToast('✓ Test data saved and synced to tests/fixtures/test-data.json!');
+        await fetchState();
+      } catch (err) {
+        alert('Failed to save test data: ' + err.message);
+      }
+    });
+
+    // Edit Global Fixtures Button
+    document.getElementById('editGlobalFixturesBtn').addEventListener('click', openModalForGlobalFixtures);
+
+    // Edit Full test-data.json Button
+    document.getElementById('openFullJsonEditorBtn').addEventListener('click', openModalForFullJson);
+
+    // ── Run Agent 04 ──────────────────────────────────────────────────────────
+    document.getElementById('runBtn').addEventListener('click', async () => {
+      const projectName = document.getElementById('projectNameInput').value.trim();
+
+      document.getElementById('inputPhase').classList.add('hidden');
+      document.getElementById('runningPhase').classList.remove('hidden');
+      document.getElementById('logStream').innerHTML = '';
+
+      connectSSE();
+
+      try {
+        const res = await fetch('/api/agent04/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectName })
+        });
+        if (!res.ok) throw new Error('Failed to initiate Agent 04');
+      } catch (err) {
+        alert('Error starting Agent 04: ' + err.message);
+        document.getElementById('inputPhase').classList.remove('hidden');
+        document.getElementById('runningPhase').classList.add('hidden');
+      }
+    });
+
+    // ── SSE Logs Stream ───────────────────────────────────────────────────────
+    function connectSSE() {
+      if (sseSource) sseSource.close();
+      const logContainer = document.getElementById('logStream');
+
+      sseSource = new EventSource('/api/agent04/logs');
+      sseSource.onmessage = (e) => {
+        try {
+          const ev = JSON.parse(e.data);
+          if (ev.type === 'log') {
+            const line = document.createElement('div');
+            line.className = ev.level === 'error' ? 'log-error' : (ev.level === 'warn' ? 'log-warn' : 'log-info');
+            line.textContent = ev.message;
+            logContainer.appendChild(line);
+            logContainer.scrollTop = logContainer.scrollHeight;
+          } else if (ev.type === 'exit') {
+            sseSource.close();
+            sseSource = null;
+            setTimeout(() => fetchState(), 1200);
+          }
+        } catch (_) {}
+      };
+    }
+
+    // ── Approval and Rejection Flow ───────────────────────────────────────────
+    const approvalModal = document.getElementById('approvalModal');
+    const rejectionModal = document.getElementById('rejectionModal');
+
+    document.getElementById('approveBtn').addEventListener('click', () => {
+      approvalModal.classList.add('open');
+    });
+    document.getElementById('cancelApprovalBtn').addEventListener('click', () => {
+      approvalModal.classList.remove('open');
+    });
+
+    document.getElementById('confirmApprovalBtn').addEventListener('click', async () => {
+      const comment = document.getElementById('approvalComment').value.trim();
+      approvalModal.classList.remove('open');
+
+      try {
+        const res = await fetch('/api/agent04/approve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ comment })
+        });
+        const d = await res.json();
+        showToast('✓ Stage 04 Approved! Proceeding to Agent 05...');
+        setTimeout(() => {
+          window.location.href = '/agent05.html';
+        }, 1500);
+      } catch (err) {
+        alert('Approval failed: ' + err.message);
+      }
+    });
+
+    document.getElementById('rejectBtn').addEventListener('click', () => {
+      rejectionModal.classList.add('open');
+    });
+    document.getElementById('cancelRejectionBtn').addEventListener('click', () => {
+      rejectionModal.classList.remove('open');
+    });
+
+    document.getElementById('confirmRejectionBtn').addEventListener('click', async () => {
+      const comment = document.getElementById('rejectionComment').value.trim();
+      if (!comment) {
+        alert('Please provide a rejection reason.');
+        return;
+      }
+      rejectionModal.classList.remove('open');
+
+      try {
+        const res = await fetch('/api/agent04/reject', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ comment })
+        });
+        showToast('Stage 04 rejected. Ready for re-run.');
+        await fetchState();
+      } catch (err) {
+        alert('Rejection failed: ' + err.message);
+      }
+    });
+
+    // ── AI Chat Assistant ─────────────────────────────────────────────────────
+    const chatDrawer = document.getElementById('chatDrawer');
+    document.getElementById('chatToggleBtn').addEventListener('click', () => {
+      chatDrawer.classList.toggle('open');
+    });
+    document.getElementById('chatCloseBtn').addEventListener('click', () => {
+      chatDrawer.classList.remove('open');
+    });
+
+    async function sendChatMessage() {
+      const input = document.getElementById('chatInput');
+      const text = input.value.trim();
+      if (!text) return;
+
+      input.value = '';
+      const msgBox = document.getElementById('chatMessages');
+
+      // Add user bubble
+      const uBubble = document.createElement('div');
+      uBubble.className = 'chat-bubble user';
+      uBubble.textContent = text;
+      msgBox.appendChild(uBubble);
+
+      chatHistory.push({ role: 'user', content: text });
+
+      // Add thinking bubble
+      const aBubble = document.createElement('div');
+      aBubble.className = 'chat-bubble aria';
+      aBubble.textContent = 'Analyzing test data manifest...';
+      msgBox.appendChild(aBubble);
+      msgBox.scrollTop = msgBox.scrollHeight;
+
+      try {
+        const res = await fetch('/api/agent04/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: text, history: chatHistory })
+        });
+        const d = await res.json();
+        aBubble.textContent = d.reply || 'No response from assistant.';
+        chatHistory.push({ role: 'assistant', content: aBubble.textContent });
+      } catch (err) {
+        aBubble.textContent = 'Error: ' + err.message;
+      }
+      msgBox.scrollTop = msgBox.scrollHeight;
+    }
+
+    document.getElementById('chatSendBtn').addEventListener('click', sendChatMessage);
+    document.getElementById('chatInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') sendChatMessage();
+    });
+
+    // ── Helper Utilities ──────────────────────────────────────────────────────
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/[&<>"']/g, m => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[m]));
+    }
+
+    function getTypeClass(t) {
+      const type = (t || '').toLowerCase();
+      if (type.includes('pos')) return 'type-positive';
+      if (type.includes('neg')) return 'type-negative';
+      if (type.includes('edge') || type.includes('bound')) return 'type-edge';
+      if (type.includes('api')) return 'type-api';
+      return 'type-positive';
+    }
+
+    // ── Initialize ────────────────────────────────────────────────────────────
+    window.addEventListener('DOMContentLoaded', () => {
+      renderPipelineBar();
+      fetchState();
+    });
+  </script>
+</body>
+</html>
