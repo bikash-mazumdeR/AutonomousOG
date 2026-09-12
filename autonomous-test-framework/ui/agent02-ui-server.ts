@@ -31,16 +31,41 @@ function broadcastSSE(data: any) {
 }
 
 // ── GET /api/agent02/state ────────────────────────────────────────────────────
-app.get('/api/agent02/state', async (_req: Request, res: Response) => {
+app.get('/api/agent02/state', async (req: Request, res: Response) => {
   try {
-    if (!(stateManager as any)._initialized) {
-      try { await stateManager.initialize(); } catch (_) {}
+    let reqProject = (req.query.projectId as string || '').trim();
+    if (!reqProject) {
+      try {
+        const stateDb = stateManager.getDatabase();
+        const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get() as any;
+        if (latestRun?.project_id) reqProject = latestRun.project_id;
+      } catch (_) {}
     }
-    
+    if (reqProject && (stateManager as any)._projectId !== reqProject) {
+      await stateManager.initialize(reqProject);
+    } else if (!(stateManager as any)._initialized) {
+      await stateManager.initialize(reqProject || 'default');
+    }
+
+    const stage01 = await stateManager.get('stages.01-requirement-analyzer');
     const stage = await stateManager.get('stages.02-test-case-generator');
     const requirements = await stateManager.getPipelineArtifact('analyzedRequirements');
     const testCases = await stateManager.getPipelineArtifact('testCases');
-    res.json({ stage, requirements, testCases, running: !!activeProcess });
+
+    // Detect if test cases are out of date compared to latest requirement analysis
+    const isOutOfDate = !!(
+      stage01?.completedAt && stage?.completedAt &&
+      new Date(stage01.completedAt).getTime() > new Date(stage.completedAt).getTime()
+    );
+
+    res.json({
+      stage,
+      requirements,
+      testCases,
+      isOutOfDate,
+      projectName: (stateManager as any)._projectId,
+      running: !!activeProcess
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -55,7 +80,16 @@ app.post('/api/agent02/run', async (req: Request, res: Response) => {
     activeProcess = null;
   }
 
-  const projectName = ((req.body?.projectName as string) || 'ARIA Project').trim();
+  let projectName = ((req.body?.projectName as string) || '').trim();
+  if (!projectName) {
+    try {
+      const stateDb = stateManager.getDatabase();
+      const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get() as any;
+      if (latestRun?.project_id) projectName = latestRun.project_id;
+    } catch (_) {}
+  }
+  projectName = projectName || 'ARIA Project';
+
   const skipPositive = req.body?.skipPositive ? '--skip-positive' : '';
   const skipNegative = req.body?.skipNegative ? '--skip-negative' : '';
   const skipEdge = req.body?.skipEdge ? '--skip-edge' : '';
@@ -181,6 +215,82 @@ app.post('/api/agent02/chat', async (req: Request, res: Response) => {
   }
 });
 
+// ── Advisory Insights Helper ────────────────────────────────────────────────
+function computeRequirementMappingInsights(requirements: any, testCasesOutput: any) {
+  const allTCs: any[] = testCasesOutput?.zephyrExport?.testCases || testCasesOutput?.testCases || [];
+  const isSelected = (tc: any) => tc.status !== 'OBSOLETE' && !tc.isObsolete && tc.selected !== false;
+  const selectedTCs = allTCs.filter(isSelected);
+  const unselectedTCs = allTCs.filter((tc: any) => !isSelected(tc));
+
+  const features = requirements?.features || [];
+  const pendingRequirements: any[] = [];
+  const featureMap = new Map<string, string>();
+
+  for (const f of features) {
+    featureMap.set(f.id, f.name);
+    for (const s of (f.userStories || [])) {
+      const selectedForStory = selectedTCs.filter((tc: any) => {
+        const sid = tc.traceabilityLinks?.userStoryId || tc.userStoryId;
+        return sid === s.id;
+      });
+      const unselectedForStory = unselectedTCs.filter((tc: any) => {
+        const sid = tc.traceabilityLinks?.userStoryId || tc.userStoryId;
+        return sid === s.id;
+      });
+
+      if (selectedForStory.length === 0) {
+        const reason = unselectedForStory.length > 0
+          ? `All ${unselectedForStory.length} test case(s) (${unselectedForStory.map((t: any) => t.key).join(', ')}) were unselected during Agent 02 stage.`
+          : 'No test cases were generated or mapped for this user story in the Requirement Document.';
+
+        pendingRequirements.push({
+          storyId: s.id,
+          storyTitle: s.title || s.name || s.id,
+          featureId: f.id,
+          featureName: f.name,
+          riskLevel: f.riskLevel || 'MEDIUM',
+          reason,
+          unselectedKeys: unselectedForStory.map((t: any) => t.key),
+          status: 'PENDING_MAPPING',
+        });
+      } else if (unselectedForStory.length > 0) {
+        pendingRequirements.push({
+          storyId: s.id,
+          storyTitle: s.title || s.name || s.id,
+          featureId: f.id,
+          featureName: f.name,
+          riskLevel: f.riskLevel || 'MEDIUM',
+          reason: `Partial mapping: ${selectedForStory.length} active, ${unselectedForStory.length} unselected (${unselectedForStory.map((t: any) => t.key).join(', ')}).`,
+          unselectedKeys: unselectedForStory.map((t: any) => t.key),
+          status: 'PARTIAL_MAPPING',
+        });
+      }
+    }
+  }
+
+  const unselectedTestCases = unselectedTCs.map((tc: any) => ({
+    key: tc.key,
+    name: tc.name,
+    type: tc.type,
+    userStoryId: tc.traceabilityLinks?.userStoryId || tc.userStoryId || 'US-01',
+    featureName: featureMap.get(tc.traceabilityLinks?.featureId) || 'General Features',
+    reason: 'Excluded by user during Agent 02 approval stage',
+  }));
+
+  const summary = unselectedTCs.length > 0
+    ? `${unselectedTCs.length} test case(s) were excluded during Agent 02 stage. ${pendingRequirements.length} requirement(s) have pending or partial test coverage. (Informational Advisory — user may still approve or reject).`
+    : 'All generated test cases were selected. Full requirement traceability mapped.';
+
+  return {
+    unselectedCount: unselectedTCs.length,
+    selectedCount: selectedTCs.length,
+    totalCount: allTCs.length,
+    unselectedTestCases,
+    pendingRequirements,
+    summary,
+  };
+}
+
 // ── POST /api/agent02/approve ─────────────────────────────────────────────────
 app.post('/api/agent02/approve', async (req: Request, res: Response) => {
   const uncheckedTestCaseKeys = req.body?.uncheckedTestCaseKeys || [];
@@ -191,11 +301,16 @@ app.post('/api/agent02/approve', async (req: Request, res: Response) => {
       
       const allTCs = testCasesOutput.zephyrExport.testCases;
       
-      // Mark unchecked TCs as OBSOLETE
+      // Explicitly set approved and obsolete flags
       for (const tc of allTCs) {
         if (uncheckedTestCaseKeys.includes(tc.key)) {
           tc.status = 'OBSOLETE';
           tc.isObsolete = true;
+          tc.selected = false;
+        } else {
+          if (tc.status === 'OBSOLETE') tc.status = 'Draft';
+          tc.isObsolete = false;
+          tc.selected = true;
         }
       }
       
@@ -206,20 +321,29 @@ app.post('/api/agent02/approve', async (req: Request, res: Response) => {
       
       // Rewrite k6ScenarioIndex excluding obsolete ones
       const k6ScenarioIndex = allTCs
-        .filter((tc: any) => tc.type === 'PERFORMANCE' && tc.performanceRef && tc.status !== 'OBSOLETE')
+        .filter((tc: any) => tc.type === 'PERFORMANCE' && tc.performanceRef && tc.status !== 'OBSOLETE' && !tc.isObsolete && tc.selected !== false)
         .map((tc: any) => ({
           tcKey:          tc.key,
           scriptPath:     tc.performanceRef.k6ScriptPath,
           scenario:       tc.performanceRef.scenario,
           targetEndpoint: tc.performanceRef.targetEndpoint,
-          featureId:      tc.traceabilityLinks.featureId,
-          storyId:        tc.traceabilityLinks.userStoryId,
+          featureId:      tc.traceabilityLinks?.featureId,
+          storyId:        tc.traceabilityLinks?.userStoryId,
         }));
       
       testCasesOutput.k6ScenarioIndex = k6ScenarioIndex;
       
       // Save updated artifacts
       await stateManager.setPipelineArtifact('testCases', testCasesOutput);
+
+      // Always sync reviewedTestCases advisory so Agent 03 screen shows recent data immediately
+      const liveInsights = computeRequirementMappingInsights(requirements, testCasesOutput);
+      const reviewed = await stateManager.getPipelineArtifact('reviewedTestCases');
+      if (reviewed) {
+        reviewed.informationalInsights = liveInsights;
+        reviewed.unselectedTestCases = liveInsights.unselectedTestCases;
+        await stateManager.setPipelineArtifact('reviewedTestCases', reviewed);
+      }
     }
     
     // Attempt webhook proxy with direct StateManager fallback
@@ -254,9 +378,18 @@ app.post('/api/agent02/approve', async (req: Request, res: Response) => {
       proxyRes.on('data', chunk => { data += chunk; });
       proxyRes.on('end', () => {
         if (!responded) {
-          responded = true;
-          try { res.status(proxyRes.statusCode || 200).json(JSON.parse(data)); }
-          catch { res.status(proxyRes.statusCode || 200).send(data); }
+          try {
+            const parsed = JSON.parse(data);
+            if (proxyRes.statusCode && proxyRes.statusCode >= 400 && parsed.error && parsed.error.includes('mismatch')) {
+              logger.warn(`Approval webhook port ${APPROVAL_PORT} active for a different stage (${parsed.error}); using direct StateManager fallback for 02-test-case-generator`);
+              return fallbackDirect();
+            }
+            responded = true;
+            res.status(proxyRes.statusCode || 200).json(parsed);
+          } catch {
+            responded = true;
+            res.status(proxyRes.statusCode || 200).send(data);
+          }
         }
       });
     });
@@ -313,9 +446,18 @@ app.post('/api/agent02/reject', (req: Request, res: Response) => {
     proxyRes.on('data', chunk => { data += chunk; });
     proxyRes.on('end', () => {
       if (!responded) {
-        responded = true;
-        try { res.status(proxyRes.statusCode || 200).json(JSON.parse(data)); }
-        catch { res.status(proxyRes.statusCode || 200).send(data); }
+        try {
+          const parsed = JSON.parse(data);
+          if (proxyRes.statusCode && proxyRes.statusCode >= 400 && parsed.error && parsed.error.includes('mismatch')) {
+            logger.warn(`Rejection webhook port ${APPROVAL_PORT} active for a different stage (${parsed.error}); using direct StateManager fallback for 02-test-case-generator`);
+            return fallbackDirect();
+          }
+          responded = true;
+          res.status(proxyRes.statusCode || 200).json(parsed);
+        } catch {
+          responded = true;
+          res.status(proxyRes.statusCode || 200).send(data);
+        }
       }
     });
   });

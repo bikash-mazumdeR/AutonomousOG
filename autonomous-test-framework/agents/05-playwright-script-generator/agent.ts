@@ -10,6 +10,7 @@ import fs from 'fs';
 import { stateManager, STAGE_STATUS } from '../../core/state-manager/StateManager';
 import { memoryEngine } from '../../core/project-memory/MemoryEngine';
 import { approvalGate } from '../../core/approval-gate/ApprovalGate';
+import { ensureFixturesFileSynced, FIXTURES_PATH } from '../../core/state-manager/FixtureSync';
 import { Logger } from '../../core/logger/Logger';
 import { FRAMEWORK_CONFIG } from '../../config/framework.config';
 
@@ -61,7 +62,45 @@ class PlaywrightScriptGeneratorAgent {
       const memoryContext = await memoryEngine.getContextForStage(STAGE_ID);
       await stateManager.markStageRunning(STAGE_ID);
 
-      const testCases = (input.testData?.enrichedZephyrExport || input.reviewedTestCases?.reviewedZephyrExport)?.testCases || [];
+      // ── Approved Scope Enforcement ──────────────────────────────────────────
+      // Automation scripts are strictly generated ONLY for approved test cases
+      const isApproved = (tc: any) =>
+        tc.reviewStatus !== 'REJECTED' &&
+        tc.status !== 'OBSOLETE' &&
+        !tc.isObsolete &&
+        tc.selected !== false;
+
+      // input.testData (Agent 04) is only trustworthy for scope when its approved
+      // TC key set still matches the latest input.reviewedTestCases (Agent 02/03)
+      // approval. If the user went back and changed the Agent 02/03 selection after
+      // Agent 04 last ran, testData.enrichedZephyrExport is stale — fall back to the
+      // current reviewedTestCases scope (losing injected data enrichment for those
+      // TCs) rather than silently automating a larger/smaller set than was approved.
+      const reviewedRaw = input.reviewedTestCases?.reviewedZephyrExport?.testCases || [];
+      const enrichedRaw = input.testData?.enrichedZephyrExport?.testCases || [];
+      const reviewedApprovedKeys = new Set(reviewedRaw.filter(isApproved).map((tc: any) => tc.key));
+      const enrichedApprovedKeys = new Set(enrichedRaw.filter(isApproved).map((tc: any) => tc.key));
+      const testDataInSync = enrichedRaw.length > 0
+        && reviewedApprovedKeys.size === enrichedApprovedKeys.size
+        && [...reviewedApprovedKeys].every((k) => enrichedApprovedKeys.has(k));
+
+      if (enrichedRaw.length > 0 && !testDataInSync) {
+        this._logger.warn(
+          'testData artifact is out of sync with the latest reviewed test cases — Agent 02/03 approval changed since Agent 04 last ran. Using reviewedTestCases scope without injected test data. Re-run Agent 04 to regenerate enriched data for the current approved scope.',
+          { reviewedApproved: reviewedApprovedKeys.size, enrichedApproved: enrichedApprovedKeys.size },
+        );
+      }
+
+      const rawTestCases = testDataInSync ? enrichedRaw : reviewedRaw;
+      const testCases = rawTestCases.filter(isApproved);
+      const excludedTestCases = rawTestCases.filter((tc: any) => !isApproved(tc));
+
+      this._logger.info('Generating automation scripts for approved test cases', {
+        totalInput: rawTestCases.length,
+        approvedCount: testCases.length,
+        excludedCount: excludedTestCases.length,
+      });
+
       const manifest = input.testData?.manifest || null;
       const analysis = input.analyzedRequirements || (await stateManager.getPipelineArtifact('analyzedRequirements')) || {};
       const previousReview = input.reviewedScripts || (await stateManager.getPipelineArtifact('reviewedScripts'));
@@ -92,9 +131,7 @@ class PlaywrightScriptGeneratorAgent {
       const fixturesDataPath = path.resolve(__dirname, '../../tests/fixtures/test-data.json');
       let flatTestData: Record<string, any> = {};
       try {
-        if (fs.existsSync(fixturesDataPath)) {
-          flatTestData = JSON.parse(fs.readFileSync(fixturesDataPath, 'utf-8'));
-        }
+        flatTestData = await ensureFixturesFileSynced(stateManager, fixturesDataPath);
       } catch {
         flatTestData = {};
       }
@@ -113,6 +150,11 @@ class PlaywrightScriptGeneratorAgent {
         pomFiles: [],
         helperFiles: [],
       };
+
+      const basePagePath = path.join(PAGES_DIR, 'BasePage.ts');
+      if (fs.existsSync(basePagePath)) {
+        generatedFiles.pomFiles.push(basePagePath);
+      }
 
       for (const [featureId, group] of Object.entries(featureGroups)) {
         // ── Partition TCs by test type into UI, API, and Perf buckets ──
@@ -191,14 +233,25 @@ class PlaywrightScriptGeneratorAgent {
         }
       }
 
-      this._generateApiHelper();
-      this._generateNetworkCapture();
+      this._generateApiHelper(generatedFiles);
+      this._generateNetworkCapture(generatedFiles);
 
       const output = {
         ...generatedFiles,
         totalFilesGenerated:
-          generatedFiles.specFiles.length + generatedFiles.k6Files.length + generatedFiles.pomFiles.length,
+          generatedFiles.specFiles.length +
+          generatedFiles.k6Files.length +
+          generatedFiles.pomFiles.length +
+          generatedFiles.helperFiles.length,
         updatedTestCases: testCases,
+        approvedCount: testCases.length,
+        excludedCount: excludedTestCases.length,
+        excludedTestCases: excludedTestCases.map((tc: any) => ({
+          key: tc.key,
+          name: tc.name,
+          type: tc.type,
+          reason: tc.reviewStatus === 'REJECTED' ? 'Rejected in Agent 03 review' : 'Excluded by user selection'
+        })),
         featureCount: Object.keys(featureGroups).length,
         generatedAt: new Date().toISOString(),
       };
@@ -299,7 +352,7 @@ export class BasePage {
     return memoryContext?.healedSelectors || {};
   }
 
-  _generateApiHelper() {
+  _generateApiHelper(generatedFiles?: any) {
     const apiHelperPath = path.join(HELPER_DIR, 'apiHelper.ts');
     if (!fs.existsSync(apiHelperPath)) {
       const code = `import { APIRequestContext, APIResponse } from '@playwright/test';
@@ -319,9 +372,12 @@ export async function performRequest(
 `;
       fs.writeFileSync(apiHelperPath, code, 'utf-8');
     }
+    if (generatedFiles?.helperFiles && !generatedFiles.helperFiles.includes(apiHelperPath)) {
+      generatedFiles.helperFiles.push(apiHelperPath);
+    }
   }
 
-  _generateNetworkCapture() {
+  _generateNetworkCapture(generatedFiles?: any) {
     const networkCapturePath = path.join(HELPER_DIR, 'networkCapture.ts');
     if (!fs.existsSync(networkCapturePath)) {
       const code = `import { Page, Request } from '@playwright/test';
@@ -339,10 +395,21 @@ export async function captureNetworkRequests(page: Page, urlPattern: string): Pr
 `;
       fs.writeFileSync(networkCapturePath, code, 'utf-8');
     }
+    if (generatedFiles?.helperFiles && !generatedFiles.helperFiles.includes(networkCapturePath)) {
+      generatedFiles.helperFiles.push(networkCapturePath);
+    }
   }
 
   _buildApprovalSummary(output: any) {
-    return { 'Files Generated': output.totalFilesGenerated };
+    return {
+      'Files Generated': output.totalFilesGenerated,
+      'Approved TCs': output.approvedCount ?? output.updatedTestCases?.length,
+      'Excluded TCs': output.excludedCount ?? 0,
+      'Spec Files': (output.specFiles || []).length,
+      'Page Objects': (output.pomFiles || []).length,
+      'K6 Scripts': (output.k6Files || []).length,
+      'Helper Files': (output.helperFiles || []).length,
+    };
   }
 
   _buildAgentResult(output: any, warnings: any[], durationMs: number) {
@@ -365,15 +432,36 @@ export const PlaywrightScriptCoordinator = PlaywrightScriptGeneratorAgent;
 
 if (require.main === module) {
   (async () => {
-    let projectId = FRAMEWORK_CONFIG.projectId;
-    try {
-      const { stateDb } = require('../../core/state-manager/Database');
-      stateDb.initialize();
-      const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get();
-      if (latestRun && latestRun.project_id) {
-        projectId = latestRun.project_id;
+    const args = process.argv.slice(2);
+    const opts: any = {};
+    for (let i = 0; i < args.length; i++) {
+      const arg = args[i];
+      if (arg === '--') continue;
+      if (arg.startsWith('--')) {
+        const [key, val] = arg.slice(2).split('=');
+        if (val !== undefined) {
+          opts[key] = val;
+        } else if (args[i + 1] !== undefined && !args[i + 1].startsWith('--')) {
+          opts[key] = args[i + 1];
+          i++;
+        } else {
+          opts[key] = true;
+        }
       }
-    } catch {}
+    }
+
+    let projectId = opts.project;
+    if (!projectId) {
+      try {
+        const { stateDb } = require('../../core/state-manager/Database');
+        stateDb.initialize();
+        const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get();
+        if (latestRun && latestRun.project_id) {
+          projectId = latestRun.project_id;
+        }
+      } catch {}
+    }
+    projectId = projectId || FRAMEWORK_CONFIG.projectId;
 
     await stateManager.initialize(projectId);
     await memoryEngine.initialize(projectId);

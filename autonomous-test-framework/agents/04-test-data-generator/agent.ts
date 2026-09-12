@@ -1095,8 +1095,14 @@ if (require.main === module) {
       if (arg === '--') continue;
       if (arg.startsWith('--')) {
         const [key, val] = arg.slice(2).split('=');
-        opts[key] = val || args[i + 1];
-        if (!val) i++;
+        if (val !== undefined) {
+          opts[key] = val;
+        } else if (args[i + 1] !== undefined && !args[i + 1].startsWith('--')) {
+          opts[key] = args[i + 1];
+          i++;
+        } else {
+          opts[key] = true;
+        }
       }
     }
 

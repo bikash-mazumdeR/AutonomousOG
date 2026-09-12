@@ -14,6 +14,7 @@
     "ui:agent02": "node -r ts-node/register ui/agent02-ui-server.ts",
     "ui:agent03": "node -r ts-node/register ui/agent03-ui-server.ts",
     "ui:agent04": "node -r ts-node/register ui/agent04-ui-server.ts",
+    "ui:agent05": "node -r ts-node/register ui/agent05-ui-server.ts",
     "pipeline:start": "node -r ts-node/register orchestrator.ts",
     "pipeline:status": "node -r ts-node/register cli/status.ts",
     "pipeline:status:watch": "node -r ts-node/register cli/status.ts --watch",

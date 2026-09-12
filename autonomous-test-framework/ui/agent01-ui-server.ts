@@ -22,6 +22,7 @@ import { memoryEngine } from '../core/project-memory/MemoryEngine';
 import { llmClient } from '../core/llm/LLMClient';
 import { Logger } from '../core/logger/Logger';
 import { syncFeatureFiles } from '../agents/02-test-case-generator/utils';
+import { ensureFixturesFileSynced, syncFixturesFileFromTestData } from '../core/state-manager/FixtureSync';
 
 require('dotenv').config();
 
@@ -130,9 +131,9 @@ app.post('/api/agent01/run', upload.single('file'), async (req: Request, res: Re
   // what the agent passes to stateManager.initialize() via --project=<name>
   const projectId = projectName;
 
-  // Initialise shared services (they share the same SQLite DB with the agent)
+  // Initialise shared services with a clean run for the project
   try {
-    await stateManager.initialize(projectId);
+    await stateManager.startNewRun(projectId);
     await memoryEngine.initialize(projectId);
     // synchronously mark as running so frontend polling immediately sees RUNNING and doesn't snap to old results
     await stateManager.markStageRunning('01-requirement-analyzer');
@@ -321,6 +322,16 @@ function handleApproval(stageId: string, action: 'approve' | 'reject') {
       if (responded) return;
       responded = true;
       try {
+        if (!(stateManager as any)._initialized) {
+          try {
+            const stateDb = stateManager.getDatabase();
+            const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get() as any;
+            await stateManager.initialize(latestRun?.project_id || 'ARIA Project');
+            await memoryEngine.initialize(latestRun?.project_id || 'ARIA Project');
+          } catch (_) {
+            await stateManager.initialize('ARIA Project');
+          }
+        }
         if (isApproval) {
           await stateManager.markStageApproved(stageId, comment);
           await memoryEngine.recordApprovalFeedback(stageId, 'APPROVED', comment);
@@ -341,9 +352,18 @@ function handleApproval(stageId: string, action: 'approve' | 'reject') {
       proxyRes.on('data', chunk => { data += chunk; });
       proxyRes.on('end', () => {
         if (!responded) {
-          responded = true;
-          try { res.status(proxyRes.statusCode || 200).json(JSON.parse(data)); }
-          catch { res.status(proxyRes.statusCode || 200).send(data); }
+          try {
+            const parsed = JSON.parse(data);
+            if (proxyRes.statusCode && proxyRes.statusCode >= 400 && parsed.error && parsed.error.includes('mismatch')) {
+              logger.warn(`Approval webhook port ${APPROVAL_PORT} active for different stage (${parsed.error}); using direct StateManager fallback for ${stageId}`);
+              return fallbackDirect();
+            }
+            responded = true;
+            res.status(proxyRes.statusCode || 200).json(parsed);
+          } catch {
+            responded = true;
+            res.status(proxyRes.statusCode || 200).send(data);
+          }
         }
       });
     });
@@ -378,15 +398,41 @@ function broadcastAgent02SSE(data: any): void {
   }
 }
 
-app.get('/api/agent02/state', async (_req: Request, res: Response) => {
+app.get('/api/agent02/state', async (req: Request, res: Response) => {
   try {
-    if (!(stateManager as any)._initialized) {
-      try { await stateManager.initialize(); } catch (_) {}
+    let reqProject = (req.query.projectId as string || '').trim();
+    if (!reqProject) {
+      try {
+        const stateDb = stateManager.getDatabase();
+        const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get() as any;
+        if (latestRun?.project_id) reqProject = latestRun.project_id;
+      } catch (_) {}
     }
+    if (reqProject && (stateManager as any)._projectId !== reqProject) {
+      await stateManager.initialize(reqProject);
+    } else if (!(stateManager as any)._initialized) {
+      await stateManager.initialize(reqProject || 'default');
+    }
+
+    const stage01 = await stateManager.get('stages.01-requirement-analyzer');
     const stage = await stateManager.get('stages.02-test-case-generator');
     const requirements = await stateManager.getPipelineArtifact('analyzedRequirements');
     const testCases = await stateManager.getPipelineArtifact('testCases');
-    res.json({ stage, requirements, testCases, running: !!activeAgent02Process });
+
+    // Detect if test cases are out of date compared to latest requirement analysis
+    const isOutOfDate = !!(
+      stage01?.completedAt && stage?.completedAt &&
+      new Date(stage01.completedAt).getTime() > new Date(stage.completedAt).getTime()
+    );
+
+    res.json({
+      stage,
+      requirements,
+      testCases,
+      isOutOfDate,
+      projectName: (stateManager as any)._projectId,
+      running: !!activeAgent02Process
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -400,7 +446,16 @@ app.post('/api/agent02/run', async (req: Request, res: Response) => {
     activeAgent02Process = null;
   }
 
-  const projectName = ((req.body?.projectName as string) || 'ARIA Project').trim();
+  let projectName = ((req.body?.projectName as string) || '').trim();
+  if (!projectName) {
+    try {
+      const stateDb = stateManager.getDatabase();
+      const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get() as any;
+      if (latestRun?.project_id) projectName = latestRun.project_id;
+    } catch (_) {}
+  }
+  projectName = projectName || 'ARIA Project';
+
   const skipPositive = req.body?.skipPositive ? '--skip-positive' : '';
   const skipNegative = req.body?.skipNegative ? '--skip-negative' : '';
   const skipEdge = req.body?.skipEdge ? '--skip-edge' : '';
@@ -521,6 +576,82 @@ app.post('/api/agent02/chat', async (req: Request, res: Response) => {
   }
 });
 
+// ── Advisory Insights Helper ────────────────────────────────────────────────
+function computeRequirementMappingInsights(requirements: any, testCasesOutput: any) {
+  const allTCs: any[] = testCasesOutput?.zephyrExport?.testCases || testCasesOutput?.testCases || [];
+  const isSelected = (tc: any) => tc.status !== 'OBSOLETE' && !tc.isObsolete && tc.selected !== false;
+  const selectedTCs = allTCs.filter(isSelected);
+  const unselectedTCs = allTCs.filter((tc: any) => !isSelected(tc));
+
+  const features = requirements?.features || [];
+  const pendingRequirements: any[] = [];
+  const featureMap = new Map<string, string>();
+
+  for (const f of features) {
+    featureMap.set(f.id, f.name);
+    for (const s of (f.userStories || [])) {
+      const selectedForStory = selectedTCs.filter((tc: any) => {
+        const sid = tc.traceabilityLinks?.userStoryId || tc.userStoryId;
+        return sid === s.id;
+      });
+      const unselectedForStory = unselectedTCs.filter((tc: any) => {
+        const sid = tc.traceabilityLinks?.userStoryId || tc.userStoryId;
+        return sid === s.id;
+      });
+
+      if (selectedForStory.length === 0) {
+        const reason = unselectedForStory.length > 0
+          ? `All ${unselectedForStory.length} test case(s) (${unselectedForStory.map((t: any) => t.key).join(', ')}) were unselected during Agent 02 stage.`
+          : 'No test cases were generated or mapped for this user story in the Requirement Document.';
+
+        pendingRequirements.push({
+          storyId: s.id,
+          storyTitle: s.title || s.name || s.id,
+          featureId: f.id,
+          featureName: f.name,
+          riskLevel: f.riskLevel || 'MEDIUM',
+          reason,
+          unselectedKeys: unselectedForStory.map((t: any) => t.key),
+          status: 'PENDING_MAPPING',
+        });
+      } else if (unselectedForStory.length > 0) {
+        pendingRequirements.push({
+          storyId: s.id,
+          storyTitle: s.title || s.name || s.id,
+          featureId: f.id,
+          featureName: f.name,
+          riskLevel: f.riskLevel || 'MEDIUM',
+          reason: `Partial mapping: ${selectedForStory.length} active, ${unselectedForStory.length} unselected (${unselectedForStory.map((t: any) => t.key).join(', ')}).`,
+          unselectedKeys: unselectedForStory.map((t: any) => t.key),
+          status: 'PARTIAL_MAPPING',
+        });
+      }
+    }
+  }
+
+  const unselectedTestCases = unselectedTCs.map((tc: any) => ({
+    key: tc.key,
+    name: tc.name,
+    type: tc.type,
+    userStoryId: tc.traceabilityLinks?.userStoryId || tc.userStoryId || 'US-01',
+    featureName: featureMap.get(tc.traceabilityLinks?.featureId) || 'General Features',
+    reason: 'Excluded by user during Agent 02 approval stage',
+  }));
+
+  const summary = unselectedTCs.length > 0
+    ? `${unselectedTCs.length} test case(s) were excluded during Agent 02 stage. ${pendingRequirements.length} requirement(s) have pending or partial test coverage. (Informational Advisory — user may still approve or reject).`
+    : 'All generated test cases were selected. Full requirement traceability mapped.';
+
+  return {
+    unselectedCount: unselectedTCs.length,
+    selectedCount: selectedTCs.length,
+    totalCount: allTCs.length,
+    unselectedTestCases,
+    pendingRequirements,
+    summary,
+  };
+}
+
 app.post('/api/agent02/approve', async (req: Request, res: Response) => {
   const uncheckedTestCaseKeys = req.body?.uncheckedTestCaseKeys || [];
   try {
@@ -531,22 +662,36 @@ app.post('/api/agent02/approve', async (req: Request, res: Response) => {
         if (uncheckedTestCaseKeys.includes(tc.key)) {
           tc.status = 'OBSOLETE';
           tc.isObsolete = true;
+          tc.selected = false;
+        } else {
+          if (tc.status === 'OBSOLETE') tc.status = 'Draft';
+          tc.isObsolete = false;
+          tc.selected = true;
         }
       }
       const requirements = await stateManager.getPipelineArtifact('analyzedRequirements');
       syncFeatureFiles(requirements, allTCs, logger);
       const k6ScenarioIndex = allTCs
-        .filter((tc: any) => tc.type === 'PERFORMANCE' && tc.performanceRef && tc.status !== 'OBSOLETE')
+        .filter((tc: any) => tc.type === 'PERFORMANCE' && tc.performanceRef && tc.status !== 'OBSOLETE' && !tc.isObsolete && tc.selected !== false)
         .map((tc: any) => ({
           tcKey:          tc.key,
           scriptPath:     tc.performanceRef.k6ScriptPath,
           scenario:       tc.performanceRef.scenario,
           targetEndpoint: tc.performanceRef.targetEndpoint,
-          featureId:      tc.traceabilityLinks.featureId,
-          storyId:        tc.traceabilityLinks.userStoryId,
+          featureId:      tc.traceabilityLinks?.featureId,
+          storyId:        tc.traceabilityLinks?.userStoryId,
         }));
       testCasesOutput.k6ScenarioIndex = k6ScenarioIndex;
       await stateManager.setPipelineArtifact('testCases', testCasesOutput);
+
+      // Always sync reviewedTestCases advisory so Agent 03 screen shows recent data immediately
+      const liveInsights = computeRequirementMappingInsights(requirements, testCasesOutput);
+      const reviewed = await stateManager.getPipelineArtifact('reviewedTestCases');
+      if (reviewed) {
+        reviewed.informationalInsights = liveInsights;
+        reviewed.unselectedTestCases = liveInsights.unselectedTestCases;
+        await stateManager.setPipelineArtifact('reviewedTestCases', reviewed);
+      }
     }
   } catch (err: any) {
     logger.warn('Failed to filter obsolete test cases during approval', { error: err.message });
@@ -641,12 +786,22 @@ app.get('/api/agent03/state', async (_req: Request, res: Response) => {
     const stage = await stateManager.get('stages.03-test-case-reviewer');
     const requirements = await stateManager.getPipelineArtifact('analyzedRequirements');
     const testCases = await stateManager.getPipelineArtifact('testCases');
-    const reviewedTestCases = await stateManager.getPipelineArtifact('reviewedTestCases');
+    let reviewedTestCases = await stateManager.getPipelineArtifact('reviewedTestCases');
+
+    // Always compute live informational advisory based on current approved test cases from Agent 02
+    const informationalInsights = computeRequirementMappingInsights(requirements, testCases);
+
+    if (reviewedTestCases) {
+      reviewedTestCases.informationalInsights = informationalInsights;
+      reviewedTestCases.unselectedTestCases = informationalInsights.unselectedTestCases;
+    }
+
     res.json({
       stage,
       requirements,
       testCases,
       reviewedTestCases,
+      informationalInsights,
       running: !!activeProcess03
     });
   } catch (err: any) {
@@ -883,6 +1038,11 @@ app.get('/api/agent04/state', async (_req: Request, res: Response) => {
         flatTestData = JSON.parse(fs.readFileSync(FIXTURES_PATH, 'utf-8'));
       } catch (_) {}
     }
+    if (Object.keys(flatTestData).length === 0 && testData) {
+      try {
+        flatTestData = syncFixturesFileFromTestData(testData, undefined, FIXTURES_PATH);
+      } catch (_) {}
+    }
 
     res.json({
       stage,
@@ -973,7 +1133,19 @@ app.get('/api/agent04/logs', (req: Request, res: Response) => {
 });
 
 // ── Approvals for Agent 04 ──────────────────────────────────────────────────
-app.post('/api/agent04/approve', handleApproval('04-test-data-generator', 'approve'));
+app.post('/api/agent04/approve', async (req: Request, res: Response) => {
+  try {
+    const testDataOutput = await stateManager.getPipelineArtifact('testData');
+    if (testDataOutput) {
+      syncFixturesFileFromTestData(testDataOutput, undefined, FIXTURES_PATH);
+      await stateManager.setPipelineArtifact('testData', testDataOutput);
+      logger.info('Synchronized fixtures to disk on Agent 04 approval', { fixturesPath: FIXTURES_PATH });
+    }
+  } catch (err: any) {
+    logger.warn('Failed to sync fixtures during Agent 04 approval', { error: err.message });
+  }
+  return handleApproval('04-test-data-generator', 'approve')(req, res);
+});
 app.post('/api/agent04/reject',  handleApproval('04-test-data-generator', 'reject'));
 
 // ── POST /api/agent04/chat ──────────────────────────────────────────────────
@@ -1121,6 +1293,282 @@ const updateTestDataHandler04 = async (req: Request, res: Response) => {
 app.put('/api/agent04/data', updateTestDataHandler04);
 app.post('/api/agent04/data', updateTestDataHandler04);
 
+// ── Agent 05 (Playwright Script Generator) Routes ───────────────────────────
+
+const SPECS_DIR_05 = path.join(FRAMEWORK_DIR, 'tests', 'specs');
+const PAGES_DIR_05 = path.join(FRAMEWORK_DIR, 'tests', 'pages');
+const K6_DIR_05 = path.join(FRAMEWORK_DIR, 'tests', 'k6');
+const HELPERS_DIR_05 = path.join(FRAMEWORK_DIR, 'tests', 'helpers');
+
+function scanDirectoryFiles05(dir: string, extFilter?: string[]) {
+  if (!fs.existsSync(dir)) return [];
+  try {
+    return fs.readdirSync(dir)
+      .filter(f => !extFilter || extFilter.some(ext => f.endsWith(ext)))
+      .map(f => {
+        const full = path.join(dir, f);
+        const st = fs.statSync(full);
+        return {
+          name: f,
+          relativePath: path.relative(FRAMEWORK_DIR, full).replace(/\\/g, '/'),
+          size: st.size,
+          mtime: st.mtime.toISOString(),
+        };
+      });
+  } catch {
+    return [];
+  }
+}
+
+let activeProcess05: ChildProcess | null = null;
+const sseClients05: Set<Response> = new Set();
+
+function broadcastSSE05(data: any) {
+  const payload = `data: ${JSON.stringify(data)}\n\n`;
+  for (const client of sseClients05) {
+    client.write(payload);
+  }
+}
+
+// ── GET /api/agent05/state ──────────────────────────────────────────────────
+app.get('/api/agent05/state', async (_req: Request, res: Response) => {
+  try {
+    if (!(stateManager as any)._initialized) {
+      try { await stateManager.initialize(); } catch (_) {}
+    }
+
+    const stage = await stateManager.get('stages.05-playwright-script-generator');
+    const requirements = await stateManager.getPipelineArtifact('analyzedRequirements');
+    const reviewedTestCases = await stateManager.getPipelineArtifact('reviewedTestCases');
+    const testData = await stateManager.getPipelineArtifact('testData');
+    const playwrightScripts = await stateManager.getPipelineArtifact('playwrightScripts');
+
+    if (!fs.existsSync(FIXTURES_PATH)) {
+      try {
+        await ensureFixturesFileSynced(stateManager, FIXTURES_PATH);
+      } catch (_) {}
+    }
+
+    const diskFiles = {
+      specFiles: scanDirectoryFiles05(SPECS_DIR_05, ['.spec.ts']),
+      pomFiles: scanDirectoryFiles05(PAGES_DIR_05, ['.ts']),
+      k6Files: scanDirectoryFiles05(K6_DIR_05, ['.js']),
+      helperFiles: scanDirectoryFiles05(HELPERS_DIR_05, ['.ts']),
+    };
+
+    res.json({
+      stage,
+      requirements,
+      reviewedTestCases,
+      testData,
+      playwrightScripts,
+      diskFiles,
+      running: !!activeProcess05
+    });
+  } catch (err: any) {
+    logger.error('Error fetching Agent 05 state', { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /api/agent05/run ───────────────────────────────────────────────────
+app.post('/api/agent05/run', async (req: Request, res: Response) => {
+  if (activeProcess05) {
+    logger.info('Killing existing Agent 05 process to start a new run');
+    activeProcess05.removeAllListeners('close');
+    activeProcess05.kill('SIGKILL');
+    activeProcess05 = null;
+  }
+
+  let projectName = (req.body?.projectName as string || '').trim();
+  if (!projectName) {
+    try {
+      const stateDb = stateManager.getDatabase();
+      const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get() as any;
+      if (latestRun?.project_id) projectName = latestRun.project_id;
+    } catch (_) {}
+  }
+  projectName = projectName || 'ARIA Project';
+
+  try {
+    await stateManager.initialize(projectName);
+    await memoryEngine.initialize(projectName);
+    await stateManager.markStageRunning('05-playwright-script-generator');
+  } catch (_) { /* non-fatal */ }
+
+  const args = [
+    '-r', 'ts-node/register',
+    path.join(FRAMEWORK_DIR, 'agents', '05-playwright-script-generator', 'agent.ts'),
+    `--project=${projectName}`
+  ];
+
+  logger.info('Spawning Agent 05', { project: projectName, args: args.join(' ') });
+  activeProcess05 = spawn(process.execPath, args, {
+    cwd: FRAMEWORK_DIR,
+    env: { ...process.env },
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+
+  activeProcess05.stdout?.on('data', (chunk: Buffer) => {
+    chunk.toString().split('\n').filter(Boolean).forEach((line: string) =>
+      broadcastSSE05({ type: 'log', level: 'info', message: line }),
+    );
+  });
+
+  activeProcess05.stderr?.on('data', (chunk: Buffer) => {
+    chunk.toString().split('\n').filter(Boolean).forEach((line: string) =>
+      broadcastSSE05({ type: 'log', level: 'error', message: line }),
+    );
+  });
+
+  activeProcess05.on('close', (code: number) => {
+    logger.info('Agent 05 process exited', { code });
+    activeProcess05 = null;
+    broadcastSSE05({ type: 'exit', code });
+  });
+
+  res.json({ ok: true, message: 'Agent 05 started' });
+});
+
+// ── GET /api/agent05/logs ───────────────────────────────────────────────────
+app.get('/api/agent05/logs', (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+
+  sseClients05.add(res);
+  res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`);
+
+  req.on('close', () => {
+    sseClients05.delete(res);
+  });
+});
+
+// ── GET /api/agent05/file (Read Code Content) ─────────────────────────────────
+app.get('/api/agent05/file', (req: Request, res: Response) => {
+  const relPath = (req.query.path as string || '').trim();
+  if (!relPath) {
+    return res.status(400).json({ error: 'path query parameter is required' });
+  }
+
+  const normalized = path.normalize(relPath).replace(/^[/\\]+/, '');
+  const targetPath = path.resolve(FRAMEWORK_DIR, normalized);
+
+  if (!targetPath.startsWith(FRAMEWORK_DIR) || (!targetPath.includes(path.join('tests', 'specs')) && !targetPath.includes(path.join('tests', 'pages')) && !targetPath.includes(path.join('tests', 'k6')) && !targetPath.includes(path.join('tests', 'helpers')))) {
+    return res.status(403).json({ error: 'Access denied. File must be within tests/ directory.' });
+  }
+
+  if (!fs.existsSync(targetPath) || !fs.statSync(targetPath).isFile()) {
+    return res.status(404).json({ error: `File not found: ${relPath}` });
+  }
+
+  try {
+    const content = fs.readFileSync(targetPath, 'utf-8');
+    const st = fs.statSync(targetPath);
+    res.json({
+      ok: true,
+      path: relPath,
+      content,
+      size: st.size,
+      mtime: st.mtime.toISOString(),
+    });
+  } catch (err: any) {
+    logger.error('Error reading script file', { path: relPath, error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PUT / POST /api/agent05/file (Save Code Content) ─────────────────────────
+const saveFileHandler05 = async (req: Request, res: Response) => {
+  const { path: relPath, content } = req.body || {};
+  if (!relPath || typeof content !== 'string') {
+    return res.status(400).json({ error: 'path and content string are required' });
+  }
+
+  const normalized = path.normalize(relPath).replace(/^[/\\]+/, '');
+  const targetPath = path.resolve(FRAMEWORK_DIR, normalized);
+
+  if (!targetPath.startsWith(FRAMEWORK_DIR) || (!targetPath.includes(path.join('tests', 'specs')) && !targetPath.includes(path.join('tests', 'pages')) && !targetPath.includes(path.join('tests', 'k6')) && !targetPath.includes(path.join('tests', 'helpers')))) {
+    return res.status(403).json({ error: 'Access denied. File must be within tests/ directory.' });
+  }
+
+  try {
+    const dir = path.dirname(targetPath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(targetPath, content, 'utf-8');
+
+    logger.info('Script/POM file saved via Agent 05 UI', { path: relPath, size: content.length });
+    return res.json({ ok: true, path: relPath, size: content.length });
+  } catch (err: any) {
+    logger.error('Error saving script file', { path: relPath, error: err.message });
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+app.put('/api/agent05/file', saveFileHandler05);
+app.post('/api/agent05/file', saveFileHandler05);
+
+// ── Approvals for Agent 05 ──────────────────────────────────────────────────
+app.post('/api/agent05/approve', handleApproval('05-playwright-script-generator', 'approve'));
+app.post('/api/agent05/reject',  handleApproval('05-playwright-script-generator', 'reject'));
+
+// ── POST /api/agent05/chat ──────────────────────────────────────────────────
+app.post('/api/agent05/chat', async (req: Request, res: Response) => {
+  const { message, history = [] } = req.body as {
+    message: string;
+    history: Array<{ role: 'user' | 'assistant'; content: string }>;
+  };
+
+  if (!message?.trim()) {
+    return res.status(400).json({ error: 'message is required' });
+  }
+
+  try {
+    const scriptsOutput = await stateManager.getPipelineArtifact('playwrightScripts');
+    const reviewedReport = await stateManager.getPipelineArtifact('reviewedTestCases');
+
+    const systemPrompt = [
+      'You are ARIA, a Senior Playwright Test Automation Architect.',
+      'The user wants to inspect generated Playwright specs (.spec.ts), Page Object Models (Page.ts), API request fixtures, and K6 scripts.',
+      'Answer questions accurately based on the playwrightScripts artifact and framework standards (centralized test-data.json, accessible locators, BasePage inheritance, TLS negotiation details).',
+      'If a detail is not present in the generated code or artifact, state that clearly — do NOT invent facts.',
+      'Be concise, analytical, and provide code examples when helpful.',
+      '',
+      '=== SCRIPT GENERATION SUMMARY ===',
+      scriptsOutput ? JSON.stringify({
+        totalFilesGenerated: scriptsOutput.totalFilesGenerated,
+        approvedCount: scriptsOutput.approvedCount,
+        excludedCount: scriptsOutput.excludedCount,
+        specFiles: (scriptsOutput.specFiles || []).map((f: string) => path.basename(f)),
+        pomFiles: (scriptsOutput.pomFiles || []).map((f: string) => path.basename(f)),
+        k6Files: (scriptsOutput.k6Files || []).map((f: string) => path.basename(f)),
+        featureCount: scriptsOutput.featureCount
+      }, null, 2) : '(No scripts generated yet)',
+      '',
+      '=== APPROVED TEST CASES INPUT ===',
+      reviewedReport?.approvedCount ? `Approved test cases: ${reviewedReport.approvedCount}` : '(No reviewed cases found)'
+    ].join('\n');
+
+    const messages = [
+      { role: 'system' as const, content: systemPrompt },
+      ...history.map(m => ({ role: m.role, content: m.content })),
+      { role: 'user' as const, content: message }
+    ];
+
+    const reply = await llmClient.chat(messages, {
+      model: process.env.LITELLM_MODEL || 'gemini/gemini-2.5-flash',
+      temperature: 0.2,
+      maxTokens: 1000
+    });
+
+    res.json({ reply });
+  } catch (err: any) {
+    logger.error('Agent 05 chat failed', { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Start ─────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`\n╔══════════════════════════════════════════════╗`);
@@ -1130,7 +1578,7 @@ app.listen(PORT, () => {
   logger.info(`Agent UI server started`, { port: PORT });
 });
 
-// Also listen on port 3001, 3002, and 3003 if available
+// Also listen on port 3001, 3002, 3003, and 3004 if available
 const ALT_PORT = parseInt(process.env.AGENT02_UI_PORT || '3001', 10);
 if (ALT_PORT !== PORT) {
   try {
@@ -1163,6 +1611,18 @@ if (AGENT04_PORT !== PORT && AGENT04_PORT !== ALT_PORT && AGENT04_PORT !== AGENT
     });
     port04Server.on('error', (err: any) => {
       logger.info(`Agent 04 port ${AGENT04_PORT} not bound: ${err.message}`);
+    });
+  } catch (_) {}
+}
+
+const AGENT05_PORT = parseInt(process.env.AGENT05_UI_PORT || '3004', 10);
+if (AGENT05_PORT !== PORT && AGENT05_PORT !== ALT_PORT && AGENT05_PORT !== AGENT03_PORT && AGENT05_PORT !== AGENT04_PORT) {
+  try {
+    const port05Server = app.listen(AGENT05_PORT, () => {
+      logger.info(`Agent UI also listening on Agent 05 port ${AGENT05_PORT} (http://localhost:${AGENT05_PORT}/agent05.html)`);
+    });
+    port05Server.on('error', (err: any) => {
+      logger.info(`Agent 05 port ${AGENT05_PORT} not bound: ${err.message}`);
     });
   } catch (_) {}
 }

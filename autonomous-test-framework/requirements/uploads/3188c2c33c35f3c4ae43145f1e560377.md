@@ -88,7 +88,6 @@ The following test user accounts SHALL be available on the login page for QA and
 - Error message displayed: "Epic sadface: Username and password do not match any user in this service"
 - User remains on login page
 - Error message persists until corrected or page is refreshed
-- No session token created
 - No redirect to inventory page
 
 #### 2.3.3 Failed Authentication - Locked Out Account
@@ -101,7 +100,7 @@ The following test user accounts SHALL be available on the login page for QA and
 **Expected Result:**
 - Error message displayed: "Epic sadface: Sorry, this user has been locked out."
 - User remains on login page
-- User is instructed to contact support (if applicable)
+- User is instructed to contact support
 - No session created
 
 ### 2.4 Input Validation
@@ -126,14 +125,10 @@ The following test user accounts SHALL be available on the login page for QA and
 - **Page Title:** "Swag Labs"
 - **Form Position:** Centered on page
 - **Responsive Design:** Functional on mobile (375px) and desktop (1920px) viewports
-- **Accessibility:** WCAG 2.1 Level AA compliant
-  - Proper label associations with input fields
-  - Keyboard navigation support (Tab, Enter)
+
 
 #### 2.5.2 Login Button Behavior
 - **Default State:** Enabled at all times (button should always be clickable)
-- **Hover State:** Visual feedback (color change or cursor pointer)
-- **Click State:** Loading indicator or disabled state (TBD by design team)
 - **Label:** "Login"
 - **Type:** Submit button
 
@@ -147,29 +142,14 @@ The following test user accounts SHALL be available on the login page for QA and
 ---
 
 ### 3.1 Security
-- **Password Storage:** Hashed using bcrypt, scrypt, or PBKDF2 (not plaintext)
-- **HTTPS:** All login traffic encrypted (TLS 1.2+)
-- **Session Duration:** 30 minutes idle timeout (configurable)
-- **CSRF Protection:** CSRF tokens implemented for POST requests
 - **SQL Injection:** Parameterized queries enforced
-- **XSS Prevention:** Input sanitization and output encoding applied
 
-### 3.2 Accessibility
-- **WCAG 2.1 Level AA** compliance required
-- **Color Contrast:** Minimum 4.5:1 for normal text
-- **Keyboard Navigation:** All elements keyboard accessible
-- **Screen Reader:** Proper ARIA labels and announcements
-- **Error Messages:** Announced to screen readers
 
-### 3.3 Compatibility
+### 3.2 Compatibility
 - **Browsers:** Chrome (latest-1), Firefox (latest-1), Safari (latest-1), Edge (latest-1)
 - **Devices:** Desktop
 - **Viewport Sizes:** 320px to 2560px width
 
-### 3.4 Usability
-- **Form Completion Time:** Average user ≤ 30 seconds
-- **Error Recovery:** User can correct errors without page refresh
-- **Help Text:** Credentials hint visible above form
 
 ---
 
@@ -182,4 +162,3 @@ The following test user accounts SHALL be available on the login page for QA and
 ---
 
 **End of Requirement Specification**
-

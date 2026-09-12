@@ -35,6 +35,82 @@ function broadcastSSE(data: any) {
   }
 }
 
+// ── Advisory Insights Helper ────────────────────────────────────────────────
+function computeRequirementMappingInsights(requirements: any, testCasesOutput: any) {
+  const allTCs: any[] = testCasesOutput?.zephyrExport?.testCases || testCasesOutput?.testCases || [];
+  const isSelected = (tc: any) => tc.status !== 'OBSOLETE' && !tc.isObsolete && tc.selected !== false;
+  const selectedTCs = allTCs.filter(isSelected);
+  const unselectedTCs = allTCs.filter((tc: any) => !isSelected(tc));
+
+  const features = requirements?.features || [];
+  const pendingRequirements: any[] = [];
+  const featureMap = new Map<string, string>();
+
+  for (const f of features) {
+    featureMap.set(f.id, f.name);
+    for (const s of (f.userStories || [])) {
+      const selectedForStory = selectedTCs.filter((tc: any) => {
+        const sid = tc.traceabilityLinks?.userStoryId || tc.userStoryId;
+        return sid === s.id;
+      });
+      const unselectedForStory = unselectedTCs.filter((tc: any) => {
+        const sid = tc.traceabilityLinks?.userStoryId || tc.userStoryId;
+        return sid === s.id;
+      });
+
+      if (selectedForStory.length === 0) {
+        const reason = unselectedForStory.length > 0
+          ? `All ${unselectedForStory.length} test case(s) (${unselectedForStory.map((t: any) => t.key).join(', ')}) were unselected during Agent 02 stage.`
+          : 'No test cases were generated or mapped for this user story in the Requirement Document.';
+
+        pendingRequirements.push({
+          storyId: s.id,
+          storyTitle: s.title || s.name || s.id,
+          featureId: f.id,
+          featureName: f.name,
+          riskLevel: f.riskLevel || 'MEDIUM',
+          reason,
+          unselectedKeys: unselectedForStory.map((t: any) => t.key),
+          status: 'PENDING_MAPPING',
+        });
+      } else if (unselectedForStory.length > 0) {
+        pendingRequirements.push({
+          storyId: s.id,
+          storyTitle: s.title || s.name || s.id,
+          featureId: f.id,
+          featureName: f.name,
+          riskLevel: f.riskLevel || 'MEDIUM',
+          reason: `Partial mapping: ${selectedForStory.length} active, ${unselectedForStory.length} unselected (${unselectedForStory.map((t: any) => t.key).join(', ')}).`,
+          unselectedKeys: unselectedForStory.map((t: any) => t.key),
+          status: 'PARTIAL_MAPPING',
+        });
+      }
+    }
+  }
+
+  const unselectedTestCases = unselectedTCs.map((tc: any) => ({
+    key: tc.key,
+    name: tc.name,
+    type: tc.type,
+    userStoryId: tc.traceabilityLinks?.userStoryId || tc.userStoryId || 'US-01',
+    featureName: featureMap.get(tc.traceabilityLinks?.featureId) || 'General Features',
+    reason: 'Excluded by user during Agent 02 approval stage',
+  }));
+
+  const summary = unselectedTCs.length > 0
+    ? `${unselectedTCs.length} test case(s) were excluded during Agent 02 stage. ${pendingRequirements.length} requirement(s) have pending or partial test coverage. (Informational Advisory — user may still approve or reject).`
+    : 'All generated test cases were selected. Full requirement traceability mapped.';
+
+  return {
+    unselectedCount: unselectedTCs.length,
+    selectedCount: selectedTCs.length,
+    totalCount: allTCs.length,
+    unselectedTestCases,
+    pendingRequirements,
+    summary,
+  };
+}
+
 // ── GET /api/agent03/state ────────────────────────────────────────────────────
 app.get('/api/agent03/state', async (_req: Request, res: Response) => {
   try {
@@ -45,12 +121,22 @@ app.get('/api/agent03/state', async (_req: Request, res: Response) => {
     const stage = await stateManager.get('stages.03-test-case-reviewer');
     const requirements = await stateManager.getPipelineArtifact('analyzedRequirements');
     const testCases = await stateManager.getPipelineArtifact('testCases');
-    const reviewedTestCases = await stateManager.getPipelineArtifact('reviewedTestCases');
+    let reviewedTestCases = await stateManager.getPipelineArtifact('reviewedTestCases');
+
+    // Always compute live informational advisory based on current approved test cases from Agent 02
+    const informationalInsights = computeRequirementMappingInsights(requirements, testCases);
+
+    if (reviewedTestCases) {
+      reviewedTestCases.informationalInsights = informationalInsights;
+      reviewedTestCases.unselectedTestCases = informationalInsights.unselectedTestCases;
+    }
+
     res.json({
       stage,
       requirements,
       testCases,
       reviewedTestCases,
+      informationalInsights,
       running: !!activeProcess
     });
   } catch (err: any) {
@@ -178,9 +264,18 @@ function handleApproval(stageId: string, action: 'approve' | 'reject') {
       proxyRes.on('data', chunk => { data += chunk; });
       proxyRes.on('end', () => {
         if (!responded) {
-          responded = true;
-          try { res.status(proxyRes.statusCode || 200).json(JSON.parse(data)); }
-          catch { res.status(proxyRes.statusCode || 200).send(data); }
+          try {
+            const parsed = JSON.parse(data);
+            if (proxyRes.statusCode && proxyRes.statusCode >= 400 && parsed.error && parsed.error.includes('mismatch')) {
+              logger.warn(`Approval webhook port ${APPROVAL_PORT} active for a different stage (${parsed.error}); using direct StateManager fallback for ${stageId}`);
+              return fallbackDirect();
+            }
+            responded = true;
+            res.status(proxyRes.statusCode || 200).json(parsed);
+          } catch {
+            responded = true;
+            res.status(proxyRes.statusCode || 200).send(data);
+          }
         }
       });
     });

@@ -2,7 +2,7 @@
   "version": "1.0.0",
   "projectId": "default",
   "createdAt": "2026-05-12T00:00:00.000Z",
-  "updatedAt": "2026-09-12T09:43:03.514Z",
+  "updatedAt": "2026-09-12T13:44:12.499Z",
   "cycles": [
     {
       "id": "cycle_1789122143177",
@@ -3271,6 +3271,390 @@
         "comment": "Approved test data synthesis and centralized fixtures.",
         "content": "",
         "timestamp": "2026-09-12T09:43:03.514Z"
+      },
+      {
+        "id": "fb_1789208576926",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "",
+        "timestamp": "2026-09-12T10:22:56.926Z"
+      },
+      {
+        "id": "fb_1789208577051",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "Features: 1, Stories: 2",
+        "timestamp": "2026-09-12T10:22:57.051Z"
+      },
+      {
+        "id": "fb_1789208586886",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "",
+        "timestamp": "2026-09-12T10:23:06.886Z"
+      },
+      {
+        "id": "fb_1789208716482",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "Approved Agent 03 review",
+        "content": "",
+        "timestamp": "2026-09-12T10:25:16.482Z"
+      },
+      {
+        "id": "fb_1789208716612",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "Approved Agent 03 review",
+        "content": "Grade: A, Score: 92",
+        "timestamp": "2026-09-12T10:25:16.612Z"
+      },
+      {
+        "id": "fb_1789208725526",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "Approved test data synthesis and centralized fixtures.",
+        "content": "",
+        "timestamp": "2026-09-12T10:25:25.526Z"
+      },
+      {
+        "id": "fb_1789209518789",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "Test selective approval",
+        "content": "",
+        "timestamp": "2026-09-12T10:38:38.789Z"
+      },
+      {
+        "id": "fb_1789209518921",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "Reset all active",
+        "content": "",
+        "timestamp": "2026-09-12T10:38:38.921Z"
+      },
+      {
+        "id": "fb_1789210412890",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "",
+        "timestamp": "2026-09-12T10:53:32.890Z"
+      },
+      {
+        "id": "fb_1789210413011",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "Features: 1, Stories: 2",
+        "timestamp": "2026-09-12T10:53:33.011Z"
+      },
+      {
+        "id": "fb_1789211959315",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "",
+        "timestamp": "2026-09-12T11:19:19.315Z"
+      },
+      {
+        "id": "fb_1789211959364",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "Features: 1, Stories: 2",
+        "timestamp": "2026-09-12T11:19:19.364Z"
+      },
+      {
+        "id": "fb_1789211990921",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "",
+        "timestamp": "2026-09-12T11:19:50.921Z"
+      },
+      {
+        "id": "fb_1789211990974",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "TCs: 31",
+        "timestamp": "2026-09-12T11:19:50.975Z"
+      },
+      {
+        "id": "fb_1789212039622",
+        "stageId": "03-test-case-reviewer",
+        "status": "REJECTED",
+        "comment": "Approved Agent 03 review",
+        "content": "",
+        "timestamp": "2026-09-12T11:20:39.622Z"
+      },
+      {
+        "id": "fb_1789212039680",
+        "stageId": "03-test-case-reviewer",
+        "status": "REJECTED",
+        "comment": "Approved Agent 03 review",
+        "content": "Grade: A, Score: 95",
+        "timestamp": "2026-09-12T11:20:39.680Z"
+      },
+      {
+        "id": "fb_1789213041924",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "Approved Agent 03 review",
+        "content": "",
+        "timestamp": "2026-09-12T11:37:21.924Z"
+      },
+      {
+        "id": "fb_1789213041979",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "Approved Agent 03 review",
+        "content": "Grade: A, Score: 95",
+        "timestamp": "2026-09-12T11:37:21.979Z"
+      },
+      {
+        "id": "fb_1789213067042",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "Approved test data synthesis and centralized fixtures.",
+        "content": "",
+        "timestamp": "2026-09-12T11:37:47.042Z"
+      },
+      {
+        "id": "fb_1789213902424",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "",
+        "timestamp": "2026-09-12T11:51:42.424Z"
+      },
+      {
+        "id": "fb_1789213902758",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "Features: 1, Stories: 2",
+        "timestamp": "2026-09-12T11:51:42.758Z"
+      },
+      {
+        "id": "fb_1789213982726",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "",
+        "timestamp": "2026-09-12T11:53:02.726Z"
+      },
+      {
+        "id": "fb_1789213982793",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "TCs: 16",
+        "timestamp": "2026-09-12T11:53:02.793Z"
+      },
+      {
+        "id": "fb_1789214055077",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "Approved Agent 03 review",
+        "content": "",
+        "timestamp": "2026-09-12T11:54:15.077Z"
+      },
+      {
+        "id": "fb_1789214055128",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "Approved Agent 03 review",
+        "content": "Grade: B, Score: 89",
+        "timestamp": "2026-09-12T11:54:15.128Z"
+      },
+      {
+        "id": "fb_1789214070649",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "Approved test data synthesis and centralized fixtures.",
+        "content": "",
+        "timestamp": "2026-09-12T11:54:30.649Z"
+      },
+      {
+        "id": "fb_1789215470951",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "Approved in verification test",
+        "content": "",
+        "timestamp": "2026-09-12T12:17:50.951Z"
+      },
+      {
+        "id": "fb_1789215732565",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "",
+        "timestamp": "2026-09-12T12:22:12.565Z"
+      },
+      {
+        "id": "fb_1789215802264",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "",
+        "timestamp": "2026-09-12T12:23:22.264Z"
+      },
+      {
+        "id": "fb_1789215844479",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "Approved Agent 03 review",
+        "content": "",
+        "timestamp": "2026-09-12T12:24:04.479Z"
+      },
+      {
+        "id": "fb_1789215854499",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "Approved test data synthesis and centralized fixtures.",
+        "content": "",
+        "timestamp": "2026-09-12T12:24:14.499Z"
+      },
+      {
+        "id": "fb_1789217944595",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "",
+        "timestamp": "2026-09-12T12:59:04.595Z"
+      },
+      {
+        "id": "fb_1789217964390",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "",
+        "timestamp": "2026-09-12T12:59:24.390Z"
+      },
+      {
+        "id": "fb_1789218834274",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "",
+        "timestamp": "2026-09-12T13:13:54.274Z"
+      },
+      {
+        "id": "fb_1789218834327",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "Features: 1, Stories: 2",
+        "timestamp": "2026-09-12T13:13:54.327Z"
+      },
+      {
+        "id": "fb_1789218871125",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "",
+        "timestamp": "2026-09-12T13:14:31.125Z"
+      },
+      {
+        "id": "fb_1789218871180",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "TCs: 14",
+        "timestamp": "2026-09-12T13:14:31.180Z"
+      },
+      {
+        "id": "fb_1789218910859",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "Approved Agent 03 review",
+        "content": "",
+        "timestamp": "2026-09-12T13:15:10.859Z"
+      },
+      {
+        "id": "fb_1789218910913",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "Approved Agent 03 review",
+        "content": "Grade: B, Score: 85",
+        "timestamp": "2026-09-12T13:15:10.913Z"
+      },
+      {
+        "id": "fb_1789218922995",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "Approved test data synthesis and centralized fixtures.",
+        "content": "",
+        "timestamp": "2026-09-12T13:15:22.995Z"
+      },
+      {
+        "id": "fb_1789219662798",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "Approved Playwright automation test scripts and Page Object Models.",
+        "content": "",
+        "timestamp": "2026-09-12T13:27:42.798Z"
+      },
+      {
+        "id": "fb_1789220439237",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "",
+        "timestamp": "2026-09-12T13:40:39.237Z"
+      },
+      {
+        "id": "fb_1789220439286",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "Features: 1, Stories: 1",
+        "timestamp": "2026-09-12T13:40:39.286Z"
+      },
+      {
+        "id": "fb_1789220504593",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "",
+        "timestamp": "2026-09-12T13:41:44.593Z"
+      },
+      {
+        "id": "fb_1789220504649",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "TCs: 14",
+        "timestamp": "2026-09-12T13:41:44.649Z"
+      },
+      {
+        "id": "fb_1789220540974",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "Approved Agent 03 review",
+        "content": "",
+        "timestamp": "2026-09-12T13:42:20.974Z"
+      },
+      {
+        "id": "fb_1789220551951",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "Approved test data synthesis and centralized fixtures.",
+        "content": "",
+        "timestamp": "2026-09-12T13:42:31.951Z"
+      },
+      {
+        "id": "fb_1789220652499",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "Approved Playwright automation test scripts and Page Object Models.",
+        "content": "",
+        "timestamp": "2026-09-12T13:44:12.499Z"
       }
     ],
     "performanceBaselines": {},

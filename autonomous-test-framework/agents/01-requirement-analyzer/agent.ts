@@ -13,7 +13,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as readline from 'readline';
 
-import { stateManager, STAGE_STATUS } from '../../core/state-manager/StateManager';
+import { stateManager, STAGE_STATUS, APPROVAL_STATUS } from '../../core/state-manager/StateManager';
 import { memoryEngine } from '../../core/project-memory/MemoryEngine';
 import { approvalGate } from '../../core/approval-gate/ApprovalGate';
 import { Logger } from '../../core/logger/Logger';
@@ -73,6 +73,40 @@ export class RequirementAnalyzerAgent {
 
       const usage = llmClient.getStageUsage(STAGE_ID);
       await stateManager.setPipelineArtifact('analyzedRequirements', analysisReport);
+
+      // Invalidate any downstream stages and artifacts from prior requirement analyses
+      await stateManager.update((state) => {
+        const downstreamStages = [
+          '02-test-case-generator', '03-test-case-reviewer', '04-test-data-generator',
+          '05-playwright-script-generator', '06-automation-reviewer', '07-test-runner',
+          '08-bug-reporter', '09-report-generator', '10-auto-healer', '11-retest-agent'
+        ];
+        downstreamStages.forEach(sId => {
+          if (state.stages[sId]) {
+            state.stages[sId].status = STAGE_STATUS.PENDING;
+            state.stages[sId].output = null;
+            state.stages[sId].approval = APPROVAL_STATUS.PENDING;
+            state.stages[sId].completedAt = null;
+            state.stages[sId].approvedAt = null;
+          }
+        });
+        state.pipeline.testCases = null;
+        state.pipeline.reviewedTestCases = null;
+        state.pipeline.testData = null;
+        state.pipeline.playwrightScripts = null;
+        state.pipeline.reviewedScripts = null;
+        state.pipeline.executionResults = null;
+        state.pipeline.bugReports = null;
+        state.pipeline.publishedReports = null;
+        state.pipeline.healingPatches = null;
+        state.pipeline.retestResults = null;
+        try {
+          const db = stateManager.getDatabase();
+          db.prepare("DELETE FROM artifacts WHERE run_id = ? AND key NOT IN ('requirements', 'analyzedRequirements')").run(state.runId);
+        } catch (_) {}
+        return state;
+      });
+
       await stateManager.markStageCompleted(STAGE_ID, analysisReport, usage);
 
       this._saveReportToDisk(analysisReport);
@@ -670,12 +704,18 @@ if (require.main === module) {
       const arg = args[i];
       if (arg.startsWith('--')) {
         const [key, val] = arg.slice(2).split('=');
-        opts[key] = val || args[i + 1];
-        if (!val) i++;
+        if (val !== undefined) {
+          opts[key] = val;
+        } else if (args[i + 1] !== undefined && !args[i + 1].startsWith('--')) {
+          opts[key] = args[i + 1];
+          i++;
+        } else {
+          opts[key] = true;
+        }
       }
     }
 
-    await stateManager.initialize(opts.project || 'default');
+    await stateManager.startNewRun(opts.project || 'default');
     await memoryEngine.initialize(opts.project || 'default');
 
     const result = await agent.run({

@@ -97,7 +97,38 @@ export class LLMClient {
    *    that as the new start index for subsequent calls in the same stage.
    * 3. Hard errors (400/401/403/404) abort immediately without fallback.
    */
+  /**
+   * Hard ceiling on total wall-clock time for a single chat() call, covering
+   * every fallback candidate and retry combined. Without this, a candidate
+   * that genuinely hangs (network stall, DNS issue) rather than failing fast
+   * can consume its full per-request timeout on every attempt of every
+   * fallback (up to `candidates.length * retries * perRequestTimeout`,
+   * theoretically tens of minutes) instead of failing fast — which is exactly
+   * what stalls the pipeline UI on a spinner with no way to recover short of
+   * killing the process.
+   */
+  private static readonly MAX_CHAT_DURATION_MS = 5 * 60 * 1000;
+
   async chat(stageId: string, payload: any): Promise<LLMClientResponse> {
+    return this._withDeadline(this._chatInternal(stageId, payload), LLMClient.MAX_CHAT_DURATION_MS, stageId);
+  }
+
+  /** @private Races a promise against a hard deadline so a hung candidate can't stall the pipeline indefinitely. */
+  private _withDeadline<T>(promise: Promise<T>, ms: number, stageId: string): Promise<T> {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error(
+          `LLM chat() exceeded the maximum allowed duration of ${ms}ms across all fallback candidates for stage "${stageId}" — aborting rather than stalling indefinitely.`
+        ));
+      }, ms);
+      promise.then(
+        (value) => { clearTimeout(timer); resolve(value); },
+        (err) => { clearTimeout(timer); reject(err); },
+      );
+    });
+  }
+
+  private async _chatInternal(stageId: string, payload: any): Promise<LLMClientResponse> {
     const llmConfig = (FRAMEWORK_CONFIG as any).llm;
     const modelType = llmConfig.stageMapping[stageId] || 'default';
     const modelInfo = llmConfig.models[modelType] || llmConfig.models.default;

@@ -237,14 +237,31 @@ if (require.main === module) {
       if (arg === '--') continue;
       if (arg.startsWith('--')) {
         const [key, val] = arg.slice(2).split('=');
-        opts[key] = val || args[i + 1];
-        if (!val) i++;
+        if (val !== undefined) {
+          opts[key] = val;
+        } else if (args[i + 1] !== undefined && !args[i + 1].startsWith('--')) {
+          opts[key] = args[i + 1];
+          i++;
+        } else {
+          opts[key] = true;
+        }
       }
     }
 
-    const projectId = opts.project || FRAMEWORK_CONFIG.projectId;
-    await stateManager.initialize(projectId);
-    await memoryEngine.initialize(projectId);
+    let activeProjectId = opts.project;
+    if (!activeProjectId) {
+      try {
+        const stateDb = stateManager.getDatabase();
+        const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get() as any;
+        if (latestRun?.project_id) {
+          activeProjectId = latestRun.project_id;
+        }
+      } catch (_) {}
+    }
+    activeProjectId = activeProjectId || FRAMEWORK_CONFIG.projectId || 'default';
+
+    await stateManager.initialize(activeProjectId);
+    await memoryEngine.initialize(activeProjectId);
 
     const agent = new TestCaseGeneratorAgent();
     const analyzedRequirements = await stateManager.getPipelineArtifact('analyzedRequirements');

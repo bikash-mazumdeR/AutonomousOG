@@ -771,6 +771,57 @@
         </div>
       </div>
 
+      <!-- Requirements Mapping & Exclusions Advisory (Information Only) for Input Phase -->
+      <div class="advisory-card hidden" id="inputAdvisoryCard" style="margin-bottom: 18px;">
+        <div class="advisory-header">
+          <div class="advisory-title">
+            <svg style="width: 18px; height: 18px; flex-shrink: 0;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            <span>Requirements Mapping & Exclusions Advisory</span>
+          </div>
+          <span class="advisory-badge">Active Scope from Agent 02</span>
+        </div>
+        <div class="advisory-body" id="inputAdvisorySummary">
+          Agent 03 will evaluate only test cases approved by user in Agent 02 stage.
+        </div>
+        <div id="inputAdvisoryGrid" class="advisory-grid">
+          <!-- Injected dynamically -->
+        </div>
+      </div>
+
+      <!-- Approved Test Cases from Agent 02 Card (Input Phase) -->
+      <div class="card" id="inputApprovedTcCard" style="margin-bottom: 18px; border: 1px solid var(--border); background: var(--surface2);">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+          <div>
+            <div style="font-weight: 600; font-size: 15px; color: var(--text);">Approved Test Cases for Review</div>
+            <div style="font-size: 12px; color: var(--text-muted);">Test cases selected and approved from Agent 02, staged for multi-dimensional quality review</div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span id="inputApprovedCountBadge" class="status-badge status-PASSED">0 Approved</span>
+            <input type="text" id="inputTcSearch" placeholder="Filter approved test cases..." style="padding: 5px 10px; font-size: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; color: var(--text); width: 220px;">
+          </div>
+        </div>
+        <div class="table-container" style="max-height: 320px; overflow-y: auto;">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 85px;">Key</th>
+                <th style="width: 100px;">Type</th>
+                <th>Scenario & Objective</th>
+                <th style="width: 110px;">User Story</th>
+                <th style="width: 80px;">Steps</th>
+              </tr>
+            </thead>
+            <tbody id="inputApprovedTcBody">
+              <!-- Injected dynamically -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <button id="runBtn" class="btn btn-primary">
         <span>Start Quality Review</span>
         <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -877,6 +928,7 @@
               <button type="button" class="tab-btn" data-filter="REWRITTEN">Rewritten (<span id="countRewritten">0</span>)</button>
               <button type="button" class="tab-btn" data-filter="FLAGGED">Flagged (<span id="countFlagged">0</span>)</button>
               <button type="button" class="tab-btn" data-filter="REJECTED">Rejected (<span id="countRejected">0</span>)</button>
+              <button type="button" class="tab-btn hidden" id="tabExcluded" data-filter="EXCLUDED" style="border-color: rgba(239, 68, 68, 0.4); color: #f87171;">Excluded (<span id="countExcluded">0</span>)</button>
               
               <input type="text" id="tcSearchInput" class="search-input" placeholder="Search test cases...">
             </div>
@@ -1165,6 +1217,7 @@
     let currentFilter = 'ALL';
     let currentEditingKey = null;
     let chatHistory = [];
+    let currentLiveInsights = null;
 
     const DOM = {
       inputPhase: document.getElementById('inputPhase'),
@@ -1176,6 +1229,10 @@
       projectNameInput: document.getElementById('projectNameInput'),
       inputTcCount: document.getElementById('inputTcCount'),
       inputFeatureCount: document.getElementById('inputFeatureCount'),
+      inputApprovedTcCard: document.getElementById('inputApprovedTcCard'),
+      inputApprovedCountBadge: document.getElementById('inputApprovedCountBadge'),
+      inputApprovedTcBody: document.getElementById('inputApprovedTcBody'),
+      inputTcSearch: document.getElementById('inputTcSearch'),
       successAlert: document.getElementById('successAlert'),
       errorAlert: document.getElementById('errorAlert'),
 
@@ -1204,6 +1261,9 @@
       reqAdvisoryCard: document.getElementById('reqAdvisoryCard'),
       reqAdvisorySummary: document.getElementById('reqAdvisorySummary'),
       reqAdvisoryGrid: document.getElementById('reqAdvisoryGrid'),
+      inputAdvisoryCard: document.getElementById('inputAdvisoryCard'),
+      inputAdvisorySummary: document.getElementById('inputAdvisorySummary'),
+      inputAdvisoryGrid: document.getElementById('inputAdvisoryGrid'),
 
       // Modal
       tcReviewModal: document.getElementById('tcReviewModal'),
@@ -1373,27 +1433,244 @@
       DOM.modalFeatureSnippet.textContent = buildGherkinScenarioText(syntheticTc);
     }
 
+    // ── Live Advisory Computation & Rendering Helper ────────────────────────
+    function computeLiveAdvisory(testCasesData, requirementsData) {
+      const allTCs = testCasesData?.zephyrExport?.testCases || testCasesData?.testCases || [];
+      const isSelected = tc => tc.status !== 'OBSOLETE' && !tc.isObsolete && tc.selected !== false;
+      const selectedTCs = allTCs.filter(isSelected);
+      const unselectedTCs = allTCs.filter(tc => !isSelected(tc));
+
+      const features = requirementsData?.features || [];
+      const pendingRequirements = [];
+      const featureMap = new Map();
+
+      for (const f of features) {
+        featureMap.set(f.id, f.name);
+        for (const s of (f.userStories || [])) {
+          const selectedForStory = selectedTCs.filter(tc => {
+            const sid = tc.traceabilityLinks?.userStoryId || tc.userStoryId;
+            return sid === s.id;
+          });
+          const unselectedForStory = unselectedTCs.filter(tc => {
+            const sid = tc.traceabilityLinks?.userStoryId || tc.userStoryId;
+            return sid === s.id;
+          });
+
+          if (selectedForStory.length === 0) {
+            const reason = unselectedForStory.length > 0
+              ? `All ${unselectedForStory.length} test case(s) (${unselectedForStory.map(t => t.key).join(', ')}) were unselected during Agent 02 stage.`
+              : 'No test cases were generated or mapped for this user story in the Requirement Document.';
+
+            pendingRequirements.push({
+              storyId: s.id,
+              storyTitle: s.title || s.name || s.id,
+              featureId: f.id,
+              featureName: f.name,
+              riskLevel: f.riskLevel || 'MEDIUM',
+              reason,
+              unselectedKeys: unselectedForStory.map(t => t.key),
+              status: 'PENDING_MAPPING'
+            });
+          } else if (unselectedForStory.length > 0) {
+            pendingRequirements.push({
+              storyId: s.id,
+              storyTitle: s.title || s.name || s.id,
+              featureId: f.id,
+              featureName: f.name,
+              riskLevel: f.riskLevel || 'MEDIUM',
+              reason: `Partial mapping: ${selectedForStory.length} active, ${unselectedForStory.length} unselected (${unselectedForStory.map(t => t.key).join(', ')}).`,
+              unselectedKeys: unselectedForStory.map(t => t.key),
+              status: 'PARTIAL_MAPPING'
+            });
+          }
+        }
+      }
+
+      const unselectedTestCases = unselectedTCs.map(tc => ({
+        key: tc.key,
+        name: tc.name,
+        type: tc.type,
+        userStoryId: tc.traceabilityLinks?.userStoryId || tc.userStoryId || 'US-01',
+        featureName: featureMap.get(tc.traceabilityLinks?.featureId) || 'General Features',
+        reason: 'Excluded by user during Agent 02 approval stage'
+      }));
+
+      const summary = unselectedTCs.length > 0
+        ? `${unselectedTCs.length} test case(s) were excluded during Agent 02 stage. ${pendingRequirements.length} requirement(s) have pending or partial test coverage. (Informational Advisory — user may still approve or reject).`
+        : 'All generated test cases were selected. Full requirement traceability mapped.';
+
+      return {
+        unselectedCount: unselectedTCs.length,
+        selectedCount: selectedTCs.length,
+        totalCount: allTCs.length,
+        unselectedTestCases,
+        pendingRequirements,
+        summary
+      };
+    }
+
+    function renderAdvisoryToElement(insights, cardEl, summaryEl, gridEl) {
+      if (!cardEl || !summaryEl || !gridEl) return;
+
+      const unselectedTCs = insights?.unselectedTestCases || [];
+      const pendingReqs = insights?.pendingRequirements || [];
+      const hasAdvisory = (insights && (insights.unselectedCount > 0 || pendingReqs.length > 0)) || unselectedTCs.length > 0;
+
+      cardEl.classList.remove('hidden');
+
+      if (!hasAdvisory) {
+        summaryEl.innerHTML = `<strong>Advisory Notice:</strong> All ${insights?.selectedCount || insights?.totalCount || 0} approved test cases from Agent 02 are active. Full requirement traceability is mapped per the Requirement Document.`;
+        gridEl.innerHTML = `
+          <div class="advisory-item">
+            <div class="advisory-item-title">
+              <span>All Test Cases Active (${insights?.selectedCount || insights?.totalCount || 0})</span>
+              <span class="findings-chip" style="background: rgba(34, 197, 94, 0.15); color: #4ade80;">100% Selected</span>
+            </div>
+            <div class="advisory-item-desc" style="color: #4ade80; font-size: 11px;">
+              ✅ Zero test cases excluded. All generated test cases are approved and active.
+            </div>
+          </div>
+          <div class="advisory-item">
+            <div class="advisory-item-title">
+              <span>Requirement Mapping Status</span>
+              <span class="findings-chip" style="background: rgba(34, 197, 94, 0.15); color: #4ade80;">Full Coverage</span>
+            </div>
+            <div class="advisory-item-desc" style="color: #4ade80; font-size: 11px;">
+              ✅ All user stories and features have at least one active test case mapped.
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      summaryEl.innerHTML = `<strong>Advisory Notice:</strong> ${escapeHtml(insights?.summary || 'Informational observations regarding excluded test cases and requirement coverage mapping.')} <br><span style="font-style: italic; opacity: 0.85;">(Note: This advisory is non-blocking. You may proceed to approve this stage or re-include test cases in Agent 02 if full mapping is required.)</span>`;
+      gridEl.innerHTML = '';
+
+      // Card 1: Excluded / Unselected Test Cases
+      const unselectedCard = document.createElement('div');
+      unselectedCard.className = 'advisory-item';
+      const unselectedListHtml = unselectedTCs.length > 0 
+        ? unselectedTCs.map(t => `<div style="font-family: monospace; font-size: 11px; margin-top: 3px;">• <strong style="color: var(--accent);">${escapeHtml(t.key)}</strong>: ${escapeHtml(t.name || t.key)} <span style="color: var(--text-dim);">(${escapeHtml(t.featureName || 'General Features')})</span></div>`).join('')
+        : '<div style="color: var(--text-dim); font-size: 11px;">No test cases were excluded. All generated test cases are active.</div>';
+      
+      unselectedCard.innerHTML = `
+        <div class="advisory-item-title">
+          <span>Unselected Test Cases (${unselectedTCs.length})</span>
+          <span class="findings-chip">Excluded in Agent 02</span>
+        </div>
+        <div class="advisory-item-desc">
+          These test cases were unchecked by the user during Agent 02 and were excluded from quality review & scoring:
+        </div>
+        <div style="margin-top: 6px; max-height: 120px; overflow-y: auto;">
+          ${unselectedListHtml}
+        </div>
+      `;
+      gridEl.appendChild(unselectedCard);
+
+      // Card 2: Requirement Document Mapping Status
+      const reqCard = document.createElement('div');
+      reqCard.className = 'advisory-item';
+      const pendingListHtml = pendingReqs.length > 0
+        ? pendingReqs.map(p => `<div style="font-size: 11px; margin-top: 3px;">• <strong>${escapeHtml(p.storyId)}</strong> (${escapeHtml(p.storyTitle)}): <span style="color: #fbbf24;">${escapeHtml(p.reason || 'Pending coverage mapping')}</span></div>`).join('')
+        : '<div style="color: #4ade80; font-size: 11px;">✅ All user stories and features have at least one active test case mapped.</div>';
+      
+      reqCard.innerHTML = `
+        <div class="advisory-item-title">
+          <span>Requirement Mapping Status</span>
+          <span class="findings-chip ${pendingReqs.length > 0 ? 'warn' : ''}">${pendingReqs.length > 0 ? `${pendingReqs.length} Pending / Partial` : 'Full Coverage'}</span>
+        </div>
+        <div class="advisory-item-desc">
+          Cross-reference against Requirement Document specifications:
+        </div>
+        <div style="margin-top: 6px; max-height: 120px; overflow-y: auto;">
+          ${pendingListHtml}
+        </div>
+      `;
+      gridEl.appendChild(reqCard);
+    }
+
+    // ── Input Phase Approved Test Cases ──────────────────────────────────
+    let inputApprovedCases = [];
+
+    function renderInputApprovedTestCases(cases) {
+      if (!DOM.inputApprovedTcBody) return;
+      DOM.inputApprovedTcBody.innerHTML = '';
+      const query = (DOM.inputTcSearch?.value || '').trim().toLowerCase();
+      const filtered = cases.filter(tc => {
+        if (!query) return true;
+        return (tc.key || '').toLowerCase().includes(query) ||
+               (tc.name || '').toLowerCase().includes(query) ||
+               (tc.type || '').toLowerCase().includes(query) ||
+               (tc.objective || '').toLowerCase().includes(query);
+      });
+
+      if (DOM.inputApprovedCountBadge) {
+        DOM.inputApprovedCountBadge.textContent = `${cases.length} Approved`;
+      }
+
+      if (filtered.length === 0) {
+        DOM.inputApprovedTcBody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-dim); padding: 16px;">No matching approved test cases found.</td></tr>`;
+        return;
+      }
+
+      filtered.forEach(tc => {
+        const tr = document.createElement('tr');
+        const typeClass = (tc.type || 'positive').toLowerCase();
+        const story = tc.traceabilityLinks?.userStoryId || tc.userStoryId || '—';
+        const stepsCount = Array.isArray(tc.testSteps) ? tc.testSteps.length : 0;
+        
+        tr.innerHTML = `
+          <td class="tc-key" style="font-weight: 700; color: var(--accent);">${escapeHtml(tc.key)}</td>
+          <td><span class="tc-type type-${typeClass}">${escapeHtml(tc.type || 'Positive')}</span></td>
+          <td>
+            <div style="font-weight: 600; color: var(--text); font-size: 13px;">${escapeHtml(tc.name)}</div>
+            ${tc.objective ? `<div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">${escapeHtml(tc.objective)}</div>` : ''}
+          </td>
+          <td><span style="font-family: monospace; font-size: 11px; background: var(--surface); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border);">${escapeHtml(story)}</span></td>
+          <td style="font-size: 12px; color: var(--text-muted);">${stepsCount} steps</td>
+        `;
+        DOM.inputApprovedTcBody.appendChild(tr);
+      });
+    }
+
+    if (DOM.inputTcSearch) {
+      DOM.inputTcSearch.addEventListener('input', () => {
+        renderInputApprovedTestCases(inputApprovedCases);
+      });
+    }
+
     // ── Initialization ────────────────────────────────────────────────────
     async function init() {
       try {
         const res = await fetch('/api/agent03/state');
         const data = await res.json();
 
+        // Compute live advisory based strictly on active/approved test cases from Agent 02
+        currentLiveInsights = data.informationalInsights || computeLiveAdvisory(data.testCases, data.requirements);
+
         // Populate input phase previews
-        if (data.testCases?.zephyrExport?.totalTestCases) {
-          DOM.inputTcCount.textContent = data.testCases.zephyrExport.totalTestCases;
+        const tcs = data.testCases?.zephyrExport?.testCases || data.testCases?.testCases || [];
+        inputApprovedCases = tcs.filter(t => t.status !== 'OBSOLETE' && !t.isObsolete && t.selected !== false);
+        if (tcs.length > 0) {
+          DOM.inputTcCount.textContent = `${inputApprovedCases.length} Active / ${tcs.length} Total`;
         }
         if (data.requirements?.totalFeatures) {
           DOM.inputFeatureCount.textContent = data.requirements.totalFeatures;
         }
 
+        renderInputApprovedTestCases(inputApprovedCases);
+
+        // Render advisory in input phase
+        renderAdvisoryToElement(currentLiveInsights, DOM.inputAdvisoryCard, DOM.inputAdvisorySummary, DOM.inputAdvisoryGrid);
+
+        const report = data.reviewedTestCases || data.stage?.output;
         if (data.running) {
           showPhase('running');
           startLogStream();
           startPolling();
-        } else if ((data.stage && data.stage.status === 'COMPLETED' && data.reviewedTestCases) || data.reviewedTestCases) {
+        } else if (data.stage && data.stage.status === 'COMPLETED' && report) {
           showPhase('results');
-          renderReviewReport(data.reviewedTestCases);
+          renderReviewReport(report, currentLiveInsights);
         } else {
           showPhase('input');
         }
@@ -1475,11 +1752,13 @@
         try {
           const res = await fetch('/api/agent03/state');
           const data = await res.json();
-          if (data.stage && data.stage.status === 'COMPLETED' && data.reviewedTestCases) {
+          const report = data.reviewedTestCases || data.stage?.output;
+          if (data.stage && data.stage.status === 'COMPLETED' && report) {
             clearInterval(pollInterval);
             if (eventSource) eventSource.close();
+            currentLiveInsights = data.informationalInsights || computeLiveAdvisory(data.testCases, data.requirements);
             showPhase('results');
-            renderReviewReport(data.reviewedTestCases);
+            renderReviewReport(report, currentLiveInsights);
           } else if (data.stage && data.stage.status === 'FAILED') {
             clearInterval(pollInterval);
             if (eventSource) eventSource.close();
@@ -1492,7 +1771,7 @@
     }
 
     // ── Render Review Report ──────────────────────────────────────────────
-    function renderReviewReport(output) {
+    function renderReviewReport(output, liveInsights) {
       reviewedOutput = output;
       const score = output.qualityScore || {};
       const grade = score.grade || 'B';
@@ -1536,79 +1815,38 @@
         DOM.dimensionsGrid.appendChild(div);
       });
 
-      // 3. Informational Requirements Mapping & Exclusions Advisory
-      const insights = output.informationalInsights || null;
-      const unselectedTCs = output.unselectedTestCases || insights?.unselectedTestCases || [];
-      const pendingReqs = insights?.pendingRequirements || [];
-      const hasAdvisory = (insights && (insights.unselectedCount > 0 || pendingReqs.length > 0)) || unselectedTCs.length > 0;
+      // 3. Informational Requirements Mapping & Exclusions Advisory (always live)
+      const insights = (typeof liveInsights !== 'undefined' ? liveInsights : null) || currentLiveInsights || output.informationalInsights || null;
+      renderAdvisoryToElement(insights, DOM.reqAdvisoryCard, DOM.reqAdvisorySummary, DOM.reqAdvisoryGrid);
 
-      if (hasAdvisory && DOM.reqAdvisoryCard) {
-        DOM.reqAdvisoryCard.classList.remove('hidden');
-        if (DOM.reqAdvisorySummary) {
-          DOM.reqAdvisorySummary.innerHTML = `<strong>Advisory Notice:</strong> ${escapeHtml(insights?.summary || 'Informational observations regarding excluded test cases and requirement coverage mapping.')} <br><span style="font-style: italic; opacity: 0.85;">(Note: This advisory is non-blocking. You may proceed to approve this stage or re-include test cases in Agent 02 if full mapping is required.)</span>`;
-        }
-        if (DOM.reqAdvisoryGrid) {
-          DOM.reqAdvisoryGrid.innerHTML = '';
-
-          // Card 1: Excluded / Unselected Test Cases
-          const unselectedCard = document.createElement('div');
-          unselectedCard.className = 'advisory-item';
-          const unselectedListHtml = unselectedTCs.length > 0 
-            ? unselectedTCs.map(t => `<div style="font-family: monospace; font-size: 11px; margin-top: 3px;">• <strong style="color: var(--accent);">${escapeHtml(t.key)}</strong>: ${escapeHtml(t.name || t.key)} <span style="color: var(--text-dim);">(${escapeHtml(t.featureName || 'General Features')})</span></div>`).join('')
-            : '<div style="color: var(--text-dim); font-size: 11px;">No test cases were excluded. All generated test cases are active.</div>';
-          
-          unselectedCard.innerHTML = `
-            <div class="advisory-item-title">
-              <span>Unselected Test Cases (${unselectedTCs.length})</span>
-              <span class="findings-chip">Excluded in Agent 02</span>
-            </div>
-            <div class="advisory-item-desc">
-              These test cases were unchecked by the user during Agent 02 and were excluded from Agent 03 quality review & scoring:
-            </div>
-            <div style="margin-top: 6px; max-height: 120px; overflow-y: auto;">
-              ${unselectedListHtml}
-            </div>
-          `;
-          DOM.reqAdvisoryGrid.appendChild(unselectedCard);
-
-          // Card 2: Requirement Document Mapping Status
-          const reqCard = document.createElement('div');
-          reqCard.className = 'advisory-item';
-          const pendingListHtml = pendingReqs.length > 0
-            ? pendingReqs.map(p => `<div style="font-size: 11px; margin-top: 3px;">• <strong>${escapeHtml(p.storyId)}</strong> (${escapeHtml(p.storyTitle)}): <span style="color: #fbbf24;">${escapeHtml(p.reason || 'Pending coverage mapping')}</span></div>`).join('')
-            : '<div style="color: #4ade80; font-size: 11px;">✅ All user stories and features have at least one active test case mapped.</div>';
-          
-          reqCard.innerHTML = `
-            <div class="advisory-item-title">
-              <span>Requirement Mapping Status</span>
-              <span class="findings-chip ${pendingReqs.length > 0 ? 'warn' : ''}">${pendingReqs.length > 0 ? `${pendingReqs.length} Pending / Partial` : 'Full Coverage'}</span>
-            </div>
-            <div class="advisory-item-desc">
-              Cross-reference against Requirement Document specifications:
-            </div>
-            <div style="margin-top: 6px; max-height: 120px; overflow-y: auto;">
-              ${pendingListHtml}
-            </div>
-          `;
-          DOM.reqAdvisoryGrid.appendChild(reqCard);
-        }
-      } else if (DOM.reqAdvisoryCard) {
-        DOM.reqAdvisoryCard.classList.add('hidden');
-      }
-
-      // 4. Review Summary Stats
+      // 4. Review Summary Stats (active test cases)
       allTestCases = output.reviewedZephyrExport?.testCases || [];
-      DOM.statReviewed.textContent = output.originalCount || allTestCases.length;
-      DOM.statApproved.textContent = output.approvedCount || allTestCases.filter(t => t.reviewStatus !== 'REJECTED').length;
-      DOM.statRewritten.textContent = output.rewrittenCount || allTestCases.filter(t => (t.rewrittenSteps || 0) > 0).length;
+      const isExcluded = (tc) => tc.status === 'OBSOLETE' || tc.isObsolete || tc.selected === false || tc.reviewStatus === 'EXCLUDED';
+      const activeReviewed = allTestCases.filter(t => !isExcluded(t));
+      const excludedCases = allTestCases.filter(isExcluded);
+
+      DOM.statReviewed.textContent = activeReviewed.length;
+      DOM.statApproved.textContent = activeReviewed.filter(t => t.reviewStatus !== 'REJECTED').length;
+      DOM.statRewritten.textContent = activeReviewed.filter(t => (t.rewrittenSteps || 0) > 0).length;
       DOM.statDeduped.textContent = output.duplicatesRemoved || 0;
 
       // Filter counts
-      document.getElementById('countAll').textContent = allTestCases.length;
-      document.getElementById('countPassed').textContent = allTestCases.filter(t => t.reviewStatus === 'PASSED').length;
-      document.getElementById('countRewritten').textContent = allTestCases.filter(t => (t.rewrittenSteps || 0) > 0 || t.reviewStatus === 'REWRITTEN').length;
-      document.getElementById('countFlagged').textContent = allTestCases.filter(t => t.reviewStatus === 'FLAGGED').length;
-      document.getElementById('countRejected').textContent = allTestCases.filter(t => t.reviewStatus === 'REJECTED').length;
+      document.getElementById('countAll').textContent = activeReviewed.length;
+      document.getElementById('countPassed').textContent = activeReviewed.filter(t => t.reviewStatus === 'PASSED').length;
+      document.getElementById('countRewritten').textContent = activeReviewed.filter(t => (t.rewrittenSteps || 0) > 0 || t.reviewStatus === 'REWRITTEN').length;
+      document.getElementById('countFlagged').textContent = activeReviewed.filter(t => t.reviewStatus === 'FLAGGED').length;
+      document.getElementById('countRejected').textContent = activeReviewed.filter(t => t.reviewStatus === 'REJECTED').length;
+
+      const tabExcluded = document.getElementById('tabExcluded');
+      const countExcluded = document.getElementById('countExcluded');
+      if (tabExcluded && countExcluded) {
+        if (excludedCases.length > 0) {
+          tabExcluded.classList.remove('hidden');
+          countExcluded.textContent = excludedCases.length;
+        } else {
+          tabExcluded.classList.add('hidden');
+        }
+      }
 
       // 4. Coverage Matrix Table
       DOM.coverageTableBody.innerHTML = '';
@@ -1659,24 +1897,34 @@
       DOM.tcTableBody.innerHTML = '';
       const query = DOM.tcSearchInput.value.trim().toLowerCase();
 
+      const isExcluded = (tc) => tc.status === 'OBSOLETE' || tc.isObsolete || tc.selected === false || tc.reviewStatus === 'EXCLUDED';
+      const activeCases = allTestCases.filter(tc => !isExcluded(tc));
+
       const filtered = allTestCases.filter(tc => {
-        // Status filter
-        if (currentFilter === 'PASSED' && tc.reviewStatus !== 'PASSED') return false;
-        if (currentFilter === 'REWRITTEN' && ((tc.rewrittenSteps || 0) === 0 && tc.reviewStatus !== 'REWRITTEN')) return false;
-        if (currentFilter === 'FLAGGED' && tc.reviewStatus !== 'FLAGGED') return false;
-        if (currentFilter === 'REJECTED' && tc.reviewStatus !== 'REJECTED') return false;
+        if (currentFilter === 'EXCLUDED') {
+          if (!isExcluded(tc)) return false;
+        } else {
+          if (isExcluded(tc)) return false;
+          // Status filter
+          if (currentFilter === 'PASSED' && tc.reviewStatus !== 'PASSED') return false;
+          if (currentFilter === 'REWRITTEN' && ((tc.rewrittenSteps || 0) === 0 && tc.reviewStatus !== 'REWRITTEN')) return false;
+          if (currentFilter === 'FLAGGED' && tc.reviewStatus !== 'FLAGGED') return false;
+          if (currentFilter === 'REJECTED' && tc.reviewStatus !== 'REJECTED') return false;
+        }
 
         // Query search
         if (query) {
           const matchKey = (tc.key || '').toLowerCase().includes(query);
           const matchName = (tc.name || '').toLowerCase().includes(query);
           const matchType = (tc.type || '').toLowerCase().includes(query);
-          return matchKey || matchName || matchType;
+          const matchObj = (tc.objective || '').toLowerCase().includes(query);
+          return matchKey || matchName || matchType || matchObj;
         }
         return true;
       });
 
-      DOM.tcCountPill.textContent = `Showing ${filtered.length} of ${allTestCases.length} test cases`;
+      const totalDisplay = currentFilter === 'EXCLUDED' ? allTestCases.filter(isExcluded).length : activeCases.length;
+      DOM.tcCountPill.textContent = `Showing ${filtered.length} of ${totalDisplay} test cases`;
 
       filtered.forEach(tc => {
         const tr = document.createElement('tr');
@@ -1684,20 +1932,25 @@
         tr.id = `row-${tc.key}`;
         
         const typeClass = (tc.type || '').toLowerCase();
-        const statusClass = `status-${tc.reviewStatus || 'PASSED'}`;
+        const tcIsExcluded = isExcluded(tc);
+        const statusClass = tcIsExcluded ? 'status-REJECTED' : `status-${tc.reviewStatus || 'PASSED'}`;
         const annotations = (reviewedOutput?.reviewAnnotations || []).filter(a => a.tcKey === tc.key);
-        const firstStep = tc.testSteps?.[0]?.description || 'No steps generated';
 
         let findingsHtml = '<span class="findings-chip">Clean</span>';
-        if (annotations.length > 0) {
+        if (tcIsExcluded) {
+          findingsHtml = '<span class="findings-chip warn">Excluded in Agent 02</span>';
+        } else if (annotations.length > 0) {
           const hasBlocker = annotations.some(a => a.severity === 'BLOCKER');
           const chipClass = hasBlocker ? 'findings-chip danger' : 'findings-chip warn';
           findingsHtml = `<span class="${chipClass}">⚠️ ${annotations.length} findings</span>`;
         }
 
+        const displayStatus = tcIsExcluded ? 'EXCLUDED' : (tc.reviewStatus || 'PASSED');
+        const isChecked = !tcIsExcluded && tc.reviewStatus !== 'REJECTED';
+
         tr.innerHTML = `
-          <td><input type="checkbox" class="tc-checkbox" data-key="${tc.key}" ${tc.reviewStatus === 'REJECTED' ? '' : 'checked'}></td>
-          <td class="tc-key">${tc.key}</td>
+          <td><input type="checkbox" class="tc-checkbox" data-key="${tc.key}" ${isChecked ? 'checked' : ''} ${tcIsExcluded ? 'disabled' : ''}></td>
+          <td class="tc-key">${escapeHtml(tc.key)}</td>
           <td><span class="tc-type type-${typeClass}">${escapeHtml(tc.type)}</span></td>
           <td>
             <a href="javascript:void(0)" class="tc-name-link" data-key="${tc.key}" style="font-weight: 600; color: var(--text);" id="name-${tc.key}" title="Click to inspect & edit">${escapeHtml(tc.name)}</a>
@@ -1705,7 +1958,7 @@
               ${renderGherkinPreviewHtml(tc)}
             </div>
           </td>
-          <td><span class="status-badge ${statusClass}" id="status-${tc.key}">${tc.reviewStatus || 'PASSED'}</span></td>
+          <td><span class="status-badge ${statusClass}" id="status-${tc.key}">${displayStatus}</span></td>
           <td>${findingsHtml}</td>
           <td>
             <button type="button" class="btn-inspect-tc" data-key="${tc.key}" title="Inspect review and edit steps">

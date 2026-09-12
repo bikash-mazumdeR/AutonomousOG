@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
 import { spawn, ChildProcess } from 'child_process';
 import { stateManager } from '../core/state-manager/StateManager';
+import { ensureFixturesFileSynced, syncFixturesFileFromTestData } from '../core/state-manager/FixtureSync';
 import { llmClient } from '../core/llm/LLMClient';
 import { memoryEngine } from '../core/project-memory/MemoryEngine';
 import { Logger } from '../core/logger/Logger';
@@ -52,6 +53,11 @@ app.get('/api/agent04/state', async (_req: Request, res: Response) => {
     if (fs.existsSync(FIXTURES_PATH)) {
       try {
         flatTestData = JSON.parse(fs.readFileSync(FIXTURES_PATH, 'utf-8'));
+      } catch (_) {}
+    }
+    if (Object.keys(flatTestData).length === 0 && testData) {
+      try {
+        flatTestData = syncFixturesFileFromTestData(testData, undefined, FIXTURES_PATH);
       } catch (_) {}
     }
 
@@ -168,6 +174,16 @@ function handleApproval(stageId: string, action: 'approve' | 'reject') {
       if (responded) return;
       responded = true;
       try {
+        if (!(stateManager as any)._initialized) {
+          try {
+            const stateDb = stateManager.getDatabase();
+            const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get() as any;
+            await stateManager.initialize(latestRun?.project_id || 'ARIA Project');
+            await memoryEngine.initialize(latestRun?.project_id || 'ARIA Project');
+          } catch (_) {
+            await stateManager.initialize('ARIA Project');
+          }
+        }
         if (isApproval) {
           await stateManager.markStageApproved(stageId, comment);
           await memoryEngine.recordApprovalFeedback(stageId, 'APPROVED', comment);
@@ -188,9 +204,18 @@ function handleApproval(stageId: string, action: 'approve' | 'reject') {
       proxyRes.on('data', chunk => { data += chunk; });
       proxyRes.on('end', () => {
         if (!responded) {
-          responded = true;
-          try { res.status(proxyRes.statusCode || 200).json(JSON.parse(data)); }
-          catch { res.status(proxyRes.statusCode || 200).send(data); }
+          try {
+            const parsed = JSON.parse(data);
+            if (proxyRes.statusCode && proxyRes.statusCode >= 400 && parsed.error && parsed.error.includes('mismatch')) {
+              logger.warn(`Approval webhook port ${APPROVAL_PORT} active for different stage (${parsed.error}); using direct StateManager fallback for ${stageId}`);
+              return fallbackDirect();
+            }
+            responded = true;
+            res.status(proxyRes.statusCode || 200).json(parsed);
+          } catch {
+            responded = true;
+            res.status(proxyRes.statusCode || 200).send(data);
+          }
         }
       });
     });
@@ -211,7 +236,19 @@ function handleApproval(stageId: string, action: 'approve' | 'reject') {
   };
 }
 
-app.post('/api/agent04/approve', handleApproval('04-test-data-generator', 'approve'));
+app.post('/api/agent04/approve', async (req: Request, res: Response) => {
+  try {
+    const testDataOutput = await stateManager.getPipelineArtifact('testData');
+    if (testDataOutput) {
+      syncFixturesFileFromTestData(testDataOutput, undefined, FIXTURES_PATH);
+      await stateManager.setPipelineArtifact('testData', testDataOutput);
+      logger.info('Synchronized fixtures to disk on Agent 04 approval', { fixturesPath: FIXTURES_PATH });
+    }
+  } catch (err: any) {
+    logger.warn('Failed to sync fixtures during Agent 04 approval', { error: err.message });
+  }
+  return handleApproval('04-test-data-generator', 'approve')(req, res);
+});
 app.post('/api/agent04/reject',  handleApproval('04-test-data-generator', 'reject'));
 
 // ── POST /api/agent04/chat ────────────────────────────────────────────────────

@@ -582,11 +582,13 @@
   <!-- Bottom Action Bar -->
   <div class="action-bar hidden" id="actionBar">
     <div class="hint">Review the generated test cases above.</div>
-    <button id="chatBtn" class="btn btn-ghost">
+    <button id="reGenBtn" class="btn btn-ghost" title="Re-generate test cases with updated options or requirements">
       <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+        <path d="M23 4v6h-6"></path>
+        <path d="M1 20v-6h6"></path>
+        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
       </svg>
-      <span>Chat with ARIA</span>
+      <span>Re-Generate Test Cases</span>
     </button>
     <button id="proceedBtn" class="btn btn-primary">
       <span>Proceed to Agent 03</span>
@@ -869,17 +871,36 @@
           }
         }
 
+        if (data.projectName) {
+          const pInput = document.getElementById('projectNameInput');
+          if (pInput && !pInput.value) pInput.value = data.projectName;
+        }
+
         if (data.running) {
           showPhase('running');
           startLogStream();
           startPolling();
-        } else if (data.stage && data.stage.status === 'COMPLETED' && data.testCases) {
+        } else if (data.stage && data.stage.status === 'COMPLETED' && data.testCases && !data.isOutOfDate) {
           showPhase('results');
           renderResults(data.testCases);
+        } else {
+          showPhase('input');
+          if (data.isOutOfDate) {
+            DOM.errorAlert.innerHTML = '⚠️ <strong>Requirements Updated:</strong> The requirement specification was updated after test cases were last generated. Click <strong>Generate Test Cases</strong> below to generate fresh test cases matching the latest requirements.';
+            DOM.errorAlert.classList.remove('hidden');
+          }
         }
       } catch (e) {
         console.error('Init error:', e);
       }
+    }
+
+    const reGenBtn = document.getElementById('reGenBtn');
+    if (reGenBtn) {
+      reGenBtn.addEventListener('click', () => {
+        showPhase('input');
+        DOM.errorAlert.classList.add('hidden');
+      });
     }
 
     // ── Checkbox Warning Logic ────────────────────────────────────────────
@@ -1113,14 +1134,15 @@
 
       DOM.tcTableBody.innerHTML = '';
       allTestCases.forEach((tc) => {
+        const isChecked = tc.status !== 'OBSOLETE' && !tc.isObsolete && tc.selected !== false;
         const tr = document.createElement('tr');
-        tr.className = 'tc-row';
+        tr.className = `tc-row ${isChecked ? '' : 'unchecked'}`;
         tr.id = `row-${tc.key}`;
         
         const typeClass = (tc.type || '').toLowerCase();
 
         tr.innerHTML = `
-          <td><input type="checkbox" class="tc-checkbox" data-key="${tc.key}" checked></td>
+          <td><input type="checkbox" class="tc-checkbox" data-key="${tc.key}" ${isChecked ? 'checked' : ''}></td>
           <td class="tc-key">${tc.key}</td>
           <td><span class="tc-type type-${typeClass}" id="type-badge-${tc.key}">${escapeHtml(tc.type)}</span></td>
           <td>
@@ -1158,6 +1180,7 @@
           if (key) openTcModal(key);
         });
       });
+      updateSelectAllState();
     }
 
     DOM.selectAllTc.addEventListener('change', (e) => {
