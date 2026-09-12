@@ -23,7 +23,7 @@ import {
   TC_TYPE, MIN_TC_BY_RISK, PRIORITY,
 } from './constants';
 import {
-  buildSummary, buildApprovalSummary, buildZephyrExport, buildK6ScenarioIndex,
+  buildSummary, buildApprovalSummary, buildZephyrExport, buildK6ScenarioIndex, syncFeatureFiles
 } from './utils';
 
 import { generatePositiveTCs }     from './generators/PositiveGenerator';
@@ -87,11 +87,11 @@ export class TestCaseGeneratorAgent {
             continue;
           }
 
-          const positiveTCs    = generatePositiveTCs(this._counter, feature, story, analysis);
-          const negativeTCs    = generateNegativeTCs(this._counter, feature, story, analysis);
-          const edgeTCs        = generateEdgeTCs(this._counter, feature, story, analysis);
-          const apiTCs         = story.testTypes.includes('API')         ? generateAPITCs(this._counter, feature, story, analysis)         : [];
-          const performanceTCs = story.testTypes.includes('PERFORMANCE') ? generatePerformanceTCs(this._counter, feature, story, analysis) : [];
+          const positiveTCs    = input.opts?.['skip-positive'] ? [] : generatePositiveTCs(this._counter, feature, story, analysis);
+          const negativeTCs    = input.opts?.['skip-negative'] ? [] : generateNegativeTCs(this._counter, feature, story, analysis);
+          const edgeTCs        = input.opts?.['skip-edge'] ? [] : generateEdgeTCs(this._counter, feature, story, analysis);
+          const apiTCs         = input.opts?.['skip-api'] ? [] : (story.testTypes.includes('API') ? generateAPITCs(this._counter, feature, story, analysis) : []);
+          const performanceTCs = input.opts?.['skip-perf'] ? [] : (story.testTypes.includes('PERFORMANCE') ? generatePerformanceTCs(this._counter, feature, story, analysis) : []);
 
           // Coverage warnings
           const mins = MIN_TC_BY_RISK[feature.riskLevel] || MIN_TC_BY_RISK.MEDIUM;
@@ -108,7 +108,7 @@ export class TestCaseGeneratorAgent {
       const k6ScenarioIndex = buildK6ScenarioIndex(improvedTCs, analysis);
 
       // ── Sync BDD Feature Files (1:1 Scenario Mirroring) ───────────────────
-      const featureFilePaths = this._syncFeatureFiles(analysis, improvedTCs);
+      const featureFilePaths = syncFeatureFiles(analysis, improvedTCs, this._logger);
 
       const output = {
         zephyrExport,
@@ -214,232 +214,6 @@ export class TestCaseGeneratorAgent {
     this._logger.info('Test cases saved to disk', { tcPath, k6Path });
   }
 
-  /**
-   * Syncs all generated test cases to BDD .feature file(s).
-   * Enforces a strict 1:1 parity between test cases and feature Scenarios.
-   * @private
-   */
-  _syncFeatureFiles(analysis: any, testCases: any[]): string[] {
-    const featureDir = path.resolve(__dirname, '../../tests/features');
-    if (!fs.existsSync(featureDir)) {
-      fs.mkdirSync(featureDir, { recursive: true });
-    }
-
-    const fallbackStoryId = analysis?.features?.[0]?.userStories?.[0]?.id || 'US-01';
-    const storyGroups = new Map<string, any[]>();
-
-    for (const tc of testCases) {
-      const storyId = tc.userStoryId || tc.traceabilityLinks?.userStoryId || fallbackStoryId;
-      if (!storyGroups.has(storyId)) {
-        storyGroups.set(storyId, []);
-      }
-      storyGroups.get(storyId)!.push(tc);
-    }
-
-    const savedPaths: string[] = [];
-    let totalScenariosCount = 0;
-
-    for (const [storyId, storyTCs] of storyGroups.entries()) {
-      let matchedFeature: any = null;
-      let matchedStory: any = null;
-
-      for (const f of (analysis.features || [])) {
-        const s = (f.userStories || []).find((st: any) => st.id === storyId);
-        if (s) {
-          matchedFeature = f;
-          matchedStory = s;
-          break;
-        }
-      }
-
-      if (!matchedFeature && analysis.features?.length > 0) {
-        matchedFeature = analysis.features[0];
-        matchedStory = matchedFeature.userStories?.[0];
-      }
-
-      const featureTitle = matchedFeature?.name || matchedStory?.title || 'User Authentication System';
-      const role = matchedStory?.role || 'user of the application';
-      const goal = matchedStory?.goal || 'authenticate and use the system securely';
-      const benefit = matchedStory?.benefit || 'access protected functionality';
-
-      // ── Create Feature Name directory inside features (tests/features/<Feature Name>/) ──
-      const featureFolderName = (matchedFeature?.name || 'General Features')
-        .replace(/[/\\?%*:|"<>]/g, '-')
-        .trim();
-      const targetFeatureDir = path.join(featureDir, featureFolderName);
-      if (!fs.existsSync(targetFeatureDir)) {
-        fs.mkdirSync(targetFeatureDir, { recursive: true });
-      }
-
-      let fileName: string | null = null;
-      if (Array.isArray(analysis.gherkinFeatures)) {
-        const gf = analysis.gherkinFeatures.find((g: any) =>
-          g.fileName && (g.fileName.includes(storyId) || g.fileName.toLowerCase().includes(storyId.toLowerCase()))
-        );
-        if (gf?.fileName) {
-          fileName = path.basename(gf.fileName);
-        }
-      }
-
-      if (!fileName && Array.isArray(analysis.featureFilePaths)) {
-        const fp = analysis.featureFilePaths.find((p: string) => path.basename(p).includes(storyId));
-        if (fp) {
-          fileName = path.basename(fp);
-        }
-      }
-
-      if (!fileName && fs.existsSync(targetFeatureDir)) {
-        const existingFiles = fs.readdirSync(targetFeatureDir).filter((f: string) => f.endsWith('.feature'));
-        const matchedExisting = existingFiles.find((f: string) => f.includes(storyId));
-        if (matchedExisting) {
-          fileName = matchedExisting;
-        }
-      }
-
-      if (!fileName && fs.existsSync(featureDir)) {
-        const existingFiles = fs.readdirSync(featureDir).filter((f: string) => f.endsWith('.feature'));
-        const matchedExisting = existingFiles.find((f: string) => f.includes(storyId));
-        if (matchedExisting) {
-          fileName = matchedExisting;
-        } else if (existingFiles.length === 1) {
-          fileName = existingFiles[0];
-        }
-      }
-
-      if (!fileName) {
-        const slug = (matchedStory?.title || matchedFeature?.name || 'feature')
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/^-|-$/g, '');
-        fileName = `${storyId}-${slug}.feature`;
-      }
-
-      if (!fileName.endsWith('.feature')) {
-        fileName = `${fileName}.feature`;
-      }
-
-      // ── Automatically partition test cases into UI, API, and Performance files ──
-      const uiTCs = storyTCs.filter((tc: any) =>
-        tc.type === TC_TYPE.POSITIVE || tc.type === TC_TYPE.NEGATIVE || tc.type === TC_TYPE.EDGE
-      );
-      const apiTCs = storyTCs.filter((tc: any) => tc.type === TC_TYPE.API);
-      const perfTCs = storyTCs.filter((tc: any) => tc.type === TC_TYPE.PERFORMANCE);
-
-      const baseSlug = fileName.replace(/\.feature$/i, '').replace(/-(api|perf)$/i, '');
-
-      const partitions = [
-        { type: 'UI', tcs: uiTCs, suffix: '', titleSuffix: '', bgStep: 'Given the user is on the login page' },
-        { type: 'API', tcs: apiTCs, suffix: '-api', titleSuffix: ' — API', bgStep: 'Given the backend API service is available' },
-        { type: 'Performance', tcs: perfTCs, suffix: '-perf', titleSuffix: ' — Performance', bgStep: 'Given the application is operational for performance testing' },
-      ].filter((p) => p.tcs.length > 0);
-
-      for (const partition of partitions) {
-        const partFileName = `${baseSlug}${partition.suffix}.feature`;
-        const partFilePath = path.join(targetFeatureDir, partFileName);
-
-        const partFeatureTitle = `${featureTitle}${partition.titleSuffix}`;
-        const lines: string[] = [
-          `Feature: ${partFeatureTitle}`,
-          `  As a ${role},`,
-          `  I want to ${goal}`,
-          `  So that ${benefit}.`,
-          '',
-          '  Background:',
-          `    ${partition.bgStep}`,
-          '',
-        ];
-
-        for (const tc of partition.tcs) {
-          const tags: string[] = [];
-          const typeTag = `@${tc.type.toLowerCase()}`;
-          tags.push(typeTag);
-
-          if (Array.isArray(tc.labels)) {
-            for (const l of tc.labels) {
-              const cleanLabel = `@${String(l).toLowerCase().replace(/[^a-z0-9_-]/g, '')}`;
-              if (!tags.includes(cleanLabel)) {
-                tags.push(cleanLabel);
-              }
-            }
-          }
-
-          const keyTag = `@${tc.key.toLowerCase()}`;
-          if (!tags.includes(keyTag)) {
-            tags.push(keyTag);
-          }
-
-          let scenarioTitle = tc.name || tc.objective || tc.key;
-          if (scenarioTitle.includes('—')) {
-            scenarioTitle = scenarioTitle.split('—').slice(1).join('—').trim();
-          } else if (scenarioTitle.includes(' - ')) {
-            scenarioTitle = scenarioTitle.split(' - ').slice(1).join(' - ').trim();
-          } else {
-            scenarioTitle = scenarioTitle.replace(/^\[.*?\]\s*/g, '').trim();
-          }
-
-          lines.push(`  ${tags.join(' ')}`);
-          lines.push(`  Scenario: [${tc.key}] ${scenarioTitle}`);
-
-          const steps = tc.testSteps || [];
-          if (steps.length === 0) {
-            lines.push('    Given the application state is prepared');
-            lines.push(`    When the test action for "${tc.key}" is executed`);
-            lines.push(`    Then the expected outcome is validated: ${tc.objective || 'Success'}`);
-          } else {
-            for (let stepIdx = 0; stepIdx < steps.length; stepIdx++) {
-              const step = steps[stepIdx];
-              const desc = (step.description || '').trim();
-              const data = (step.testData || '').trim();
-              const expected = (step.expectedResult || '').trim();
-
-              const isVerification = /^(verify|validate|check|confirm|ensure)/i.test(desc);
-              const isNav = /^(navigate|open|given|go to)/i.test(desc);
-
-              if (isVerification) {
-                const thenText = expected || desc;
-                lines.push(`    Then ${thenText}`);
-              } else {
-                const keyword = (stepIdx === 0 && isNav) ? 'Given' : 'When';
-                lines.push(`    ${keyword} ${desc}`);
-
-                if (data && !/^\((leave blank|none|no token.*)\)$/i.test(data)) {
-                  lines.push(`    And with test data "${data}"`);
-                }
-
-                if (expected && expected.toLowerCase() !== desc.toLowerCase()) {
-                  lines.push(`    Then ${expected}`);
-                }
-              }
-            }
-          }
-
-          lines.push('');
-        }
-
-        const content = lines.join('\n');
-        fs.writeFileSync(partFilePath, content, 'utf-8');
-        savedPaths.push(partFilePath);
-
-        const scenarioCount = (content.match(/^\s*Scenario:/gm) || []).length;
-        totalScenariosCount += scenarioCount;
-
-        this._logger.info(`Feature file synced: [${partition.type}]`, {
-          filePath: partFilePath,
-          storyId,
-          scenariosCount: scenarioCount,
-          expectedTCs: partition.tcs.length,
-        });
-      }
-    }
-
-    if (totalScenariosCount !== testCases.length) {
-      this._logger.warn(`Feature file scenario count mismatch: generated ${totalScenariosCount} scenarios for ${testCases.length} test cases`);
-    } else {
-      this._logger.info(`Feature file sync complete: ${totalScenariosCount}/${testCases.length} scenarios strictly matched.`);
-    }
-
-    return savedPaths;
-  }
 
   _loadSkill() {
     let skill = '';
@@ -460,6 +234,7 @@ if (require.main === module) {
     const opts: any = {};
     for (let i = 0; i < args.length; i++) {
       const arg = args[i];
+      if (arg === '--') continue;
       if (arg.startsWith('--')) {
         const [key, val] = arg.slice(2).split('=');
         opts[key] = val || args[i + 1];
@@ -479,7 +254,7 @@ if (require.main === module) {
       process.exit(1);
     }
 
-    const result = await agent.run({ analyzedRequirements });
+    const result = await agent.run({ analyzedRequirements, opts });
     console.log(`\n✅ Agent 02 completed — ${result.output.zephyrExport.totalTestCases} test cases generated`);
     process.exit(result.approvalStatus === 'APPROVED' ? 0 : 1);
   })();

@@ -212,7 +212,7 @@ const FRAMEWORK_CONFIG = {
   projectId: process.env.FRAMEWORK_PROJECT_ID || 'default',
   logLevel: process.env.FRAMEWORK_LOG_LEVEL || 'info',
   approvalMode: process.env.FRAMEWORK_APPROVAL_MODE || 'manual',
-  approvalWebhookPort: parseInt(process.env.APPROVAL_WEBHOOK_PORT || '8080', 10),
+  approvalWebhookPort: parseInt(process.env.APPROVAL_WEBHOOK_PORT || '8081', 10),
   maxThreads: parseInt(process.env.FRAMEWORK_MAX_THREADS || '4', 10),
   environment: process.env.AUT_ENVIRONMENT || 'staging',
   uncertaintyThreshold: 0.80, // Agents ask if confidence < 80%

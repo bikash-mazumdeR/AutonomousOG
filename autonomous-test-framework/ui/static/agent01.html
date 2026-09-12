@@ -81,6 +81,7 @@
 
     /* Two-column grid */
     .main-grid { display: grid; grid-template-columns: 1fr 320px; gap: 20px; align-items: start; }
+    .left-col { min-width: 0; }
     @media (max-width: 900px) { .main-grid { grid-template-columns: 1fr; } }
 
     /* ── Cards ───────────────────────────────────────────────────────────── */
@@ -180,8 +181,9 @@
     /* ── Log stream ──────────────────────────────────────────────────────── */
     .log-stream {
       background: #020817; border: 1px solid var(--border); border-radius: var(--radius);
-      height: 240px; overflow-y: auto; padding: 12px; font-family: 'Fira Code', 'JetBrains Mono', monospace;
-      font-size: 12px; line-height: 1.7; word-wrap: break-word; white-space: pre-wrap;
+      height: 240px; overflow-y: auto; overflow-x: hidden; padding: 12px; font-family: 'Fira Code', 'JetBrains Mono', monospace;
+      font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; word-break: break-word; white-space: pre-wrap;
+      width: 100%; max-width: 100%;
     }
     .log-line { color: var(--text-muted); }
     .log-line.warn  { color: var(--warning); }
@@ -1011,8 +1013,12 @@ async function submitApproval(action) {
     });
 
     targetBtn.classList.remove('btn-loading');
-
     document.getElementById('approvalModal').classList.remove('open');
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ error: 'Approval request failed' }));
+      throw new Error(err.error || 'Approval request failed');
+    }
 
     if (action === 'approve') {
       document.getElementById('successAlert').innerHTML =
@@ -1026,8 +1032,8 @@ async function submitApproval(action) {
       
       // Auto-navigate to Agent 02 UI after a short delay
       setTimeout(() => {
-        window.location.href = window.location.protocol + '//' + window.location.hostname + ':3001';
-      }, 2500);
+        window.location.href = '/agent02.html';
+      }, 2000);
     } else {
       document.getElementById('rejectedAlert').textContent =
         '❌ Stage rejected. Fix the issues and re-run Analysis.';
@@ -1038,11 +1044,6 @@ async function submitApproval(action) {
       selectedFile = null;
       document.getElementById('dropZone').classList.remove('has-file');
       document.getElementById('dzText').textContent = 'Drop .md or .txt file here, or click to browse';
-    }
-
-    if (!resp.ok) {
-      const err = await resp.json();
-      console.warn('Approval gate response:', err.error);
     }
 
   } catch (e) {

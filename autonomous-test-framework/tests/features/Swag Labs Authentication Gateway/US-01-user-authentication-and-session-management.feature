@@ -1,6 +1,6 @@
 Feature: Swag Labs Authentication Gateway
   As a user of the application,
-  I want to Allow users to authenticate with valid test credentials, establish a local storage session, and redirect to the inventory catalog.
+  I want to Allow users to authenticate securely using their credentials and receive appropriate validation feedback.
   So that access protected functionality.
 
   Background:
@@ -86,7 +86,7 @@ Feature: Swag Labs Authentication Gateway
     When Submit form and verify error handling response
     Then Boundary error shown. Value rejected.
 
-  @negative @functional @ui @regression @tc-007
+  @negative @functional @ui @regression @tc-007 @obsolete
   Scenario: [TC-007] Access without authentication
     Given Navigate to: User Authentication and Session Management
     And with test data "{{validBaseURL}}"

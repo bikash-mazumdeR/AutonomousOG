@@ -1,0 +1,1300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ARIA — Agent 02: Test Case Generator</title>
+  <style>
+    /* ── Design tokens ───────────────────────────────────────────────────── */
+    :root {
+      --bg:           #0f172a;
+      --surface:      #1e293b;
+      --surface2:     #273449;
+      --border:       #334155;
+      --accent:       #6366f1;
+      --accent-h:     #4f46e5;
+      --success:      #22c55e;
+      --success-bg:   #14532d22;
+      --warning:      #f59e0b;
+      --warning-bg:   #78350f22;
+      --danger:       #ef4444;
+      --danger-bg:    #7f1d1d22;
+      --text:         #f1f5f9;
+      --text-muted:   #94a3b8;
+      --text-dim:     #64748b;
+      --radius:       10px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: var(--bg); color: var(--text);
+                 font-family: 'Inter', system-ui, sans-serif; font-size: 14px; line-height: 1.6; }
+    
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--surface); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* ── Header & Pipeline Bar ───────────────────────────────────────────── */
+    .header {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 12px 24px; display: flex; align-items: center; gap: 16px;
+      position: sticky; top: 0; z-index: 100;
+    }
+    .header-logo { font-size: 18px; font-weight: 700; display: flex; gap: 8px; }
+    .header-logo span { color: var(--accent); }
+    .header-badge {
+      background: var(--accent); color: #fff; padding: 3px 12px; border-radius: 20px; 
+      font-size: 12px; font-weight: 600; margin-left: auto;
+    }
+
+    .pipeline-bar {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 10px 24px; display: flex; align-items: center; overflow-x: auto;
+    }
+    .step-node {
+      width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; background: var(--surface2); border: 2px solid var(--border); color: var(--text-dim);
+    }
+    .step-node.done    { background: var(--success); border-color: var(--success); color: #fff; }
+    .step-node.active  { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .step-connector { height: 2px; flex: 1; min-width: 16px; background: var(--border); }
+    .step-connector.done { background: var(--success); }
+
+    /* ── Layout ──────────────────────────────────────────────────────────── */
+    .page-body { padding: 24px; max-width: 1400px; margin: 0 auto; padding-bottom: 100px; }
+    .main-grid { display: grid; grid-template-columns: 1fr 340px; gap: 20px; align-items: start; }
+    .col-main { min-width: 0; }
+    @media (max-width: 900px) { .main-grid { grid-template-columns: 1fr; } }
+
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
+    .card + .card { margin-top: 16px; }
+    .card-title { font-size: 13px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 16px; }
+
+    /* ── Checkboxes ──────────────────────────────────────────────────────── */
+    .checkbox-group { display: flex; flex-direction: column; gap: 10px; margin: 16px 0; }
+    .checkbox-label {
+      display: flex; align-items: center; gap: 10px; padding: 12px;
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+      cursor: pointer; user-select: none; transition: border .2s;
+    }
+    .checkbox-label:hover { border-color: var(--accent); }
+    .checkbox-label input { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
+    .cb-title { font-weight: 600; color: var(--text); }
+    .cb-desc { font-size: 12px; color: var(--text-dim); margin-left: auto; }
+
+    /* ── Buttons ─────────────────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      height: 38px;
+      min-width: 140px;
+      padding: 0 18px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1;
+      cursor: pointer;
+      border: 1px solid transparent;
+      box-sizing: border-box;
+      white-space: nowrap;
+      transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+      user-select: none;
+    }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .btn-loading { pointer-events: none; opacity: 0.8; }
+    .btn-loading::before {
+      content: ''; display: inline-block; width: 14px; height: 14px;
+      border: 2px solid currentColor; border-bottom-color: transparent;
+      border-radius: 50%; animation: spin .8s linear infinite;
+    }
+    .btn-primary  { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-h); border-color: var(--accent-h); }
+    .btn-success  { background: var(--success); color: #fff; border-color: var(--success); }
+    .btn-success:hover:not(:disabled) { opacity: 0.9; }
+    .btn-danger   { background: var(--danger);  color: #fff; border-color: var(--danger); }
+    .btn-danger:hover:not(:disabled) { opacity: 0.9; }
+    .btn-ghost    { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
+    .btn-ghost:hover:not(:disabled) { background: var(--surface2); color: var(--text); border-color: var(--text-dim); }
+
+    .btn-sm {
+      height: 32px;
+      min-width: 110px;
+      padding: 0 12px;
+      font-size: 12px;
+      gap: 6px;
+    }
+    .btn-xs {
+      height: 28px;
+      min-width: 90px;
+      padding: 0 10px;
+      font-size: 12px;
+      gap: 5px;
+    }
+
+    .btn-icon {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+      stroke-width: 2;
+    }
+    
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Log stream ──────────────────────────────────────────────────────── */
+    .log-stream {
+      background: #020817; border: 1px solid var(--border); border-radius: var(--radius);
+      height: 240px; overflow-y: auto; overflow-x: hidden; padding: 12px; font-family: monospace; font-size: 12px;
+      overflow-wrap: anywhere; word-break: break-word; white-space: pre-wrap; width: 100%; max-width: 100%;
+    }
+    .log-line { color: var(--text-muted); }
+    .log-line.warn  { color: var(--warning); }
+    .log-line.error { color: var(--danger); }
+    .spinner { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-top: 10px; }
+    .spinner::before {
+      content: ''; width: 14px; height: 14px; border: 2px solid var(--border);
+      border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite;
+    }
+
+    /* ── Alerts ──────────────────────────────────────────────────────────── */
+    .alert { padding: 12px 16px; border-radius: 6px; font-size: 13px; margin-bottom: 16px; border: 1px solid transparent; }
+    .alert-warning { background: var(--warning-bg); border-color: var(--warning); color: #fbbf24; }
+    .alert-success { background: var(--success-bg); border-color: var(--success); color: #4ade80; }
+    .alert-danger { background: var(--danger-bg); border-color: var(--danger); color: #f87171; }
+    .hidden { display: none !important; }
+
+    /* ── Data table ──────────────────────────────────────────────────────── */
+    .table-container {
+      max-height: 500px; overflow-y: auto; border: 1px solid var(--border);
+      border-radius: var(--radius); background: var(--surface2);
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 12px 16px; border-bottom: 1px solid var(--border); text-align: left; }
+    th { position: sticky; top: 0; background: var(--surface); color: var(--text-dim); font-weight: 600; z-index: 10; }
+    tr:last-child td { border-bottom: none; }
+    .tc-key { font-family: monospace; color: var(--accent); font-weight: 600; }
+    .tc-type { font-size: 11px; padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,0.1); font-weight: 600; }
+    .tc-type.type-positive { background: rgba(34, 197, 94, 0.2); color: #4ade80; }
+    .tc-type.type-negative { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+    .tc-type.type-edge { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+    .tc-type.type-api { background: rgba(99, 102, 241, 0.2); color: #a5b4fc; }
+    .tc-type.type-perf, .tc-type.type-performance { background: rgba(168, 85, 247, 0.2); color: #c084fc; }
+
+    .tc-row { transition: background 0.15s ease; }
+    .tc-row:hover { background: rgba(99, 102, 241, 0.08); }
+    .tc-row.unchecked { opacity: 0.5; background: rgba(0,0,0,0.2); }
+    .tc-name-link {
+      color: var(--text); cursor: pointer; text-decoration: none; font-weight: 600;
+      transition: color 0.15s; display: inline-block;
+    }
+    .tc-name-link:hover { color: var(--accent); text-decoration: underline; }
+    .btn-view-steps {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      height: 32px;
+      width: 115px;
+      min-width: 115px;
+      max-width: 115px;
+      padding: 0 12px;
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1;
+      white-space: nowrap;
+      flex-shrink: 0;
+      background: var(--surface);
+      color: var(--accent);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      box-sizing: border-box;
+      transition: all 0.15s ease;
+      user-select: none;
+    }
+    .btn-view-steps:hover {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+    .tc-preview-text { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+    
+    .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .stat-item { background: var(--surface2); border-radius: 6px; padding: 12px; }
+    .stat-label { font-size: 11px; color: var(--text-dim); }
+    .stat-value { font-size: 22px; font-weight: 700; color: var(--text); }
+
+    /* ── Test Case Steps Modal ────────────────────────────────────────────── */
+    .tc-modal-dialog {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); width: 92%; max-width: 860px; max-height: 88vh;
+      display: flex; flex-direction: column; overflow: hidden;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.75);
+      animation: modalPop 0.2s ease-out;
+    }
+    @keyframes modalPop { from { transform: scale(0.96); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    .tc-modal-head {
+      padding: 16px 24px; border-bottom: 1px solid var(--border); display: flex;
+      align-items: center; justify-content: space-between; background: var(--surface); gap: 12px;
+    }
+    .tc-modal-head-left { display: flex; align-items: center; gap: 10px; }
+    .tc-modal-head h2 { font-size: 16px; font-weight: 700; color: var(--text); }
+    .tc-modal-close-btn {
+      background: none; border: none; color: var(--text-muted); font-size: 22px; cursor: pointer; line-height: 1;
+      width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;
+      border-radius: 6px; transition: background 0.15s, color 0.15s;
+    }
+    .tc-modal-close-btn:hover { background: var(--surface2); color: var(--text); }
+    .tc-modal-content {
+      padding: 20px 24px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 18px;
+    }
+    .tc-modal-foot {
+      padding: 14px 24px; border-top: 1px solid var(--border); display: flex;
+      align-items: center; justify-content: flex-end; background: var(--surface); gap: 12px;
+    }
+    .tc-modal-foot .btn {
+      height: 38px;
+      min-width: 140px;
+    }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .form-field { display: flex; flex-direction: column; gap: 6px; }
+    .form-field label { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px; }
+    .form-input, .form-textarea, .form-select {
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
+      color: var(--text); padding: 8px 12px; font-family: inherit; font-size: 13px;
+      outline: none; transition: border-color 0.2s; width: 100%; box-sizing: border-box;
+    }
+    .form-input:focus, .form-textarea:focus, .form-select:focus { border-color: var(--accent); }
+    .steps-header-row { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; }
+    .steps-header-row span { font-size: 13px; font-weight: 600; color: var(--text); text-transform: uppercase; }
+    #addStepBtn {
+      height: 30px;
+      min-width: 110px;
+    }
+    .step-card {
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+      padding: 14px; display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px;
+    }
+    .step-card-head { display: flex; align-items: center; justify-content: space-between; }
+    .step-num-badge {
+      font-size: 11px; font-weight: 700; background: rgba(99, 102, 241, 0.25);
+      color: #a5b4fc; padding: 2px 8px; border-radius: 4px;
+    }
+    .step-btn-remove {
+      background: transparent; border: 1px solid var(--border); color: var(--text-dim); cursor: pointer;
+      font-size: 12px; font-weight: 500; display: inline-flex; align-items: center; justify-content: center;
+      gap: 5px; height: 28px; min-width: 90px; padding: 0 10px; border-radius: 4px; box-sizing: border-box;
+      transition: all 0.15s ease; user-select: none;
+    }
+    .step-btn-remove:hover { color: var(--danger); border-color: var(--danger); background: rgba(239, 68, 68, 0.1); }
+    .step-fields-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    /* ── Action bar & Modals (Mimic Agent 01) ────────────────────────────── */
+    #runBtn {
+      height: 38px;
+      min-width: 220px;
+    }
+    .action-bar {
+      position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface);
+      border-top: 1px solid var(--border); padding: 14px 24px;
+      display: flex; gap: 12px; justify-content: flex-end; align-items: center; z-index: 50;
+    }
+    .action-bar .btn {
+      height: 38px;
+      min-width: 180px;
+    }
+    
+    .modal {
+      position: fixed; inset: 0; background: rgba(0,0,0,.7);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 300; opacity: 0; pointer-events: none; transition: opacity .2s;
+    }
+    .modal.open { opacity: 1; pointer-events: all; }
+    .modal-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 24px; width: 100%; max-width: 400px;
+    }
+    .modal h2 { margin-bottom: 8px; }
+    .modal p { color: var(--text-muted); margin-bottom: 20px; font-size: 13px; }
+    .modal textarea {
+      width: 100%; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text); padding: 9px 12px;
+      min-height: 80px; margin-bottom: 20px; font-family: inherit; resize: vertical;
+    }
+    .modal-buttons { display: flex; gap: 12px; justify-content: flex-end; align-items: center; }
+    .modal-buttons .btn {
+      height: 38px;
+      min-width: 130px;
+    }
+
+    /* Chat Drawer */
+    .chat-drawer {
+      position: fixed; right: 0; top: 0; bottom: 0; width: 420px;
+      background: var(--surface); border-left: 1px solid var(--border);
+      display: flex; flex-direction: column; z-index: 201;
+      transform: translateX(100%); transition: transform .25s;
+    }
+    .chat-drawer.open { transform: translateX(0); }
+    .chat-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; font-weight: 700; }
+    .chat-close {
+      margin-left: auto; background: none; border: none; color: var(--text-muted); font-size: 20px;
+      width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;
+      border-radius: 6px; cursor: pointer; line-height: 1; transition: background 0.15s, color 0.15s;
+    }
+    .chat-close:hover { background: var(--surface2); color: var(--text); }
+    .chat-messages { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
+    .chat-bubble { max-width: 85%; padding: 10px 14px; border-radius: 8px; font-size: 13px; white-space: pre-wrap; }
+    .chat-bubble.user { background: var(--accent); color: #fff; align-self: flex-end; }
+    .chat-bubble.aria { background: var(--surface2); color: var(--text); align-self: flex-start; border: 1px solid var(--border); }
+    .chat-input-area { padding: 16px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; align-items: center; }
+    .chat-input-area input { flex: 1; height: 38px; box-sizing: border-box; background: var(--surface2); border: 1px solid var(--border); padding: 0 12px; border-radius: 6px; color: var(--text); }
+    .chat-input-area .btn { height: 38px; min-width: 90px; }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-logo">ARIA <span>/</span> Agent 02</div>
+    <div class="header-badge">Test Case Generator</div>
+  </header>
+
+  <div class="pipeline-bar" id="pipelineBar">
+    <!-- Rendered by JS -->
+  </div>
+
+  <div class="page-body">
+    
+    <div class="alert alert-success hidden" id="successAlert"></div>
+    <div class="alert alert-danger hidden" id="errorAlert"></div>
+
+    <div class="main-grid">
+      
+      <!-- Left Column (Main Content) -->
+      <div class="col-main">
+        
+        <!-- Phase 1: Input -->
+        <div class="card" id="inputPhase">
+          <div class="card-title">Configuration</div>
+          <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 10px;">
+            Agent 02 will automatically read the analysis from Agent 01. Select the types of test cases you want to generate.
+          </p>
+          
+          <input type="text" id="projectNameInput" placeholder="Project Name (optional — defaults to latest pipeline run)" style="width: 100%; background: var(--surface2); border: 1px solid var(--border); padding: 9px 12px; border-radius: 6px; color: var(--text); margin-bottom: 10px;">
+          
+          <div id="reqWarning" class="alert alert-warning hidden">
+            ⚠️ Test cases will not be generated and mapped for some requirements.
+          </div>
+
+          <div class="checkbox-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="chkPositive" checked>
+              <span class="cb-title">Positive Test Cases</span>
+              <span class="cb-desc">Happy paths & core functionality</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="chkNegative" checked>
+              <span class="cb-title">Negative Test Cases</span>
+              <span class="cb-desc">Error handling & invalid inputs</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="chkEdge" checked>
+              <span class="cb-title">Edge Cases</span>
+              <span class="cb-desc">Boundary limits & race conditions</span>
+            </label>
+            <label class="checkbox-label" id="lblApi">
+              <input type="checkbox" id="chkApi">
+              <span class="cb-title">API Test Cases</span>
+              <span class="cb-desc" id="apiDesc">Not explicitly required</span>
+            </label>
+            <label class="checkbox-label" id="lblPerf">
+              <input type="checkbox" id="chkPerf">
+              <span class="cb-title">Performance Test Cases</span>
+              <span class="cb-desc" id="perfDesc">Not explicitly required</span>
+            </label>
+          </div>
+
+          <button id="runBtn" class="btn btn-primary">
+            <span>Generate Test Cases</span>
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+              <polyline points="12 5 19 12 12 19"></polyline>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Phase 2: Running -->
+        <div class="card hidden" id="runningPhase">
+          <div class="card-title">Generation Progress</div>
+          <div class="log-stream" id="logStream"></div>
+          <div class="spinner">Agent 02 is generating BDD test cases...</div>
+        </div>
+
+        <!-- Phase 3: Results -->
+        <div class="card hidden" id="resultsPhase">
+          <div class="card-title">Generated Test Cases</div>
+          <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
+            Uncheck any test cases you wish to exclude. They will be tagged as <code>@obsolete</code> in the feature files.
+          </p>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 40px;"><input type="checkbox" id="selectAllTc" checked title="Toggle All"></th>
+                  <th>Key</th>
+                  <th>Type</th>
+                  <th>Scenario</th>
+                </tr>
+              </thead>
+              <tbody id="tcTableBody">
+                <!-- Rows injected here -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Right Column (Sidebar) -->
+      <div class="col-side">
+        <div class="card hidden" id="summaryCard">
+          <div class="card-title">Coverage Summary</div>
+          <div class="stat-grid">
+            <div class="stat-item">
+              <div class="stat-label">Total Generated</div>
+              <div class="stat-value" id="statTotal">—</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-label">UI Scenarios</div>
+              <div class="stat-value" id="statUi">—</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-label">API Scenarios</div>
+              <div class="stat-value" id="statApi">—</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-label">Perf Scenarios</div>
+              <div class="stat-value" id="statPerf">—</div>
+            </div>
+          </div>
+          <div id="warningsList" style="margin-top: 16px; font-size: 12px; color: var(--warning);">
+            <!-- Warnings injected here -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Action Bar -->
+  <div class="action-bar hidden" id="actionBar">
+    <div class="hint">Review the generated test cases above.</div>
+    <button id="chatBtn" class="btn btn-ghost">
+      <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+      </svg>
+      <span>Chat with ARIA</span>
+    </button>
+    <button id="proceedBtn" class="btn btn-primary">
+      <span>Proceed to Agent 03</span>
+      <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="5" y1="12" x2="19" y2="12"></line>
+        <polyline points="12 5 19 12 12 19"></polyline>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Test Case Steps & Edit Modal -->
+  <div id="tcModal" class="modal">
+    <div class="tc-modal-dialog">
+      <div class="tc-modal-head">
+        <div class="tc-modal-head-left">
+          <span id="tcModalKey" class="tc-key" style="font-size: 14px;">TC-000</span>
+          <span id="tcModalTypeBadge" class="tc-type">Positive</span>
+          <h2>Test Case Details & Steps</h2>
+        </div>
+        <button type="button" class="tc-modal-close-btn" id="tcModalCloseXBtn" title="Close without saving">&times;</button>
+      </div>
+      <div class="tc-modal-content">
+        <div id="tcModalAlert" class="alert alert-success hidden"></div>
+        <div id="tcModalError" class="alert alert-danger hidden"></div>
+        
+        <div class="form-field">
+          <label for="tcEditName">Scenario Name / Title</label>
+          <input type="text" id="tcEditName" class="form-input" placeholder="Scenario name...">
+        </div>
+
+        <div class="form-row">
+          <div class="form-field">
+            <label for="tcEditType">Type</label>
+            <select id="tcEditType" class="form-select">
+              <option value="POSITIVE">Positive</option>
+              <option value="NEGATIVE">Negative</option>
+              <option value="EDGE">Edge</option>
+              <option value="API">API</option>
+              <option value="PERFORMANCE">Performance</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label for="tcEditLabels">Tags / Labels (comma-separated)</label>
+            <input type="text" id="tcEditLabels" class="form-input" placeholder="e.g. Functional, UI, Smoke">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-field">
+            <label for="tcEditPrecondition">Precondition</label>
+            <textarea id="tcEditPrecondition" class="form-textarea" rows="2" placeholder="Preconditions..."></textarea>
+          </div>
+          <div class="form-field">
+            <label for="tcEditObjective">Objective</label>
+            <textarea id="tcEditObjective" class="form-textarea" rows="2" placeholder="Objective / Verification goal..."></textarea>
+          </div>
+        </div>
+
+        <div class="steps-header-row">
+          <span>Test Steps (<span id="tcStepsCount">0</span>)</span>
+          <button type="button" class="btn btn-ghost btn-sm" id="addStepBtn">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            <span>Add Step</span>
+          </button>
+        </div>
+
+        <div id="tcStepsList">
+          <!-- Step cards rendered here -->
+        </div>
+      </div>
+      <div class="tc-modal-foot">
+        <button type="button" class="btn btn-ghost" id="tcModalCancelBtn">Close</button>
+        <button type="button" class="btn btn-primary" id="tcModalSaveBtn">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+            <polyline points="17 21 17 13 7 13 7 21"></polyline>
+            <polyline points="7 3 7 8 15 8"></polyline>
+          </svg>
+          <span>Save Changes</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Approval Modal -->
+  <div id="approvalModal" class="modal">
+    <div class="modal-card">
+      <h2>Stage Approval</h2>
+      <p>Approve generated test cases? Unchecked test cases will be marked as obsolete in the feature files.</p>
+      <textarea id="approvalComment" placeholder="Optional comment for the approval gate..."></textarea>
+      <div class="modal-buttons">
+        <button id="rejectBtn" class="btn btn-danger">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+          <span>Reject</span>
+        </button>
+        <button id="approveBtn" class="btn btn-success">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+          <span>Approve</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Chat Drawer -->
+  <div id="chatDrawer" class="chat-drawer">
+    <div class="chat-header">
+      ARIA Chatbot
+      <button class="chat-close" id="chatCloseBtn">&times;</button>
+    </div>
+    <div class="chat-messages" id="chatMessages">
+      <div class="chat-bubble aria">I have generated the test cases. What would you like to verify?</div>
+    </div>
+    <div class="chat-input-area">
+      <input type="text" id="chatInput" placeholder="Ask about the test cases..." autocomplete="off">
+      <button id="chatSendBtn" class="btn btn-primary">Send</button>
+    </div>
+  </div>
+
+  <script>
+    // ── Pipeline Bar ──────────────────────────────────────────────────────
+    const STAGES = [
+      'Req Analyzer','Test Generator','Test Reviewer','Data Generator',
+      'Script Generator','Code Reviewer','Test Runner','Bug Reporter',
+      'Report Generator','Auto Healer','Re-Test Agent',
+    ];
+    (function renderPipeline() {
+      const bar = document.getElementById('pipelineBar');
+      STAGES.forEach((name, i) => {
+        const node = document.createElement('div');
+        if (i === 0) node.className = 'step-node done'; // Agent 01 done
+        else if (i === 1) node.className = 'step-node active'; // Agent 02 active
+        else node.className = 'step-node';
+        
+        node.title = `Agent ${String(i+1).padStart(2,'0')}: ${name}`;
+        node.textContent = i + 1;
+        bar.appendChild(node);
+        if (i < STAGES.length - 1) {
+          const conn = document.createElement('div');
+          conn.className = 'step-connector' + (i === 0 ? ' done' : '');
+          bar.appendChild(conn);
+        }
+      });
+    })();
+
+    // ── State ─────────────────────────────────────────────────────────────
+    let requiredTypes = { positive: true, negative: true, edge: true, api: false, perf: false };
+    let pollInterval = null;
+    let allTestCases = [];
+    let chatHistory = [];
+    let currentEditingKey = null;
+
+    const DOM = {
+      chkPositive: document.getElementById('chkPositive'),
+      chkNegative: document.getElementById('chkNegative'),
+      chkEdge: document.getElementById('chkEdge'),
+      chkApi: document.getElementById('chkApi'),
+      chkPerf: document.getElementById('chkPerf'),
+      reqWarning: document.getElementById('reqWarning'),
+      runBtn: document.getElementById('runBtn'),
+      
+      inputPhase: document.getElementById('inputPhase'),
+      runningPhase: document.getElementById('runningPhase'),
+      resultsPhase: document.getElementById('resultsPhase'),
+      summaryCard: document.getElementById('summaryCard'),
+      actionBar: document.getElementById('actionBar'),
+      logStream: document.getElementById('logStream'),
+      tcTableBody: document.getElementById('tcTableBody'),
+      selectAllTc: document.getElementById('selectAllTc'),
+      
+      proceedBtn: document.getElementById('proceedBtn'),
+      approvalModal: document.getElementById('approvalModal'),
+      approveBtn: document.getElementById('approveBtn'),
+      rejectBtn: document.getElementById('rejectBtn'),
+      approvalComment: document.getElementById('approvalComment'),
+      successAlert: document.getElementById('successAlert'),
+      errorAlert: document.getElementById('errorAlert'),
+
+      // Test Case Steps & Edit Modal elements
+      tcModal: document.getElementById('tcModal'),
+      tcModalKey: document.getElementById('tcModalKey'),
+      tcModalTypeBadge: document.getElementById('tcModalTypeBadge'),
+      tcModalCloseXBtn: document.getElementById('tcModalCloseXBtn'),
+      tcModalCancelBtn: document.getElementById('tcModalCancelBtn'),
+      tcModalSaveBtn: document.getElementById('tcModalSaveBtn'),
+      tcModalAlert: document.getElementById('tcModalAlert'),
+      tcModalError: document.getElementById('tcModalError'),
+      tcEditName: document.getElementById('tcEditName'),
+      tcEditType: document.getElementById('tcEditType'),
+      tcEditLabels: document.getElementById('tcEditLabels'),
+      tcEditPrecondition: document.getElementById('tcEditPrecondition'),
+      tcEditObjective: document.getElementById('tcEditObjective'),
+      tcStepsCount: document.getElementById('tcStepsCount'),
+      addStepBtn: document.getElementById('addStepBtn'),
+      tcStepsList: document.getElementById('tcStepsList')
+    };
+
+    // ── Initialization ────────────────────────────────────────────────────
+    async function init() {
+      try {
+        const res = await fetch('/api/agent02/state');
+        const data = await res.json();
+        
+        if (data.requirements) {
+          const reqs = data.requirements;
+          let needsApi = false;
+          let needsPerf = false;
+          
+          if (reqs.features) {
+            for (const f of reqs.features) {
+              for (const s of (f.userStories || [])) {
+                if (s.testTypes?.includes('API')) needsApi = true;
+                if (s.testTypes?.includes('PERFORMANCE')) needsPerf = true;
+              }
+            }
+          }
+          
+          if (needsApi) {
+            requiredTypes.api = true;
+            DOM.chkApi.checked = true;
+            document.getElementById('apiDesc').textContent = 'Required by User Stories';
+            document.getElementById('lblApi').style.borderColor = 'var(--accent)';
+          }
+          if (needsPerf) {
+            requiredTypes.perf = true;
+            DOM.chkPerf.checked = true;
+            document.getElementById('perfDesc').textContent = 'Required by User Stories';
+            document.getElementById('lblPerf').style.borderColor = 'var(--accent)';
+          }
+        }
+
+        if (data.running) {
+          showPhase('running');
+          startLogStream();
+          startPolling();
+        } else if (data.stage && data.stage.status === 'COMPLETED' && data.testCases) {
+          showPhase('results');
+          renderResults(data.testCases);
+        }
+      } catch (e) {
+        console.error('Init error:', e);
+      }
+    }
+
+    // ── Checkbox Warning Logic ────────────────────────────────────────────
+    function checkWarnings() {
+      let warn = false;
+      if (requiredTypes.positive && !DOM.chkPositive.checked) warn = true;
+      if (requiredTypes.negative && !DOM.chkNegative.checked) warn = true;
+      if (requiredTypes.edge && !DOM.chkEdge.checked) warn = true;
+      if (requiredTypes.api && !DOM.chkApi.checked) warn = true;
+      if (requiredTypes.perf && !DOM.chkPerf.checked) warn = true;
+      
+      DOM.reqWarning.classList.toggle('hidden', !warn);
+    }
+    ['chkPositive', 'chkNegative', 'chkEdge', 'chkApi', 'chkPerf'].forEach(id => {
+      document.getElementById(id).addEventListener('change', checkWarnings);
+    });
+
+    // ── Run Analysis ──────────────────────────────────────────────────────
+    DOM.runBtn.addEventListener('click', async () => {
+      DOM.runBtn.classList.add('btn-loading');
+      DOM.runBtn.disabled = true;
+      DOM.errorAlert.classList.add('hidden');
+
+      const payload = {
+        projectName: document.getElementById('projectNameInput').value,
+        skipPositive: !DOM.chkPositive.checked,
+        skipNegative: !DOM.chkNegative.checked,
+        skipEdge: !DOM.chkEdge.checked,
+        skipApi: !DOM.chkApi.checked,
+        skipPerf: !DOM.chkPerf.checked
+      };
+
+      try {
+        const resp = await fetch('/api/agent02/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        
+        if (!resp.ok) {
+          const err = await resp.json();
+          throw new Error(err.error || 'Failed to start agent');
+        }
+
+        showPhase('running');
+        DOM.logStream.innerHTML = '';
+        startLogStream();
+        startPolling();
+      } catch (e) {
+        DOM.errorAlert.textContent = e.message;
+        DOM.errorAlert.classList.remove('hidden');
+      } finally {
+        DOM.runBtn.classList.remove('btn-loading');
+        DOM.runBtn.disabled = false;
+      }
+    });
+
+    // ── UI Helpers ────────────────────────────────────────────────────────
+    function showPhase(phase) {
+      DOM.inputPhase.classList.add('hidden');
+      DOM.runningPhase.classList.add('hidden');
+      DOM.resultsPhase.classList.add('hidden');
+      DOM.summaryCard.classList.add('hidden');
+      DOM.actionBar.classList.add('hidden');
+
+      if (phase === 'input') DOM.inputPhase.classList.remove('hidden');
+      if (phase === 'running') DOM.runningPhase.classList.remove('hidden');
+      if (phase === 'results') {
+        DOM.resultsPhase.classList.remove('hidden');
+        DOM.summaryCard.classList.remove('hidden');
+        DOM.actionBar.classList.remove('hidden');
+      }
+    }
+
+    let eventSource = null;
+    function startLogStream() {
+      if (eventSource) eventSource.close();
+      eventSource = new EventSource('/api/agent02/logs');
+      eventSource.onmessage = (e) => {
+        const data = JSON.parse(e.data);
+        if (data.type === 'log') {
+          const div = document.createElement('div');
+          div.className = `log-line ${data.level || 'info'}`;
+          div.textContent = data.message;
+          DOM.logStream.appendChild(div);
+          DOM.logStream.scrollTop = DOM.logStream.scrollHeight;
+        }
+      };
+    }
+
+    function startPolling() {
+      if (pollInterval) clearInterval(pollInterval);
+      pollInterval = setInterval(async () => {
+        try {
+          const res = await fetch('/api/agent02/state');
+          const data = await res.json();
+          if (data.stage && data.stage.status === 'COMPLETED' && data.testCases) {
+            clearInterval(pollInterval);
+            if (eventSource) eventSource.close();
+            showPhase('results');
+            renderResults(data.testCases);
+          } else if (data.stage && data.stage.status === 'FAILED') {
+            clearInterval(pollInterval);
+            if (eventSource) eventSource.close();
+            DOM.errorAlert.textContent = 'Agent 02 failed. Check logs.';
+            DOM.errorAlert.classList.remove('hidden');
+            showPhase('input');
+          }
+        } catch (e) { console.error('Poll err:', e); }
+      }, 500);
+    }
+
+    // ── SVG Icons ─────────────────────────────────────────────────────────
+    const SVG_ICONS = {
+      edit: '<svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>',
+      save: '<svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>',
+      trash: '<svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>',
+      check: '<svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>'
+    };
+
+    // ── HTML Escaping Helper ──────────────────────────────────────────────
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function updateSummaryCounts() {
+      document.getElementById('statTotal').textContent = allTestCases.length;
+      document.getElementById('statUi').textContent = allTestCases.filter(t => ['POSITIVE', 'NEGATIVE', 'EDGE'].includes((t.type || '').toUpperCase())).length;
+      document.getElementById('statApi').textContent = allTestCases.filter(t => (t.type || '').toUpperCase() === 'API').length;
+      document.getElementById('statPerf').textContent = allTestCases.filter(t => (t.type || '').toUpperCase() === 'PERFORMANCE').length;
+    }
+
+    // ── Results Rendering ─────────────────────────────────────────────────
+    function renderResults(testCasesOutput) {
+      const exportData = testCasesOutput.zephyrExport;
+      if (!exportData || !exportData.testCases) return;
+      
+      allTestCases = exportData.testCases;
+      updateSummaryCounts();
+
+      DOM.tcTableBody.innerHTML = '';
+      allTestCases.forEach((tc) => {
+        const tr = document.createElement('tr');
+        tr.className = 'tc-row';
+        tr.id = `row-${tc.key}`;
+        
+        const typeClass = (tc.type || '').toLowerCase();
+        const firstStep = tc.testSteps?.[0]?.description || 'No steps generated';
+
+        tr.innerHTML = `
+          <td><input type="checkbox" class="tc-checkbox" data-key="${tc.key}" checked></td>
+          <td class="tc-key">${tc.key}</td>
+          <td><span class="tc-type type-${typeClass}" id="type-badge-${tc.key}">${escapeHtml(tc.type)}</span></td>
+          <td>
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+              <a href="javascript:void(0)" class="tc-name-link" data-key="${tc.key}" id="name-${tc.key}" title="Click to view/edit test steps">${escapeHtml(tc.name)}</a>
+              <button type="button" class="btn-view-steps" data-key="${tc.key}" title="View & edit steps">
+                ${SVG_ICONS.edit}
+                <span>Edit Steps</span>
+              </button>
+            </div>
+            <div class="tc-preview-text" id="preview-${tc.key}">
+              ${escapeHtml(firstStep)}...
+            </div>
+          </td>
+        `;
+        DOM.tcTableBody.appendChild(tr);
+      });
+
+      // Bind row checkboxes (prevent click event propagation)
+      DOM.tcTableBody.querySelectorAll('.tc-checkbox').forEach(cb => {
+        cb.addEventListener('click', (e) => e.stopPropagation());
+        cb.addEventListener('change', (e) => {
+          const row = document.getElementById(`row-${e.target.dataset.key}`);
+          if (row) row.classList.toggle('unchecked', !e.target.checked);
+          updateSelectAllState();
+        });
+      });
+
+      // Bind click on tc-name-link and btn-view-steps to open modal
+      DOM.tcTableBody.querySelectorAll('.tc-name-link, .btn-view-steps').forEach(el => {
+        el.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const key = el.dataset.key;
+          if (key) openTcModal(key);
+        });
+      });
+    }
+
+    DOM.selectAllTc.addEventListener('change', (e) => {
+      const checked = e.target.checked;
+      document.querySelectorAll('.tc-checkbox').forEach(cb => {
+        cb.checked = checked;
+        const row = document.getElementById(`row-${cb.dataset.key}`);
+        if (row) row.classList.toggle('unchecked', !checked);
+      });
+    });
+
+    function updateSelectAllState() {
+      const allCb = Array.from(document.querySelectorAll('.tc-checkbox'));
+      const allChecked = allCb.every(cb => cb.checked);
+      const someChecked = allCb.some(cb => cb.checked);
+      DOM.selectAllTc.checked = allChecked;
+      DOM.selectAllTc.indeterminate = someChecked && !allChecked;
+    }
+
+    // ── Test Case Modal & Step Editing Logic ──────────────────────────────
+    function openTcModal(key) {
+      const tc = allTestCases.find(t => t.key === key);
+      if (!tc) return;
+
+      currentEditingKey = key;
+      DOM.tcModalAlert.classList.add('hidden');
+      DOM.tcModalAlert.textContent = '';
+      DOM.tcModalError.classList.add('hidden');
+      DOM.tcModalError.textContent = '';
+
+      DOM.tcModalKey.textContent = tc.key;
+      const typeStr = (tc.type || 'POSITIVE').toUpperCase();
+      DOM.tcModalTypeBadge.textContent = typeStr;
+      DOM.tcModalTypeBadge.className = `tc-type type-${typeStr.toLowerCase()}`;
+
+      DOM.tcEditName.value = tc.name || '';
+      DOM.tcEditType.value = typeStr;
+      DOM.tcEditLabels.value = Array.isArray(tc.labels) ? tc.labels.join(', ') : (tc.labels || '');
+      DOM.tcEditPrecondition.value = tc.precondition || '';
+      DOM.tcEditObjective.value = tc.objective || '';
+
+      // Populate steps
+      DOM.tcStepsList.innerHTML = '';
+      const steps = Array.isArray(tc.testSteps) ? tc.testSteps : [];
+      steps.forEach((step, idx) => {
+        DOM.tcStepsList.appendChild(createStepCardElement(step, idx));
+      });
+      updateStepNumbers();
+
+      // Reset save button state
+      DOM.tcModalSaveBtn.disabled = false;
+      DOM.tcModalSaveBtn.innerHTML = `${SVG_ICONS.save}<span>Save Changes</span>`;
+      DOM.tcModalSaveBtn.classList.remove('btn-loading');
+
+      DOM.tcModal.classList.add('open');
+    }
+
+    function closeTcModal() {
+      DOM.tcModal.classList.remove('open');
+      DOM.tcModalAlert.classList.add('hidden');
+      DOM.tcModalError.classList.add('hidden');
+      currentEditingKey = null;
+    }
+
+    function createStepCardElement(step = {}, idx = 0) {
+      const div = document.createElement('div');
+      div.className = 'step-card';
+      div.innerHTML = `
+        <div class="step-card-head">
+          <span class="step-num-badge">Step ${idx + 1}</span>
+          <button type="button" class="step-btn-remove" title="Delete this step">
+            ${SVG_ICONS.trash}
+            <span>Remove</span>
+          </button>
+        </div>
+        <div class="form-field">
+          <label>Action / Description</label>
+          <textarea class="form-textarea step-desc" rows="2" placeholder="e.g. When the user enters valid credentials">${escapeHtml(step.description || '')}</textarea>
+        </div>
+        <div class="step-fields-grid">
+          <div class="form-field">
+            <label>Test Data (Optional)</label>
+            <input type="text" class="form-input step-data" placeholder="e.g. username: standard_user" value="${escapeHtml(step.testData || '')}">
+          </div>
+          <div class="form-field">
+            <label>Expected Result</label>
+            <input type="text" class="form-input step-expected" placeholder="e.g. User is redirected to inventory" value="${escapeHtml(step.expectedResult || '')}">
+          </div>
+        </div>
+      `;
+
+      div.querySelector('.step-btn-remove').addEventListener('click', () => {
+        div.remove();
+        updateStepNumbers();
+      });
+
+      return div;
+    }
+
+    function updateStepNumbers() {
+      const cards = DOM.tcStepsList.querySelectorAll('.step-card');
+      cards.forEach((card, idx) => {
+        const badge = card.querySelector('.step-num-badge');
+        if (badge) badge.textContent = `Step ${idx + 1}`;
+      });
+      DOM.tcStepsCount.textContent = cards.length;
+    }
+
+    function addStep() {
+      const newCard = createStepCardElement({ description: '', testData: '', expectedResult: '' }, DOM.tcStepsList.children.length);
+      DOM.tcStepsList.appendChild(newCard);
+      updateStepNumbers();
+      const descInput = newCard.querySelector('.step-desc');
+      if (descInput) {
+        descInput.focus();
+        descInput.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+
+    async function saveTestCase() {
+      if (!currentEditingKey) return;
+
+      const newName = DOM.tcEditName.value.trim();
+      if (!newName) {
+        DOM.tcModalError.textContent = 'Scenario Name / Title cannot be empty.';
+        DOM.tcModalError.classList.remove('hidden');
+        DOM.tcEditName.focus();
+        return;
+      }
+
+      DOM.tcModalError.classList.add('hidden');
+      DOM.tcModalAlert.classList.add('hidden');
+      DOM.tcModalSaveBtn.disabled = true;
+      DOM.tcModalSaveBtn.classList.add('btn-loading');
+      DOM.tcModalSaveBtn.textContent = 'Saving...';
+
+      const newType = DOM.tcEditType.value;
+      const newLabels = DOM.tcEditLabels.value
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean);
+      const newPrecondition = DOM.tcEditPrecondition.value.trim();
+      const newObjective = DOM.tcEditObjective.value.trim();
+
+      const stepCards = Array.from(DOM.tcStepsList.querySelectorAll('.step-card'));
+      const testSteps = stepCards.map((card, idx) => ({
+        index: idx + 1,
+        description: (card.querySelector('.step-desc')?.value || '').trim(),
+        testData: (card.querySelector('.step-data')?.value || '').trim(),
+        expectedResult: (card.querySelector('.step-expected')?.value || '').trim()
+      }));
+
+      const payload = {
+        key: currentEditingKey,
+        name: newName,
+        type: newType,
+        labels: newLabels,
+        precondition: newPrecondition,
+        objective: newObjective,
+        testSteps
+      };
+
+      try {
+        const resp = await fetch('/api/agent02/testcase', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.error || `Failed to update test case (HTTP ${resp.status})`);
+        }
+
+        const data = await resp.json();
+        const updated = data.testCase || payload;
+
+        // Update in-memory allTestCases
+        const targetIdx = allTestCases.findIndex(t => t.key === currentEditingKey);
+        if (targetIdx !== -1) {
+          allTestCases[targetIdx] = { ...allTestCases[targetIdx], ...updated };
+        }
+
+        // Update DOM table row
+        const rowName = document.getElementById(`name-${currentEditingKey}`);
+        if (rowName) rowName.textContent = updated.name;
+
+        const rowTypeBadge = document.getElementById(`type-badge-${currentEditingKey}`);
+        if (rowTypeBadge) {
+          rowTypeBadge.textContent = updated.type;
+          rowTypeBadge.className = `tc-type type-${(updated.type || '').toLowerCase()}`;
+        }
+
+        const rowPreview = document.getElementById(`preview-${currentEditingKey}`);
+        if (rowPreview) {
+          const firstDesc = updated.testSteps?.[0]?.description || 'No steps generated';
+          rowPreview.textContent = `${firstDesc}...`;
+        }
+
+        updateSummaryCounts();
+
+        DOM.tcModalAlert.textContent = '✅ Test case & steps saved successfully! Feature files synced.';
+        DOM.tcModalAlert.classList.remove('hidden');
+
+        setTimeout(() => {
+          closeTcModal();
+        }, 800);
+      } catch (err) {
+        DOM.tcModalError.textContent = `❌ ${err.message}`;
+        DOM.tcModalError.classList.remove('hidden');
+      } finally {
+        DOM.tcModalSaveBtn.disabled = false;
+        DOM.tcModalSaveBtn.classList.remove('btn-loading');
+        DOM.tcModalSaveBtn.innerHTML = `${SVG_ICONS.save}<span>Save Changes</span>`;
+      }
+    }
+
+    // Modal event bindings
+    DOM.addStepBtn.addEventListener('click', addStep);
+    DOM.tcModalSaveBtn.addEventListener('click', saveTestCase);
+    DOM.tcModalCloseXBtn.addEventListener('click', closeTcModal);
+    DOM.tcModalCancelBtn.addEventListener('click', closeTcModal);
+    DOM.tcModal.addEventListener('click', (e) => {
+      if (e.target === DOM.tcModal) closeTcModal();
+    });
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && DOM.tcModal.classList.contains('open')) {
+        closeTcModal();
+      }
+    });
+    DOM.tcEditType.addEventListener('change', () => {
+      const typeStr = DOM.tcEditType.value;
+      DOM.tcModalTypeBadge.textContent = typeStr;
+      DOM.tcModalTypeBadge.className = `tc-type type-${typeStr.toLowerCase()}`;
+    });
+
+    // ── Approval Logic ────────────────────────────────────────────────────
+    DOM.proceedBtn.addEventListener('click', () => {
+      DOM.approvalModal.classList.add('open');
+    });
+
+    async function submitApproval(action) {
+      const btn = action === 'approve' ? DOM.approveBtn : DOM.rejectBtn;
+      btn.classList.add('btn-loading');
+      btn.disabled = true;
+
+      // Collect unchecked keys
+      const uncheckedTestCaseKeys = Array.from(document.querySelectorAll('.tc-checkbox'))
+        .filter(cb => !cb.checked)
+        .map(cb => cb.dataset.key);
+
+      const payload = {
+        comment: DOM.approvalComment.value,
+        uncheckedTestCaseKeys
+      };
+
+      try {
+        const res = await fetch(`/api/agent02/${action}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        
+        if (!res.ok) {
+          let errMsg = 'Failed to process approval';
+          try {
+            const errData = await res.json();
+            errMsg = errData.error || errMsg;
+          } catch {
+            errMsg = await res.text() || errMsg;
+          }
+          throw new Error(errMsg);
+        }
+        
+        DOM.approvalModal.classList.remove('open');
+        
+        if (action === 'approve') {
+          DOM.successAlert.innerHTML = '✅ Stage approved! <br><small>Navigating to Agent 03 (Test Case Reviewer)...</small>';
+          DOM.successAlert.classList.remove('hidden');
+          DOM.proceedBtn.disabled = true;
+          DOM.proceedBtn.innerHTML = `${SVG_ICONS.check}<span>Approved</span>`;
+          DOM.actionBar.style.borderTopColor = 'var(--success)';
+          document.querySelector('.step-node.active').classList.add('done');
+          
+          setTimeout(() => {
+            window.location.href = '/agent03.html';
+          }, 2000);
+        } else {
+          DOM.errorAlert.textContent = '❌ Stage rejected. Fix the issues and re-run.';
+          DOM.errorAlert.classList.remove('hidden');
+          showPhase('input');
+        }
+      } catch (e) {
+        alert('Error: ' + e.message);
+      } finally {
+        btn.classList.remove('btn-loading');
+        btn.disabled = false;
+      }
+    }
+
+    DOM.approveBtn.addEventListener('click', () => submitApproval('approve'));
+    DOM.rejectBtn.addEventListener('click', () => submitApproval('reject'));
+
+    // ── Chat Drawer ───────────────────────────────────────────────────────
+    const chatDrawer = document.getElementById('chatDrawer');
+    document.getElementById('chatBtn').addEventListener('click', () => chatDrawer.classList.add('open'));
+    document.getElementById('chatCloseBtn').addEventListener('click', () => chatDrawer.classList.remove('open'));
+
+    function appendChatBubble(role, text) {
+      const msg = document.createElement('div');
+      msg.className = `chat-bubble ${role}`;
+      msg.textContent = text;
+      document.getElementById('chatMessages').appendChild(msg);
+      msg.scrollIntoView({ behavior: 'smooth' });
+      return msg;
+    }
+
+    document.getElementById('chatSendBtn').addEventListener('click', sendChatMessage);
+    document.getElementById('chatInput').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') sendChatMessage();
+    });
+
+    async function sendChatMessage() {
+      const input = document.getElementById('chatInput');
+      const msg = input.value.trim();
+      if (!msg) return;
+
+      const btn = document.getElementById('chatSendBtn');
+      btn.disabled = true;
+      btn.classList.add('btn-loading');
+
+      input.value = '';
+      appendChatBubble('user', msg);
+      chatHistory.push({ role: 'user', content: msg });
+      const typing = appendChatBubble('aria', '…');
+
+      try {
+        const resp = await fetch('/api/agent02/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: msg, history: chatHistory.slice(-10) }),
+        });
+        const data = await resp.json();
+        typing.remove();
+        btn.disabled = false;
+        btn.classList.remove('btn-loading');
+        
+        const reply = data.reply || data.error || 'No response.';
+        appendChatBubble('aria', reply);
+        chatHistory.push({ role: 'assistant', content: reply });
+      } catch (e) {
+        typing.remove();
+        btn.disabled = false;
+        btn.classList.remove('btn-loading');
+        appendChatBubble('aria', '⚠ Error: ' + e.message);
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>

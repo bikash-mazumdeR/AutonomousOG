@@ -249,8 +249,15 @@ export class ApprovalGate {
       }
 
       const prompt = () => {
+        if (!process.stdin.readable || process.stdin.destroyed || process.stdin.readableEnded) {
+          return;
+        }
         rl.question('\n  ➤ Your decision: ', async (rawInput) => {
+          if (rawInput === null || rawInput === undefined) return;
           const input = (rawInput || '').trim();
+          if (!input && !process.stdin.isTTY) {
+            return;
+          }
           const upperInput = input.toUpperCase();
 
           // ── HELP ──────────────────────────────────────────────────────
