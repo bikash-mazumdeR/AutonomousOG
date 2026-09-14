@@ -1,136 +1,59 @@
+'use strict';
+
 /**
- * @fileoverview Sub-Agent for K6 Performance Script generation.
+ * @fileoverview K6 sub-agent: readiness (scenario, relative endpoint, SLA) → validated request/check bodies →
+ * deterministic K6 scripts (one per test case) driven entirely by environment variables.
  */
 
-import path from 'path';
-import fs from 'fs';
-import { Logger } from '../../../core/logger/Logger';
-import { FILE_TYPE } from '../../../core/automation-reviewer/ReviewRules';
-import { cleanContext, generateWithSelfReview } from './shared/generation-utils';
-
-const STAGE_ID = '05-playwright-script-generator';
-const K6_SKILL_PATH = path.resolve(__dirname, '../../../skills/k6-scripting.md');
-const PLAYWRIGHT_SKILL_PATH = path.resolve(__dirname, '../../../skills/playwright-scripting.md');
-const K6_LEARNINGS_PATH = path.resolve(__dirname, '../learnings/k6-learnings.md');
-const ROOT_LEARNINGS_PATH = path.resolve(__dirname, '../LEARNINGS.md');
+import * as path from 'path';
+import { AutomationTestCase } from '../contracts/automationTestCase';
+import { renderK6Script } from '../rendering/specRenderer';
+import { generateTestBodies } from '../generation/testBodyGenerator';
+import { loadGenerationPrompt } from './shared/generation-utils';
+import {
+  FeatureGenerationContext, FeatureGenerationResult, GeneratedFile, fileStem, splitByReadiness,
+} from './shared/featureContext';
 
 export class K6ScriptGenerator {
-  private _logger: Logger;
-  private _skill: string;
-
-  constructor() {
-    this._logger = new Logger('K6ScriptGenerator');
-    this._skill = this._loadSkill();
-  }
-
   /**
-   * Loads the K6 scripting skill file and corresponding K6 learnings.
-   * Gracefully falls back to base skill and learnings if specialized sub-files are pending.
+   * Generates K6 scripts for one feature's performance test cases.
+   * @param {AutomationTestCase[]} testCases
+   * @param {FeatureGenerationContext} ctx
+   * @returns {Promise<FeatureGenerationResult>}
    */
-  private _loadSkill(): string {
-    let skill = '';
-    try {
-      if (fs.existsSync(K6_SKILL_PATH)) {
-        skill = fs.readFileSync(K6_SKILL_PATH, 'utf-8');
-      } else if (fs.existsSync(PLAYWRIGHT_SKILL_PATH)) {
-        skill = fs.readFileSync(PLAYWRIGHT_SKILL_PATH, 'utf-8');
-      }
-    } catch {
-      skill = '';
-    }
+  async generate(testCases: AutomationTestCase[], ctx: FeatureGenerationContext): Promise<FeatureGenerationResult> {
+    const { ready, notReady } = splitByReadiness(testCases, ctx.profile, 'K6');
+    if (ready.length === 0) return { outcomes: notReady, files: [], fileByTcKey: new Map() };
 
-    try {
-      if (fs.existsSync(K6_LEARNINGS_PATH)) {
-        skill += '\n\n' + fs.readFileSync(K6_LEARNINGS_PATH, 'utf-8');
-      } else if (fs.existsSync(ROOT_LEARNINGS_PATH)) {
-        skill += '\n\n' + fs.readFileSync(ROOT_LEARNINGS_PATH, 'utf-8');
-      }
-    } catch {
-      // non-blocking
-    }
-
-    return skill;
-  }
-
-  /**
-   * Validates if test cases contain concrete, actionable performance target endpoints.
-   */
-  validateEndpoints(perfTCs: any[]): boolean {
-    if (!perfTCs || perfTCs.length === 0) return false;
-    const invalid = [
-      'not specified',
-      'unknown',
-      'undefined',
-      'none',
-      'n/a',
-      '',
-      '{{targetendpoint}}',
-    ];
-
-    return perfTCs.some((tc: any) => {
-      const ep = tc.performanceRef?.targetEndpoint || tc.apiDetails?.endpoint || '';
-      return (
-        ep &&
-        !invalid.includes(String(ep).trim().toLowerCase()) &&
-        (ep.startsWith('/') || ep.startsWith('http'))
-      );
+    const scriptParams = (tc: AutomationTestCase, body: string) => ({
+      projectSlug: ctx.projectSlug,
+      featureId: ctx.featureId,
+      sourceReviewId: ctx.sourceReviewId,
+      tc,
+      body,
+      baseUrlEnv: ctx.profile.baseUrlEnv,
+      thresholdEnv: ctx.profile.performance?.thresholdEnv,
     });
-  }
+    const bodies = await generateTestBodies({
+      mode: 'K6',
+      featureId: ctx.featureId,
+      testCases: ready,
+      systemPrompt: loadGenerationPrompt('K6', ctx.paths.learningsDir),
+      priorReviewFindings: ctx.priorReviewFindings,
+      maxRetries: ctx.maxRetries,
+      concurrency: ctx.concurrency,
+      renderHarness: (tc, body) => renderK6Script(scriptParams(tc, body)),
+    }, ctx.chat);
 
-  /**
-   * Generates individual K6 performance test scripts for performance test cases.
-   * Cleans context and filters fixtures to avoid dumping bulky analysis objects.
-   *
-   * @param perfTCs - Array of performance test cases
-   * @param featureId - Feature ID (e.g. 'FEAT-001')
-   * @param featureName - Human readable feature name
-   * @param testData - Test data dictionary / fixtures
-   * @returns Array of objects containing tcKey and generated K6 code
-   */
-  async generateScripts(
-    perfTCs: any[],
-    featureId: string,
-    featureName: string,
-    testData: any
-  ): Promise<Array<{ tcKey: string; code: string }>> {
-    if (!this.validateEndpoints(perfTCs)) {
-      this._logger.warn(
-        `Skipping K6 performance script generation for ${featureId}: No concrete performance endpoints or workload conditions defined in requirements.`
-      );
-      return [];
+    const byKey = new Map(ready.map((tc) => [tc.tcKey, tc]));
+    const files: GeneratedFile[] = [];
+    const fileByTcKey = new Map<string, string>();
+    for (const outcome of bodies.filter((o) => o.status === 'GENERATED')) {
+      const tc = byKey.get(outcome.tcKey) as AutomationTestCase;
+      const scriptPath = path.join(ctx.paths.k6Dir, `${fileStem(ctx.featureId)}-${fileStem(tc.tcKey)}.k6.js`);
+      files.push({ path: scriptPath, content: renderK6Script(scriptParams(tc, outcome.body as string)), kind: 'k6' });
+      fileByTcKey.set(tc.tcKey, scriptPath);
     }
-
-    const results: Array<{ tcKey: string; code: string }> = [];
-
-    for (const tc of perfTCs) {
-      this._logger.info(`Generating K6 script for ${tc.key}: ${tc.name}...`);
-
-      const rawContext = {
-        tc,
-        featureId,
-        featureName,
-        testData,
-      };
-
-      const cleanedContext = cleanContext(rawContext, {
-        mode: 'K6',
-      });
-
-      const k6Code = await generateWithSelfReview({
-        stageId: STAGE_ID,
-        fileType: FILE_TYPE.K6,
-        skill: this._skill,
-        context: cleanedContext,
-        objective: `Generate a K6 performance script for ${tc.key}: ${tc.name}.`,
-        logger: this._logger,
-      });
-
-      results.push({
-        tcKey: tc.key,
-        code: k6Code,
-      });
-    }
-
-    return results;
+    return { outcomes: [...notReady, ...bodies], files, fileByTcKey };
   }
 }

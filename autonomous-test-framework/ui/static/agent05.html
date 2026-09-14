@@ -729,14 +729,14 @@
           <div class="stat-sub">tests/pages/*Page.ts</div>
         </div>
         <div class="stat-item">
-          <div class="stat-label">Approved TCs Automated</div>
+          <div class="stat-label">Test Cases Generated</div>
           <div class="stat-value" id="resApprovedTcs" style="color: #93c5fd;">—</div>
-          <div class="stat-sub">100% covered in specs</div>
+          <div class="stat-sub">Validated against approved TCs</div>
         </div>
         <div class="stat-item">
-          <div class="stat-label">Excluded Cases Omitted</div>
+          <div class="stat-label">Not Generated</div>
           <div class="stat-value" id="resExcludedTcs" style="color: #fca5a5;">—</div>
-          <div class="stat-sub">Clean automation guarantee</div>
+          <div class="stat-sub">Needs context + blocked / excluded</div>
         </div>
       </div>
 
@@ -775,7 +775,7 @@
           <span class="advisory-badge">APPROVED SCOPE ONLY</span>
         </div>
         <div class="advisory-body" id="scopeAdvisoryBody">
-          Playwright automation scripts were generated strictly for approved test cases. The excluded test cases below were omitted from generation:
+          Only approved test cases with verified context were automated. The test cases below were not generated (excluded, needs context or blocked) — nothing was guessed to fill the gaps:
         </div>
         <div class="advisory-chips" id="scopeAdvisoryChips"></div>
       </div>
@@ -1159,28 +1159,36 @@
       const k6Files = (diskFiles.k6Files && diskFiles.k6Files.length > 0)
         ? diskFiles.k6Files
         : (scripts.k6Files || []).map(f => ({ name: f.split(/[\\/]/).pop(), relativePath: f }));
-      const helperFiles = (diskFiles.helperFiles && diskFiles.helperFiles.length > 0)
-        ? diskFiles.helperFiles
-        : (scripts.helperFiles || []).map(f => ({ name: f.split(/[\\/]/).pop(), relativePath: f }));
+      const helperFiles = diskFiles.helperFiles || [];
+
+      // Per-test-case outcomes (GENERATED / NEEDS_CONTEXT / BLOCKED / EXCLUDED)
+      const tcResults = Array.isArray(scripts.testCases) ? scripts.testCases : [];
+      const countStatus = (status) => tcResults.filter(r => r.status === status).length;
 
       // Scorecards
       document.getElementById('resSpecCount').textContent = specFiles.length;
       document.getElementById('resPomCount').textContent = pomFiles.length;
-      document.getElementById('resApprovedTcs').textContent = scripts.approvedCount || approvedCount;
-      document.getElementById('resExcludedTcs').textContent = scripts.excludedCount || excludedCount;
+      document.getElementById('resApprovedTcs').textContent = tcResults.length ? countStatus('GENERATED') : approvedCount;
+      document.getElementById('resExcludedTcs').textContent = tcResults.length
+        ? `${countStatus('NEEDS_CONTEXT') + countStatus('BLOCKED')} / ${countStatus('EXCLUDED')}`
+        : excludedCount;
 
       // Token usage
       updateTokenCard(data.stage?.usage);
 
-      // Scope Advisory Banner
+      // Scope Advisory Banner — every approved test case that was NOT generated, with the reason
       const advisoryCard = document.getElementById('scopeAdvisoryCard');
       const advisoryChips = document.getElementById('scopeAdvisoryChips');
-      const excludedTCs = scripts.excludedTestCases || data.testData?.manifest?.excludedTestCases || [];
-      if (excludedCount > 0 && excludedTCs.length > 0) {
+      const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      const notGenerated = tcResults.filter(r => r.status !== 'GENERATED');
+      if (notGenerated.length > 0) {
         advisoryCard.classList.remove('hidden');
-        advisoryChips.innerHTML = excludedTCs.map(tc => `
-          <span class="advisory-chip" title="${tc.reason}">${tc.key}: ${tc.reason}</span>
-        `).join('');
+        advisoryChips.innerHTML = notGenerated.map(r => {
+          const detail = r.status === 'NEEDS_CONTEXT'
+            ? (r.missing || []).map(m => `${m.kind}: ${m.detail}`).join('; ')
+            : (r.reason || '');
+          return `<span class="advisory-chip" title="${esc(detail)}">${esc(r.tcKey)} · ${esc(r.status)}: ${esc(detail)}</span>`;
+        }).join('');
       } else {
         advisoryCard.classList.add('hidden');
       }

@@ -23,7 +23,9 @@ import { llmClient } from '../core/llm/LLMClient';
 import { Logger } from '../core/logger/Logger';
 import { syncFeatureFiles } from '../agents/02-test-case-generator/utils';
 import { isTestCaseSelected, setTestCaseSelected } from '../core/types';
-import { ensureFixturesFileSynced, syncFixturesFileFromTestData } from '../core/state-manager/FixtureSync';
+import { syncFixturesFileFromTestData } from '../core/state-manager/FixtureSync';
+import { loadCurrentTestData } from '../core/state-manager/TestDataFreshness';
+import { projectPaths, readActiveProjectSlug } from '../core/aut/projectPaths';
 
 require('dotenv').config();
 
@@ -1008,13 +1010,12 @@ app.get('/api/agent04/state', async (_req: Request, res: Response) => {
       try { await stateManager.initialize(); } catch (_) {}
     }
 
-    const stage = await stateManager.get('stages.04-test-data-generator');
     const requirements = await stateManager.getPipelineArtifact('analyzedRequirements');
-    const reviewedTestCases = await stateManager.getPipelineArtifact('reviewedTestCases');
-    const testData = await stateManager.getPipelineArtifact('testData');
+    // Stale manifests (another review or an earlier run) are withheld so they cannot be shown or approved
+    const { stage, reviewedTestCases, testData, stored, freshness } = await loadCurrentTestData(stateManager);
 
     let flatTestData: Record<string, any> = {};
-    if (fs.existsSync(FIXTURES_PATH)) {
+    if (testData && fs.existsSync(FIXTURES_PATH)) {
       try {
         flatTestData = JSON.parse(fs.readFileSync(FIXTURES_PATH, 'utf-8'));
       } catch (_) {}
@@ -1030,6 +1031,7 @@ app.get('/api/agent04/state', async (_req: Request, res: Response) => {
       requirements,
       reviewedTestCases,
       testData,
+      testDataStale: stored?.manifest && !freshness.current ? freshness.reason : null,
       flatTestData,
       running: !!activeProcess04
     });
@@ -1116,14 +1118,19 @@ app.get('/api/agent04/logs', (req: Request, res: Response) => {
 // ── Approvals for Agent 04 ──────────────────────────────────────────────────
 app.post('/api/agent04/approve', async (req: Request, res: Response) => {
   try {
-    const testDataOutput = await stateManager.getPipelineArtifact('testData');
-    if (testDataOutput) {
-      syncFixturesFileFromTestData(testDataOutput, undefined, FIXTURES_PATH);
-      await stateManager.setPipelineArtifact('testData', testDataOutput);
-      logger.info('Synchronized fixtures to disk on Agent 04 approval', { fixturesPath: FIXTURES_PATH });
+    if (!(stateManager as any)._initialized) {
+      try { await stateManager.initialize(); } catch (_) {}
     }
+    const { testData, freshness } = await loadCurrentTestData(stateManager);
+    if (!testData) {
+      return res.status(409).json({ error: `Cannot approve Agent 04: ${freshness.reason} Run Agent 04 first.` });
+    }
+    // Only sync the fixture — never copy the artifact into the current run (that is how stale data spread)
+    syncFixturesFileFromTestData(testData, undefined, FIXTURES_PATH);
+    logger.info('Synchronized fixtures to disk on Agent 04 approval', { fixturesPath: FIXTURES_PATH });
   } catch (err: any) {
-    logger.warn('Failed to sync fixtures during Agent 04 approval', { error: err.message });
+    logger.error('Agent 04 approval pre-check failed', { error: err.message });
+    return res.status(500).json({ error: err.message });
   }
   return handleApproval('04-test-data-generator', 'approve')(req, res);
 });
@@ -1195,9 +1202,10 @@ const updateTestDataHandler04 = async (req: Request, res: Response) => {
       try { await stateManager.initialize(); } catch (_) {}
     }
 
-    const testDataOutput = await stateManager.getPipelineArtifact('testData');
+    const { testData: testDataOutput, stored, freshness } = await loadCurrentTestData(stateManager);
     if (!testDataOutput?.manifest) {
-      return res.status(404).json({ error: 'No testData artifact found in state.' });
+      const error = stored?.manifest ? `Test data is stale: ${freshness.reason} Run Agent 04 first.` : 'No testData artifact found in state.';
+      return res.status(stored?.manifest ? 409 : 404).json({ error });
     }
 
     const manifest = testDataOutput.manifest;
@@ -1276,10 +1284,26 @@ app.post('/api/agent04/data', updateTestDataHandler04);
 
 // ── Agent 05 (Playwright Script Generator) Routes ───────────────────────────
 
-const SPECS_DIR_05 = path.join(FRAMEWORK_DIR, 'tests', 'specs');
-const PAGES_DIR_05 = path.join(FRAMEWORK_DIR, 'tests', 'pages');
-const K6_DIR_05 = path.join(FRAMEWORK_DIR, 'tests', 'k6');
 const HELPERS_DIR_05 = path.join(FRAMEWORK_DIR, 'tests', 'helpers');
+const ALLOWED_FILE_ROOTS_05 = ['specs', 'pages', 'k6', 'helpers', 'projects'].map((dir) => path.join(FRAMEWORK_DIR, 'tests', dir));
+
+/** Generated-test folders of the active project (legacy global folders when no project is active). */
+function activeGeneratedDirs05() {
+  const slug = readActiveProjectSlug();
+  if (!slug) {
+    return {
+      specs: path.join(FRAMEWORK_DIR, 'tests', 'specs'), pages: path.join(FRAMEWORK_DIR, 'tests', 'pages'), k6: path.join(FRAMEWORK_DIR, 'tests', 'k6'), pageMaps: null as string | null,
+    };
+  }
+  const paths = projectPaths(slug);
+  return {
+    specs: paths.specsDir, pages: paths.pagesDir, k6: paths.k6Dir, pageMaps: paths.pageMapsDir,
+  };
+}
+
+function isAllowedScriptPath05(targetPath: string): boolean {
+  return ALLOWED_FILE_ROOTS_05.some((root) => targetPath === root || targetPath.startsWith(`${root}${path.sep}`));
+}
 
 function scanDirectoryFiles05(dir: string, extFilter?: string[]) {
   if (!fs.existsSync(dir)) return [];
@@ -1324,17 +1348,13 @@ app.get('/api/agent05/state', async (_req: Request, res: Response) => {
     const testData = await stateManager.getPipelineArtifact('testData');
     const playwrightScripts = await stateManager.getPipelineArtifact('playwrightScripts');
 
-    if (!fs.existsSync(FIXTURES_PATH)) {
-      try {
-        await ensureFixturesFileSynced(stateManager, FIXTURES_PATH);
-      } catch (_) {}
-    }
-
+    const dirs05 = activeGeneratedDirs05();
     const diskFiles = {
-      specFiles: scanDirectoryFiles05(SPECS_DIR_05, ['.spec.ts']),
-      pomFiles: scanDirectoryFiles05(PAGES_DIR_05, ['.ts']),
-      k6Files: scanDirectoryFiles05(K6_DIR_05, ['.js']),
+      specFiles: scanDirectoryFiles05(dirs05.specs, ['.spec.ts']),
+      pomFiles: scanDirectoryFiles05(dirs05.pages, ['.ts']),
+      k6Files: scanDirectoryFiles05(dirs05.k6, ['.js']),
       helperFiles: scanDirectoryFiles05(HELPERS_DIR_05, ['.ts']),
+      pageMapFiles: dirs05.pageMaps ? scanDirectoryFiles05(dirs05.pageMaps, ['.json']) : [],
     };
 
     res.json({
@@ -1436,7 +1456,7 @@ app.get('/api/agent05/file', (req: Request, res: Response) => {
   const normalized = path.normalize(relPath).replace(/^[/\\]+/, '');
   const targetPath = path.resolve(FRAMEWORK_DIR, normalized);
 
-  if (!targetPath.startsWith(FRAMEWORK_DIR) || (!targetPath.includes(path.join('tests', 'specs')) && !targetPath.includes(path.join('tests', 'pages')) && !targetPath.includes(path.join('tests', 'k6')) && !targetPath.includes(path.join('tests', 'helpers')))) {
+  if (!isAllowedScriptPath05(targetPath)) {
     return res.status(403).json({ error: 'Access denied. File must be within tests/ directory.' });
   }
 
@@ -1470,7 +1490,7 @@ const saveFileHandler05 = async (req: Request, res: Response) => {
   const normalized = path.normalize(relPath).replace(/^[/\\]+/, '');
   const targetPath = path.resolve(FRAMEWORK_DIR, normalized);
 
-  if (!targetPath.startsWith(FRAMEWORK_DIR) || (!targetPath.includes(path.join('tests', 'specs')) && !targetPath.includes(path.join('tests', 'pages')) && !targetPath.includes(path.join('tests', 'k6')) && !targetPath.includes(path.join('tests', 'helpers')))) {
+  if (!isAllowedScriptPath05(targetPath)) {
     return res.status(403).json({ error: 'Access denied. File must be within tests/ directory.' });
   }
 
@@ -1518,13 +1538,12 @@ app.post('/api/agent05/chat', async (req: Request, res: Response) => {
       '',
       '=== SCRIPT GENERATION SUMMARY ===',
       scriptsOutput ? JSON.stringify({
-        totalFilesGenerated: scriptsOutput.totalFilesGenerated,
-        approvedCount: scriptsOutput.approvedCount,
-        excludedCount: scriptsOutput.excludedCount,
+        project: scriptsOutput.projectSlug,
+        testCases: (scriptsOutput.testCases || []).map((r: any) => ({ tcKey: r.tcKey, status: r.status, missing: r.missing, reason: r.reason })),
         specFiles: (scriptsOutput.specFiles || []).map((f: string) => path.basename(f)),
         pomFiles: (scriptsOutput.pomFiles || []).map((f: string) => path.basename(f)),
         k6Files: (scriptsOutput.k6Files || []).map((f: string) => path.basename(f)),
-        featureCount: scriptsOutput.featureCount
+        warnings: scriptsOutput.warnings || [],
       }, null, 2) : '(No scripts generated yet)',
       '',
       '=== APPROVED TEST CASES INPUT ===',

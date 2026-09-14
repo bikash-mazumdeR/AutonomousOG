@@ -1,10 +1,10 @@
 import express, { Request, Response } from 'express';
 import { spawn, ChildProcess } from 'child_process';
 import { stateManager } from '../core/state-manager/StateManager';
-import { ensureFixturesFileSynced, FIXTURES_PATH } from '../core/state-manager/FixtureSync';
 import { llmClient } from '../core/llm/LLMClient';
 import { memoryEngine } from '../core/project-memory/MemoryEngine';
 import { Logger } from '../core/logger/Logger';
+import { projectPaths, readActiveProjectSlug } from '../core/aut/projectPaths';
 import path from 'path';
 import fs from 'fs';
 import * as http from 'http';
@@ -15,10 +15,8 @@ const APPROVAL_PORT = parseInt(process.env.APPROVAL_WEBHOOK_PORT || '8081', 10);
 const logger = new Logger('Agent05UI');
 
 const FRAMEWORK_DIR = path.resolve(__dirname, '..');
-const SPECS_DIR = path.join(FRAMEWORK_DIR, 'tests', 'specs');
-const PAGES_DIR = path.join(FRAMEWORK_DIR, 'tests', 'pages');
-const K6_DIR = path.join(FRAMEWORK_DIR, 'tests', 'k6');
 const HELPERS_DIR = path.join(FRAMEWORK_DIR, 'tests', 'helpers');
+const ALLOWED_FILE_ROOTS = ['specs', 'pages', 'k6', 'helpers', 'projects'].map((dir) => path.join(FRAMEWORK_DIR, 'tests', dir));
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'static')));
@@ -49,6 +47,24 @@ function scanDirectoryFiles(dir: string, extFilter?: string[]): Array<{ name: st
   }
 }
 
+/** Generated-test folders of the active project (legacy global folders when no project is active). */
+function activeGeneratedDirs() {
+  const slug = readActiveProjectSlug();
+  if (!slug) {
+    return {
+      specs: path.join(FRAMEWORK_DIR, 'tests', 'specs'), pages: path.join(FRAMEWORK_DIR, 'tests', 'pages'), k6: path.join(FRAMEWORK_DIR, 'tests', 'k6'), pageMaps: null as string | null,
+    };
+  }
+  const paths = projectPaths(slug);
+  return {
+    specs: paths.specsDir, pages: paths.pagesDir, k6: paths.k6Dir, pageMaps: paths.pageMapsDir,
+  };
+}
+
+function isAllowedScriptPath(targetPath: string): boolean {
+  return ALLOWED_FILE_ROOTS.some((root) => targetPath === root || targetPath.startsWith(`${root}${path.sep}`));
+}
+
 // ── Agent process management ──────────────────────────────────────────────────
 let activeProcess: ChildProcess | null = null;
 const sseClients: Set<Response> = new Set();
@@ -74,18 +90,14 @@ app.get('/api/agent05/state', async (_req: Request, res: Response) => {
     const testData = await stateManager.getPipelineArtifact('testData');
     const playwrightScripts = await stateManager.getPipelineArtifact('playwrightScripts');
 
-    if (!fs.existsSync(FIXTURES_PATH)) {
-      try {
-        await ensureFixturesFileSynced(stateManager, FIXTURES_PATH);
-      } catch (_) {}
-    }
-
-    // Live scan disk for generated files
+    // Live scan disk for generated files of the active project
+    const dirs = activeGeneratedDirs();
     const diskFiles = {
-      specFiles: scanDirectoryFiles(SPECS_DIR, ['.spec.ts']),
-      pomFiles: scanDirectoryFiles(PAGES_DIR, ['.ts']),
-      k6Files: scanDirectoryFiles(K6_DIR, ['.js']),
+      specFiles: scanDirectoryFiles(dirs.specs, ['.spec.ts']),
+      pomFiles: scanDirectoryFiles(dirs.pages, ['.ts']),
+      k6Files: scanDirectoryFiles(dirs.k6, ['.js']),
       helperFiles: scanDirectoryFiles(HELPERS_DIR, ['.ts']),
+      pageMapFiles: dirs.pageMaps ? scanDirectoryFiles(dirs.pageMaps, ['.json']) : [],
     };
 
     res.json({
@@ -115,7 +127,7 @@ app.post('/api/agent05/run', async (req: Request, res: Response) => {
   let projectName = (req.body?.projectName as string || '').trim();
   if (!projectName) {
     try {
-      const stateDb = stateManager.getDatabase();
+      const stateDb = (stateManager as any).getDatabase();
       const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get() as any;
       if (latestRun?.project_id) projectName = latestRun.project_id;
     } catch (_) {}
@@ -188,8 +200,8 @@ app.get('/api/agent05/file', (req: Request, res: Response) => {
   const normalized = path.normalize(relPath).replace(/^[\/\\]+/, '');
   const targetPath = path.resolve(FRAMEWORK_DIR, normalized);
 
-  if (!targetPath.startsWith(FRAMEWORK_DIR) || (!targetPath.includes(path.join('tests', 'specs')) && !targetPath.includes(path.join('tests', 'pages')) && !targetPath.includes(path.join('tests', 'k6')) && !targetPath.includes(path.join('tests', 'helpers')))) {
-    return res.status(403).json({ error: 'Access denied. File must be within tests/ directory.' });
+  if (!isAllowedScriptPath(targetPath)) {
+    return res.status(403).json({ error: 'Access denied. File must be within the tests/ script folders.' });
   }
 
   if (!fs.existsSync(targetPath) || !fs.statSync(targetPath).isFile()) {
@@ -222,8 +234,8 @@ const saveFileHandler = async (req: Request, res: Response) => {
   const normalized = path.normalize(relPath).replace(/^[\/\\]+/, '');
   const targetPath = path.resolve(FRAMEWORK_DIR, normalized);
 
-  if (!targetPath.startsWith(FRAMEWORK_DIR) || (!targetPath.includes(path.join('tests', 'specs')) && !targetPath.includes(path.join('tests', 'pages')) && !targetPath.includes(path.join('tests', 'k6')) && !targetPath.includes(path.join('tests', 'helpers')))) {
-    return res.status(403).json({ error: 'Access denied. File must be within tests/ directory.' });
+  if (!isAllowedScriptPath(targetPath)) {
+    return res.status(403).json({ error: 'Access denied. File must be within the tests/ script folders.' });
   }
 
   try {
@@ -269,7 +281,7 @@ function handleApproval(stageId: string, action: 'approve' | 'reject') {
       try {
         if (!(stateManager as any)._initialized) {
           try {
-            const stateDb = stateManager.getDatabase();
+            const stateDb = (stateManager as any).getDatabase();
             const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get() as any;
             await stateManager.initialize(latestRun?.project_id || 'ARIA Project');
             await memoryEngine.initialize(latestRun?.project_id || 'ARIA Project');
@@ -332,6 +344,28 @@ function handleApproval(stageId: string, action: 'approve' | 'reject') {
 app.post('/api/agent05/approve', handleApproval('05-playwright-script-generator', 'approve'));
 app.post('/api/agent05/reject',  handleApproval('05-playwright-script-generator', 'reject'));
 
+/**
+ * Compact artifact summary for the chat prompt.
+ * @param {any} scripts - playwrightScripts artifact
+ * @returns {string}
+ */
+function summarizeScripts(scripts: any): string {
+  if (!scripts) return '(No scripts generated yet)';
+  const results: any[] = Array.isArray(scripts.testCases) ? scripts.testCases : [];
+  const count = (status: string) => results.filter((r) => r.status === status).length;
+  return JSON.stringify({
+    project: scripts.projectSlug,
+    generated: count('GENERATED'),
+    needsContext: results.filter((r) => r.status === 'NEEDS_CONTEXT').map((r) => ({ tcKey: r.tcKey, missing: r.missing })),
+    blocked: results.filter((r) => r.status === 'BLOCKED').map((r) => ({ tcKey: r.tcKey, reason: r.reason })),
+    excluded: count('EXCLUDED'),
+    specFiles: (scripts.specFiles || []).map((f: string) => path.basename(f)),
+    pomFiles: (scripts.pomFiles || []).map((f: string) => path.basename(f)),
+    k6Files: (scripts.k6Files || []).map((f: string) => path.basename(f)),
+    warnings: scripts.warnings || [],
+  }, null, 2);
+}
+
 // ── POST /api/agent05/chat ────────────────────────────────────────────────────
 app.post('/api/agent05/chat', async (req: Request, res: Response) => {
   const { message, history = [] } = req.body as {
@@ -349,21 +383,12 @@ app.post('/api/agent05/chat', async (req: Request, res: Response) => {
 
     const systemPrompt = [
       'You are ARIA, a Senior Playwright Test Automation Architect.',
-      'The user wants to inspect generated Playwright specs (.spec.ts), Page Object Models (Page.ts), API request fixtures, and K6 scripts.',
-      'Answer questions accurately based on the playwrightScripts artifact and framework standards (centralized test-data.json, accessible locators, BasePage inheritance, TLS negotiation details).',
-      'If a detail is not present in the generated code or artifact, state that clearly — do NOT invent facts.',
+      'The user wants to inspect generated Playwright specs, page objects, API specs and K6 scripts, and the per-test-case generation outcomes.',
+      'Answer strictly from the playwrightScripts artifact below. If a detail is not present, say so — do NOT invent facts.',
       'Be concise, analytical, and provide code examples when helpful.',
       '',
       '=== SCRIPT GENERATION SUMMARY ===',
-      scriptsOutput ? JSON.stringify({
-        totalFilesGenerated: scriptsOutput.totalFilesGenerated,
-        approvedCount: scriptsOutput.approvedCount,
-        excludedCount: scriptsOutput.excludedCount,
-        specFiles: (scriptsOutput.specFiles || []).map((f: string) => path.basename(f)),
-        pomFiles: (scriptsOutput.pomFiles || []).map((f: string) => path.basename(f)),
-        k6Files: (scriptsOutput.k6Files || []).map((f: string) => path.basename(f)),
-        featureCount: scriptsOutput.featureCount
-      }, null, 2) : '(No scripts generated yet)',
+      summarizeScripts(scriptsOutput),
       '',
       '=== APPROVED TEST CASES INPUT ===',
       reviewedReport?.approvedCount ? `Approved test cases: ${reviewedReport.approvedCount}` : '(No reviewed cases found)'
@@ -375,13 +400,13 @@ app.post('/api/agent05/chat', async (req: Request, res: Response) => {
       { role: 'user' as const, content: message }
     ];
 
-    const reply = await llmClient.chat(messages, {
-      model: process.env.LITELLM_MODEL || 'gemini/gemini-2.5-flash',
+    const response = await llmClient.chat('05-playwright-script-generator', {
+      messages,
       temperature: 0.2,
-      maxTokens: 1000
+      max_tokens: 1000,
     });
 
-    res.json({ reply });
+    res.json({ reply: response.text });
   } catch (err: any) {
     logger.error('Agent 05 chat failed', { error: err.message });
     res.status(500).json({ error: err.message });

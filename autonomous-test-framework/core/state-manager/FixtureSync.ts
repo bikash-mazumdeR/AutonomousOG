@@ -1,223 +1,139 @@
 'use strict';
 
 /**
- * @fileoverview Centralized Fixture Sync Engine for ARIA framework.
- * Synchronizes test data manifest into flat tests/fixtures/test-data.json
- * to guarantee Playwright tests, UI previews, and agents always have access
- * to centralized, approved test fixtures.
+ * @fileoverview Centralized Fixture Sync Engine for the ARIA framework.
+ * Flattens the Agent 04 test data manifest into a key/value JSON fixture.
+ *
+ * Application-agnostic: values come ONLY from the manifest (or values explicitly passed by the
+ * caller). No application URLs, credentials or messages are hard-coded here. Sensitive or
+ * runtime-only values are never written to disk.
  *
  * @module FixtureSync
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { FRAMEWORK_CONFIG } from '../../config/framework.config';
 
 export const FIXTURES_DIR = path.resolve(__dirname, '../../tests/fixtures');
 export const FIXTURES_PATH = path.join(FIXTURES_DIR, 'test-data.json');
 
-/**
- * Extracts explicit test data from requirement specifications or analysis.
- */
-export function extractRequirementData(analysis?: any): Record<string, string> {
-  const data: Record<string, string> = {
-    baseURL: FRAMEWORK_CONFIG.playwright.baseURL || 'https://www.saucedemo.com/',
-    password: 'secret_sauce',
-    standardUsername: 'standard_user',
-    lockedOutUsername: 'locked_out_user',
-    problemUsername: 'problem_user',
-    performanceGlitchUsername: 'performance_glitch_user',
-    errorUsername: 'error_user',
-    visualUsername: 'visual_user',
-    errorInvalidCredentials: 'Epic sadface: Username and password do not match any user in this service',
-    errorLockedOut: 'Epic sadface: Sorry, this user has been locked out.',
-    errorUsernameRequired: 'Epic sadface: Username is required',
-    errorPasswordRequired: 'Epic sadface: Password is required',
-    usernameMaxLength: '255',
-    passwordMaxLength: '512',
-  };
+interface ManifestInput {
+  value?: unknown;
+  sensitive?: boolean;
+  source?: string;
+}
 
-  if (analysis && Array.isArray(analysis.features)) {
-    for (const f of analysis.features) {
-      for (const s of (f.userStories || [])) {
-        if (Array.isArray(s.testUserAccounts)) {
-          for (const acc of s.testUserAccounts) {
-            if (acc.username === 'standard_user') data.standardUsername = acc.username;
-            if (acc.username === 'locked_out_user') data.lockedOutUsername = acc.username;
-            if (acc.password) data.password = acc.password;
-          }
-        }
-      }
+function isPersistable(entry: ManifestInput | undefined): boolean {
+  return !!entry && entry.value !== undefined && !entry.sensitive
+    && entry.source !== 'runtime' && entry.source !== 'unresolved';
+}
+
+function cleanPlaceholder(placeholder: string): string {
+  return placeholder.replace(/^\{\{|\}\}$/g, '');
+}
+
+function sharedPlaceholderValues(perTCData: Record<string, any>): Map<string, unknown> {
+  const seen = new Map<string, { count: number; values: Set<string>; value: unknown }>();
+  for (const tcData of Object.values(perTCData)) {
+    for (const [placeholder, entry] of Object.entries((tcData as any)?.inputs || {})) {
+      if (!isPersistable(entry as ManifestInput)) continue;
+      const key = cleanPlaceholder(placeholder);
+      const current = seen.get(key) || { count: 0, values: new Set<string>(), value: (entry as ManifestInput).value };
+      current.count += 1;
+      current.values.add(JSON.stringify((entry as ManifestInput).value));
+      seen.set(key, current);
     }
   }
-
-  const reqCandidates = [
-    path.resolve(process.cwd(), 'requirement.md'),
-    path.resolve(process.cwd(), 'requirements/requirement.md'),
-    path.resolve(process.cwd(), '../requirement.md'),
-    path.resolve(__dirname, '../../requirement.md'),
-    path.resolve(__dirname, '../../requirements/requirement.md'),
-  ];
-
-  for (const reqPath of reqCandidates) {
-    if (fs.existsSync(reqPath) && fs.statSync(reqPath).isFile()) {
-      try {
-        const content = fs.readFileSync(reqPath, 'utf-8');
-        if (content.includes('standard_user')) data.standardUsername = 'standard_user';
-        if (content.includes('locked_out_user')) data.lockedOutUsername = 'locked_out_user';
-        if (content.includes('problem_user')) data.problemUsername = 'problem_user';
-        if (content.includes('performance_glitch_user')) data.performanceGlitchUsername = 'performance_glitch_user';
-        if (content.includes('error_user')) data.errorUsername = 'error_user';
-        if (content.includes('visual_user')) data.visualUsername = 'visual_user';
-        if (content.includes('secret_sauce')) data.password = 'secret_sauce';
-
-        const urlMatch = content.match(/https?:\/\/[^\s\)\"\'`]+/i);
-        if (urlMatch) data.baseURL = urlMatch[0];
-        break;
-      } catch {
-        // ignore
-      }
-    }
+  const shared = new Map<string, unknown>();
+  for (const [key, meta] of seen.entries()) {
+    if (meta.count > 1 && meta.values.size === 1) shared.set(key, meta.value);
   }
-
-  return data;
+  return shared;
 }
 
 /**
- * Builds clean, flat key-value JSON format for test-data.json.
+ * Builds a flat key/value fixture from an Agent 04 manifest.
+ * - Values the manifest recorded from the requirement (`requirementValues`) are written first.
+ * - Placeholders used by several test cases with the same value are promoted to a root key.
+ * - Other values are stored per test case as `<TCKEY>_<placeholder>` (e.g. `TC004_validName`).
+ * - Sensitive, runtime and unresolved entries are skipped.
+ * - Generic boundary primitives are included for edge-case tests.
+ * @param {any} manifest - Agent 04 manifest (`perTCData`, optional `requirementValues`)
+ * @param {Record<string, any>} [explicitValues] - Caller-provided values; override requirement values
+ * @returns {Record<string, any>}
  */
-export function buildFlatTestData(manifest: any, reqData?: Record<string, any>): Record<string, any> {
-  const resolvedReqData = reqData || extractRequirementData();
-  const flat: Record<string, any> = {};
+export function buildFlatTestData(manifest: any, explicitValues?: Record<string, any>): Record<string, any> {
+  const flat: Record<string, any> = { ...(manifest?.requirementValues || {}), ...(explicitValues || {}) };
+  const perTCData: Record<string, any> = manifest?.perTCData || {};
 
-  // 1. Baseline requirement values
-  flat.baseURL = manifest?.globalCtx?.baseURL || resolvedReqData.baseURL || 'https://www.saucedemo.com/';
-  flat.password = manifest?.globalFixtures?.adminCredentials?.password || resolvedReqData.password || 'secret_sauce';
-  flat.standardUsername = manifest?.globalFixtures?.adminCredentials?.username || resolvedReqData.standardUsername || 'standard_user';
-  flat.lockedOutUsername = resolvedReqData.lockedOutUsername || 'locked_out_user';
-  if (resolvedReqData.problemUsername) flat.problemUsername = resolvedReqData.problemUsername;
-  if (resolvedReqData.performanceGlitchUsername) flat.performanceGlitchUsername = resolvedReqData.performanceGlitchUsername;
-  if (resolvedReqData.errorUsername) flat.errorUsername = resolvedReqData.errorUsername;
-  if (resolvedReqData.visualUsername) flat.visualUsername = resolvedReqData.visualUsername;
-  if (resolvedReqData.errorInvalidCredentials) flat.errorInvalidCredentials = resolvedReqData.errorInvalidCredentials;
-  if (resolvedReqData.errorLockedOut) flat.errorLockedOut = resolvedReqData.errorLockedOut;
-  if (resolvedReqData.errorUsernameRequired) flat.errorUsernameRequired = resolvedReqData.errorUsernameRequired;
-  if (resolvedReqData.errorPasswordRequired) flat.errorPasswordRequired = resolvedReqData.errorPasswordRequired;
+  for (const [key, value] of sharedPlaceholderValues(perTCData).entries()) {
+    if (!(key in flat)) flat[key] = value;
+  }
 
-  // 2. Identify and promote shared placeholders to root
-  const placeholderCounts = new Map<string, { count: number; value: any }>();
-  for (const tcData of Object.values(manifest?.perTCData || {})) {
-    const inputs = (tcData as any)?.inputs || {};
-    for (const [ph, entry] of Object.entries(inputs)) {
-      const rawVal = (entry as any)?.value;
-      const cleanPh = ph.replace(/^\{\{|\}\}$/g, '');
-      if (!placeholderCounts.has(cleanPh)) {
-        placeholderCounts.set(cleanPh, { count: 0, value: rawVal });
-      }
-      const current = placeholderCounts.get(cleanPh)!;
-      current.count++;
+  for (const [tcKey, tcData] of Object.entries(perTCData)) {
+    for (const [placeholder, entry] of Object.entries((tcData as any)?.inputs || {})) {
+      const key = cleanPlaceholder(placeholder);
+      if (key in flat || !isPersistable(entry as ManifestInput)) continue;
+      const formattedKey = `${tcKey.replace(/[^a-zA-Z0-9]/g, '')}_${key}`;
+      if (!(formattedKey in flat)) flat[formattedKey] = (entry as ManifestInput).value;
     }
   }
 
-  for (const [cleanPh, meta] of placeholderCounts.entries()) {
-    if (meta.count > 1) {
-      if (!(['validBaseURL', 'baseURL', 'apiBaseURL', 'validPassword', 'password', 'validUsername', 'adminUsername'].includes(cleanPh))) {
-        if (!(cleanPh in flat) && meta.value !== undefined) {
-          flat[cleanPh] = meta.value;
-        }
-      }
-    }
-  }
-
-  // 3. Per-TC unique inputs
-  for (const [tcKey, tcData] of Object.entries(manifest?.perTCData || {})) {
-    const inputs = (tcData as any)?.inputs || {};
-    for (const [ph, entry] of Object.entries(inputs)) {
-      const rawVal = (entry as any)?.value;
-      const cleanPh = ph.replace(/^\{\{|\}\}$/g, '');
-
-      if (cleanPh in flat || ['validBaseURL', 'baseURL', 'apiBaseURL', 'validPassword', 'password', 'validUsername', 'adminUsername'].includes(cleanPh)) {
-        continue;
-      }
-      if (cleanPh === 'validTestData' && typeof rawVal === 'string' && rawVal.startsWith('aria_valid_')) {
-        continue;
-      }
-
-      const formattedKey = `${tcKey.replace(/[^a-zA-Z0-9]/g, '')}_${cleanPh}`;
-      if (!(formattedKey in flat) && rawVal !== undefined) {
-        flat[formattedKey] = rawVal;
-      }
-    }
-  }
-
-  // 4. Constraints
-  if (resolvedReqData.usernameMaxLength) flat.usernameMaxLength = resolvedReqData.usernameMaxLength;
-  if (resolvedReqData.passwordMaxLength) flat.passwordMaxLength = resolvedReqData.passwordMaxLength;
-
-  // 5. Lightweight boundary primitives
-  flat.stringMin = 'A';
-  flat.stringUnderMin = '';
-  flat.stringLong = 'A'.repeat(1001);
-  flat.stringSpecialChars = '#%&<>!@$^*()';
-  flat.stringUnicode = '🚀 中文 العربية Ñ';
-  flat.stringWhitespace = '   ';
-  flat.stringSqlInject = "' OR '1'='1'; DROP TABLE users;--";
-  flat.stringXss = "<script>alert('aria-xss-test')</script>";
-
-  flat.numberMin = 0;
-  flat.numberMax = 2147483647;
-  flat.numberUnderMin = -1;
-  flat.numberOverMax = 2147483648;
-  flat.numberZero = 0;
-  flat.numberNegative = -999;
-  flat.numberDecimal = 0.001;
-  flat.numberMaxDecimal = 999999999.99;
-
+  Object.assign(flat, {
+    stringMin: 'A',
+    stringUnderMin: '',
+    stringLong: 'A'.repeat(1001),
+    stringSpecialChars: '#%&<>!@$^*()',
+    stringUnicode: '🚀 中文 العربية Ñ',
+    stringWhitespace: '   ',
+    numberMin: 0,
+    numberMax: 2147483647,
+    numberUnderMin: -1,
+    numberOverMax: 2147483648,
+    numberZero: 0,
+    numberNegative: -999,
+    numberDecimal: 0.001,
+  });
   return flat;
 }
 
 /**
- * Saves flat test data to tests/fixtures/test-data.json
+ * Saves flat test data to a fixture file.
+ * @param {any} testDataArtifact - Agent 04 artifact (or its manifest)
+ * @param {Record<string, any>} [explicitValues]
+ * @param {string} [targetPath]
+ * @returns {Record<string, any>}
  */
 export function syncFixturesFileFromTestData(
   testDataArtifact: any,
-  reqData?: Record<string, any>,
-  targetPath: string = FIXTURES_PATH
+  explicitValues?: Record<string, any>,
+  targetPath: string = FIXTURES_PATH,
 ): Record<string, any> {
   const manifest = testDataArtifact?.manifest || testDataArtifact || {};
-  const flat = buildFlatTestData(manifest, reqData);
-
-  const dir = path.dirname(targetPath);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-
+  const flat = buildFlatTestData(manifest, explicitValues);
+  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
   fs.writeFileSync(targetPath, JSON.stringify(flat, null, 2), 'utf-8');
   return flat;
 }
 
 /**
- * Ensures tests/fixtures/test-data.json is present on disk.
- * If missing, attempts to reconstruct from StateManager artifacts.
+ * Ensures a fixture file exists on disk, rebuilding it from the Agent 04 artifact when missing.
+ * @param {any} stateManager
+ * @param {string} [targetPath]
+ * @returns {Promise<Record<string, any>>}
  */
 export async function ensureFixturesFileSynced(
   stateManager: any,
-  targetPath: string = FIXTURES_PATH
+  targetPath: string = FIXTURES_PATH,
 ): Promise<Record<string, any>> {
   if (fs.existsSync(targetPath)) {
     try {
       const existing = JSON.parse(fs.readFileSync(targetPath, 'utf-8'));
-      if (existing && Object.keys(existing).length > 0) {
-        return existing;
-      }
+      if (existing && Object.keys(existing).length > 0) return existing;
     } catch {
-      // Rebuild if invalid JSON
+      // Invalid JSON — rebuild below.
     }
   }
-
   const testData = await stateManager.getPipelineArtifact('testData');
-  const analyzedRequirements = await stateManager.getPipelineArtifact('analyzedRequirements');
-  const reqData = extractRequirementData(analyzedRequirements);
-
-  return syncFixturesFileFromTestData(testData, reqData, targetPath);
+  return syncFixturesFileFromTestData(testData, undefined, targetPath);
 }

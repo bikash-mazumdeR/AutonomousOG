@@ -1,0 +1,38 @@
+{
+  "projectId": "ARIA Project",
+  "displayName": "Swag Labs (saucedemo.com)",
+  "baseUrlEnv": "AUT_BASE_URL",
+  "testIdAttribute": "data-test",
+  "browsers": ["chromium"],
+  "discovery": {
+    "entryPaths": ["/"],
+    "maxDepth": 3,
+    "dynamicIdPatterns": [],
+    "executeTestSteps": true
+  },
+  "auth": {
+    "strategy": "form",
+    "loginStateDescription": "Credentials are entered on the login form as part of each test case; there is no session token to reuse across tests."
+  },
+  "secretsEnvVars": [],
+  "couplingGuardTokens": [
+    "saucedemo",
+    "swag labs",
+    "swaglabs",
+    "standard_user",
+    "locked_out_user",
+    "problem_user",
+    "performance_glitch_user",
+    "visual_user",
+    "error_user",
+    "secret_sauce",
+    "inventory_container",
+    "inventory-container",
+    "inventoryContainer",
+    "inventory.html",
+    "sl-404",
+    "Epic sadface",
+    "E2453C",
+    "E2231A"
+  ]
+}

@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import { spawn, ChildProcess } from 'child_process';
 import { stateManager } from '../core/state-manager/StateManager';
 import { ensureFixturesFileSynced, syncFixturesFileFromTestData } from '../core/state-manager/FixtureSync';
+import { loadCurrentTestData } from '../core/state-manager/TestDataFreshness';
 import { llmClient } from '../core/llm/LLMClient';
 import { memoryEngine } from '../core/project-memory/MemoryEngine';
 import { Logger } from '../core/logger/Logger';
@@ -44,13 +45,12 @@ app.get('/api/agent04/state', async (_req: Request, res: Response) => {
       try { await stateManager.initialize(); } catch (_) {}
     }
 
-    const stage = await stateManager.get('stages.04-test-data-generator');
     const requirements = await stateManager.getPipelineArtifact('analyzedRequirements');
-    const reviewedTestCases = await stateManager.getPipelineArtifact('reviewedTestCases');
-    const testData = await stateManager.getPipelineArtifact('testData');
+    // Stale manifests (another review or an earlier run) are withheld so they cannot be shown or approved
+    const { stage, reviewedTestCases, testData, stored, freshness } = await loadCurrentTestData(stateManager);
 
     let flatTestData: Record<string, any> = {};
-    if (fs.existsSync(FIXTURES_PATH)) {
+    if (testData && fs.existsSync(FIXTURES_PATH)) {
       try {
         flatTestData = JSON.parse(fs.readFileSync(FIXTURES_PATH, 'utf-8'));
       } catch (_) {}
@@ -66,6 +66,7 @@ app.get('/api/agent04/state', async (_req: Request, res: Response) => {
       requirements,
       reviewedTestCases,
       testData,
+      testDataStale: stored?.manifest && !freshness.current ? freshness.reason : null,
       flatTestData,
       running: !!activeProcess
     });
@@ -154,7 +155,8 @@ function handleApproval(stageId: string, action: 'approve' | 'reject') {
   return async (req: Request, res: Response) => {
     const comment = ((req.body?.comment as string) || `Approved via Agent UI`).trim();
     const isApproval = action === 'approve';
-    const body = JSON.stringify({ comment });
+    // The approval gate rejects requests without a matching stageId ("stageId mismatch")
+    const body = JSON.stringify({ stageId, comment });
 
     const options = {
       hostname: 'localhost',
@@ -238,14 +240,19 @@ function handleApproval(stageId: string, action: 'approve' | 'reject') {
 
 app.post('/api/agent04/approve', async (req: Request, res: Response) => {
   try {
-    const testDataOutput = await stateManager.getPipelineArtifact('testData');
-    if (testDataOutput) {
-      syncFixturesFileFromTestData(testDataOutput, undefined, FIXTURES_PATH);
-      await stateManager.setPipelineArtifact('testData', testDataOutput);
-      logger.info('Synchronized fixtures to disk on Agent 04 approval', { fixturesPath: FIXTURES_PATH });
+    if (!(stateManager as any)._initialized) {
+      try { await stateManager.initialize(); } catch (_) {}
     }
+    const { testData, freshness } = await loadCurrentTestData(stateManager);
+    if (!testData) {
+      return res.status(409).json({ error: `Cannot approve Agent 04: ${freshness.reason} Run Agent 04 first.` });
+    }
+    // Only sync the fixture — never copy the artifact into the current run (that is how stale data spread)
+    syncFixturesFileFromTestData(testData, undefined, FIXTURES_PATH);
+    logger.info('Synchronized fixtures to disk on Agent 04 approval', { fixturesPath: FIXTURES_PATH });
   } catch (err: any) {
-    logger.warn('Failed to sync fixtures during Agent 04 approval', { error: err.message });
+    logger.error('Agent 04 approval pre-check failed', { error: err.message });
+    return res.status(500).json({ error: err.message });
   }
   return handleApproval('04-test-data-generator', 'approve')(req, res);
 });
@@ -317,9 +324,10 @@ const updateTestDataHandler = async (req: Request, res: Response) => {
       try { await stateManager.initialize(); } catch (_) {}
     }
 
-    const testDataOutput = await stateManager.getPipelineArtifact('testData');
+    const { testData: testDataOutput, stored, freshness } = await loadCurrentTestData(stateManager);
     if (!testDataOutput?.manifest) {
-      return res.status(404).json({ error: 'No testData artifact found in state.' });
+      const error = stored?.manifest ? `Test data is stale: ${freshness.reason} Run Agent 04 first.` : 'No testData artifact found in state.';
+      return res.status(stored?.manifest ? 409 : 404).json({ error });
     }
 
     const manifest = testDataOutput.manifest;

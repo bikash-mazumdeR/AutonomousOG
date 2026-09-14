@@ -260,13 +260,38 @@ export interface StageState {
 
 // ─── Pipeline Artifacts ───────────────────────────────────────────────────────
 
+/** Agent 05 outcome for one approved (or excluded) test case. */
+export interface AutomationTestCaseResult {
+  tcKey: string;
+  status: 'GENERATED' | 'NEEDS_CONTEXT' | 'BLOCKED' | 'EXCLUDED';
+  /** Framework-root-relative file containing the generated test. */
+  file?: string;
+  testTitle?: string;
+  stepAssertions?: Array<{ stepIndex: number; assertions: string[] }>;
+  missing?: Array<{ kind: string; detail: string }>;
+  reason?: string;
+}
+
+/** Pipeline artifact persisted by Agent 05 under the "playwrightScripts" key. */
+export interface PlaywrightScriptsArtifact {
+  projectSlug: string;
+  /** reviewedTestCases.reviewId the scripts were generated from (staleness check). */
+  sourceReviewId: string | null;
+  specFiles: string[];
+  pomFiles: string[];
+  k6Files: string[];
+  pageMapFiles: string[];
+  testCases: AutomationTestCaseResult[];
+  warnings: string[];
+}
+
 export interface PipelineArtifacts {
   requirements: string | Record<string, any> | null;
   analyzedRequirements?: AnalyzedRequirement | null;
   testCases: TestCasesArtifact | null;
   reviewedTestCases: Record<string, any> | null;
   testData: Record<string, any> | null;
-  playwrightScripts: Record<string, string> | null;
+  playwrightScripts: PlaywrightScriptsArtifact | null;
   reviewedScripts: Record<string, string> | null;
   executionResults: ExecutionResults | null;
   bugReports: BugReportOutput | null;

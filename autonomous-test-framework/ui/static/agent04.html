@@ -763,6 +763,7 @@
         Agent 04 resolves dynamic test variables, boundary sets, and centralized Playwright fixtures.
         In accordance with framework mandates, test data is synthesized <strong>strictly for approved test cases</strong>.
       </p>
+      <div id="staleTestDataNotice" class="hidden" style="font-size: 13px; color: #fbbf24; background: rgba(251, 191, 36, 0.08); border: 1px solid rgba(251, 191, 36, 0.35); border-radius: 8px; padding: 10px 12px; margin-bottom: 16px; line-height: 1.5;"></div>
 
       <div class="stat-grid" style="margin-bottom: 16px;">
         <div class="stat-item">
@@ -1128,6 +1129,21 @@
       setTimeout(() => t.classList.remove('show'), 3000);
     }
 
+    // ── State Polling ─────────────────────────────────────────────────────────
+    // Agent 04's process stays alive (blocked at the approval gate) after the manifest is
+    // written, so it never emits an SSE 'exit' until approval — poll state to notice completion.
+    let statePollInterval = null;
+    function startStatePolling() {
+      if (statePollInterval) return;
+      statePollInterval = setInterval(fetchState, 2000);
+    }
+    function stopStatePolling() {
+      if (statePollInterval) {
+        clearInterval(statePollInterval);
+        statePollInterval = null;
+      }
+    }
+
     // ── Fetch & Apply State ───────────────────────────────────────────────────
     async function fetchState() {
       try {
@@ -1154,9 +1170,17 @@
       document.getElementById('inputExcludedCount').textContent = excludedCount || '0';
 
       const manifest = data.testData?.manifest;
-      const stageCompleted = data.stage?.status === 'COMPLETED' || !!manifest;
+      // Results are shown only for data an Agent 04 run produced for the current review (the server withholds stale data)
+      const stageCompleted = ['COMPLETED', 'AWAITING', 'APPROVED'].includes(data.stage?.status) && !!manifest;
+      const staleNotice = document.getElementById('staleTestDataNotice');
+      staleNotice.textContent = data.testDataStale
+        ? `⚠ Existing test data was not used: ${data.testDataStale} Click Run to generate test data for the current review.`
+        : '';
+      staleNotice.classList.toggle('hidden', !data.testDataStale);
 
       if (stageCompleted && manifest) {
+        stopStatePolling();
+        if (sseSource) { sseSource.close(); sseSource = null; }
         document.getElementById('inputPhase').classList.add('hidden');
         document.getElementById('runningPhase').classList.add('hidden');
         document.getElementById('resultsPhase').classList.remove('hidden');
@@ -1168,8 +1192,10 @@
         document.getElementById('runningPhase').classList.remove('hidden');
         document.getElementById('resultsPhase').classList.add('hidden');
         document.getElementById('actionBar').classList.add('hidden');
-        connectSSE();
+        if (!sseSource) connectSSE();
+        startStatePolling();
       } else {
+        stopStatePolling();
         document.getElementById('inputPhase').classList.remove('hidden');
         document.getElementById('runningPhase').classList.add('hidden');
         document.getElementById('resultsPhase').classList.add('hidden');
@@ -1617,6 +1643,7 @@
       document.getElementById('logStream').innerHTML = '';
 
       connectSSE();
+      startStatePolling();
 
       try {
         const res = await fetch('/api/agent04/run', {
@@ -1626,6 +1653,7 @@
         });
         if (!res.ok) throw new Error('Failed to initiate Agent 04');
       } catch (err) {
+        stopStatePolling();
         alert('Error starting Agent 04: ' + err.message);
         document.getElementById('inputPhase').classList.remove('hidden');
         document.getElementById('runningPhase').classList.add('hidden');
@@ -1678,6 +1706,7 @@
           body: JSON.stringify({ comment })
         });
         const d = await res.json();
+        if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
         showToast('✓ Stage 04 Approved! Fixtures synchronized to disk. Proceeding to Agent 05...');
         setTimeout(() => {
           window.location.href = '/agent05.html';

@@ -117,9 +117,13 @@ DEDUPLICATION LOGIC:
 | Placeholder | Resolved Value |
 |---|---|
 | `{{validEmail}}` | `aria_test_{seed}@testdomain.io` |
-| `{{validPassword}}` | `Aria@Test{seed}!2024` |
+| `{{validPassword}}` | Password stated in the requirement (Rule 0) — sensitive |
 | `{{invalidEmail}}` | `notanemail.nodomain` |
-| `{{invalidPassword}}` | `short` |
+| `{{invalidPassword}}` | `wrong_pass_001` — not sensitive (deliberately wrong) |
+| `{{invalid/wrong/unknown…Username}}` | `aria_unknown_user_{seed}` |
+| `{{wrong/incorrect…Password}}` | `Aria_Wrong_{seed}!` — not sensitive |
+| `{{any/sample…Password}}` | `Aria_Sample_{seed}!` — not sensitive |
+| `{{…Case…Username}}` | Letter-case variant of the requirement username (`acme_user` → `Acme_User`) |
 | `{{validName}}` | Realistic first + last name |
 | `{{validPhone}}` | `+91-9{9 random digits}` |
 | `{{validDate}}` | Today in `YYYY-MM-DD` |

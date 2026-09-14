@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "projectSlug": "aria-project",
+  "sourceReviewId": "tc_review_1789385437197",
+  "files": [
+    "tests/projects/aria-project/pages/F01Page.ts",
+    "tests/projects/aria-project/specs/F-01.spec.ts"
+  ],
+  "testCases": [
+    {
+      "tcKey": "TC-001",
+      "status": "GENERATED",
+      "file": "tests/projects/aria-project/specs/F-01.spec.ts",
+      "note": "Manually written after the session-token-in-Local-Storage expectation was removed from the test case (no compliant way to read storage, and no traceable key name — see BLOCKED history); now asserts redirect to /inventory.html only. A regeneration of this file should reproduce this cleanly since it no longer needs page.evaluate or an unverifiable literal."
+    },
+    {
+      "tcKey": "TC-002",
+      "status": "GENERATED",
+      "file": "tests/projects/aria-project/specs/F-01.spec.ts"
+    },
+    {
+      "tcKey": "TC-003",
+      "status": "GENERATED",
+      "file": "tests/projects/aria-project/specs/F-01.spec.ts",
+      "note": "Manually written as test.fixme() overriding Agent 05's NEEDS_CONTEXT — the expected dialog is Chrome's native breach-checkup UI, not app content; cannot pass in automation. A regeneration of this file will drop it back to NEEDS_CONTEXT."
+    },
+    {
+      "tcKey": "TC-004",
+      "status": "GENERATED",
+      "file": "tests/projects/aria-project/specs/F-01.spec.ts"
+    },
+    {
+      "tcKey": "TC-005",
+      "status": "GENERATED",
+      "file": "tests/projects/aria-project/specs/F-01.spec.ts"
+    },
+    {
+      "tcKey": "TC-006",
+      "status": "GENERATED",
+      "file": "tests/projects/aria-project/specs/F-01.spec.ts"
+    },
+    {
+      "tcKey": "TC-007",
+      "status": "GENERATED",
+      "file": "tests/projects/aria-project/specs/F-01.spec.ts"
+    },
+    {
+      "tcKey": "TC-008",
+      "status": "GENERATED",
+      "file": "tests/projects/aria-project/specs/F-01.spec.ts",
+      "note": "Manually written after adding 'setViewportSize' to UI_PAGE_API (agents/05-playwright-script-generator/constants.ts) — the harness previously had no viewport-control capability at all. A regeneration of this file should now reproduce this cleanly."
+    }
+  ]
+}

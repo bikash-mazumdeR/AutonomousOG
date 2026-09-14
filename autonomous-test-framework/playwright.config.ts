@@ -1,19 +1,32 @@
-// @ts-check
 import { defineConfig, devices } from '@playwright/test';
-
-'use strict';
+import * as fs from 'fs';
+import * as path from 'path';
+import { readActiveProjectSlug } from './core/aut/projectPaths';
 
 /**
  * @fileoverview Playwright Global Configuration — ARIA Framework
- * All settings driven by environment variables for CI/CD compatibility.
+ * Application-agnostic: the active project (ARIA_PROJECT_ID env, or the marker written by Agent 05) selects
+ * the generated test folder and its AUT profile (base URL env var, test-id attribute, browsers).
  * @see https://playwright.dev/docs/test-configuration
  */
 
 require('dotenv').config();
 
+const projectSlug = readActiveProjectSlug();
+const profileFile = projectSlug ? path.join(__dirname, 'projects', projectSlug, 'aut-profile.json') : null;
+const profile = profileFile && fs.existsSync(profileFile) ? JSON.parse(fs.readFileSync(profileFile, 'utf-8')) : null;
+const projectSpecsDir = projectSlug ? path.join(__dirname, 'tests', 'projects', projectSlug, 'specs') : null;
+const browsers: string[] = Array.isArray(profile?.browsers) && profile.browsers.length > 0 ? profile.browsers : ['chromium'];
+
+const BROWSER_PROJECTS: Record<string, any> = {
+  chromium: { name: 'chromium', use: { ...devices['Desktop Chrome'], channel: 'chrome' } },
+  firefox: { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
+  webkit: { name: 'webkit', use: { ...devices['Desktop Safari'] } },
+};
+
 module.exports = defineConfig({
   // ── Test Discovery ───────────────────────────────────────────────────────
-  testDir: './tests/specs',
+  testDir: projectSpecsDir && fs.existsSync(projectSpecsDir) ? projectSpecsDir : './tests/specs',
   testMatch: '**/*.spec.ts',
 
   // ── Execution Settings ───────────────────────────────────────────────────
@@ -33,7 +46,7 @@ module.exports = defineConfig({
 
   // ── Global Use Settings ──────────────────────────────────────────────────
   use: {
-    baseURL: process.env.AUT_BASE_URL || 'http://localhost:3000',
+    baseURL: (profile?.baseUrlEnv && process.env[profile.baseUrlEnv]) || process.env.AUT_BASE_URL || 'http://localhost:3000',
     headless: process.env.PLAYWRIGHT_HEADLESS !== 'false',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -42,24 +55,12 @@ module.exports = defineConfig({
     navigationTimeout: 15000,
     viewport: { width: 1280, height: 720 },
     ignoreHTTPSErrors: true,
-
-    testIdAttribute: process.env.PLAYWRIGHT_TEST_ID_ATTRIBUTE || 'data-test',
+    testIdAttribute: process.env.PLAYWRIGHT_TEST_ID_ATTRIBUTE || profile?.testIdAttribute || 'data-testid',
   },
 
   // ── Output Directory ─────────────────────────────────────────────────────
   outputDir: 'reports/attachments',
 
-  // ── Browser Projects ─────────────────────────────────────────────────────
-  projects: [
-    {
-      name: 'chromium',
-      use: {
-        ...devices['Desktop Chrome'],
-        channel: 'chrome',
-      },
-    },
-    // Uncomment for cross-browser:
-    // { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
-    // { name: 'webkit',  use: { ...devices['Desktop Safari']  } },
-  ],
+  // ── Browser Projects (from the AUT profile) ──────────────────────────────
+  projects: browsers.filter((name) => BROWSER_PROJECTS[name]).map((name) => BROWSER_PROJECTS[name]),
 });

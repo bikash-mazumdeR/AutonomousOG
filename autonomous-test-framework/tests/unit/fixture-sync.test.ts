@@ -1,14 +1,13 @@
 /**
  * @fileoverview Unit tests for Centralized FixtureSync.
- * Tests flat test data construction, shared placeholder promotion,
- * requirement data overrides, and fixture file synchronization.
+ * Verifies flattening from the Agent 04 manifest only (no hard-coded application data),
+ * shared placeholder promotion, secret exclusion and fixture file synchronization.
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
 import {
   buildFlatTestData,
-  extractRequirementData,
   syncFixturesFileFromTestData,
 } from '../../core/state-manager/FixtureSync';
 
@@ -16,100 +15,74 @@ describe('FixtureSync Centralized Test Data Engine', () => {
   const tmpFixturePath = path.resolve(__dirname, '../fixtures/test-data-unit-tmp.json');
 
   afterAll(() => {
-    if (fs.existsSync(tmpFixturePath)) {
-      fs.unlinkSync(tmpFixturePath);
-    }
-  });
-
-  describe('extractRequirementData', () => {
-    it('returns default baseline requirement accounts and errors', () => {
-      const data = extractRequirementData();
-      expect(data.baseURL).toBeDefined();
-      expect(data.standardUsername).toBe('standard_user');
-      expect(data.password).toBe('secret_sauce');
-      expect(data.lockedOutUsername).toBe('locked_out_user');
-      expect(data.errorInvalidCredentials).toContain('Epic sadface');
-    });
-
-    it('extracts test accounts from analysis features if available', () => {
-      const mockAnalysis = {
-        features: [
-          {
-            userStories: [
-              {
-                testUserAccounts: [
-                  { username: 'custom_user', password: 'custom_password' },
-                ],
-              },
-            ],
-          },
-        ],
-      };
-      const data = extractRequirementData(mockAnalysis);
-      expect(data.baseURL).toBeDefined();
-    });
+    if (fs.existsSync(tmpFixturePath)) fs.unlinkSync(tmpFixturePath);
   });
 
   describe('buildFlatTestData', () => {
-    it('builds flat test data with promoted shared variables and per-TC items', () => {
-      const mockManifest = {
-        globalCtx: { baseURL: 'https://test.saucedemo.com/' },
-        globalFixtures: {
-          adminCredentials: { username: 'admin_user', password: 'admin_password' },
-        },
-        perTCData: {
-          'TC-001': {
-            inputs: {
-              '{{validUsername}}': { value: 'standard_user' },
-              '{{validPassword}}': { value: 'secret_sauce' },
-              '{{customSearchQuery}}': { value: 'backpack' },
-            },
-          },
-          'TC-002': {
-            inputs: {
-              '{{validUsername}}': { value: 'standard_user' },
-              '{{customSearchQuery}}': { value: 'backpack' },
-              '{{invalidZipCode}}': { value: '99999' },
-            },
+    const manifest = {
+      perTCData: {
+        'TC-001': {
+          inputs: {
+            '{{validUsername}}': { value: 'acme_user', source: 'generated' },
+            '{{validPassword}}': { value: 'hunter2', sensitive: true, source: 'generated' },
+            '{{searchQuery}}': { value: 'backpack', source: 'generated' },
           },
         },
-      };
+        'TC-002': {
+          inputs: {
+            '{{validUsername}}': { value: 'acme_user', source: 'generated' },
+            '{{searchQuery}}': { value: 'backpack', source: 'generated' },
+            '{{invalidZipCode}}': { value: '99999', source: 'generated' },
+            '{{apiToken}}': { value: '__RUNTIME__', source: 'runtime' },
+            '{{mystery}}': { value: '{{UNRESOLVED:mystery}}', source: 'unresolved' },
+          },
+        },
+      },
+    };
 
-      const flat = buildFlatTestData(mockManifest);
-
-      expect(flat.baseURL).toBe('https://test.saucedemo.com/');
-      expect(flat.standardUsername).toBe('admin_user');
-      expect(flat.password).toBe('admin_password');
-      // customSearchQuery used in both TC-001 and TC-002 should be promoted to root
-      expect(flat.customSearchQuery).toBe('backpack');
-      // invalidZipCode only in TC-002 should be formatted as TC002_invalidZipCode
+    it('promotes shared placeholders with identical values and keys the rest per test case', () => {
+      const flat = buildFlatTestData(manifest);
+      expect(flat.validUsername).toBe('acme_user');
+      expect(flat.searchQuery).toBe('backpack');
       expect(flat.TC002_invalidZipCode).toBe('99999');
-      // Boundary values should be present
       expect(flat.stringMin).toBe('A');
       expect(flat.numberMax).toBe(2147483647);
+    });
+
+    it('never writes sensitive, runtime or unresolved values', () => {
+      const flat = buildFlatTestData(manifest);
+      const serialized = JSON.stringify(flat);
+      expect(serialized).not.toContain('hunter2');
+      expect(serialized).not.toContain('__RUNTIME__');
+      expect(serialized).not.toContain('UNRESOLVED');
+    });
+
+    it('does not invent application data such as a base URL or default credentials', () => {
+      const flat = buildFlatTestData({});
+      expect(flat.baseURL).toBeUndefined();
+      expect(flat.password).toBeUndefined();
+      expect(Object.keys(flat).every((key) => key.startsWith('string') || key.startsWith('number'))).toBe(true);
+    });
+
+    it('merges explicit caller values first', () => {
+      expect(buildFlatTestData(manifest, { validUsername: 'override' }).validUsername).toBe('override');
+    });
+
+    it('writes requirement values recorded in the manifest, with explicit values taking precedence', () => {
+      const withRequirement = { ...manifest, requirementValues: { validUsername: 'from_requirement', loginPath: '/login' } };
+      expect(buildFlatTestData(withRequirement).validUsername).toBe('from_requirement');
+      expect(buildFlatTestData(withRequirement).loginPath).toBe('/login');
+      expect(buildFlatTestData(withRequirement, { loginPath: '/signin' }).loginPath).toBe('/signin');
     });
   });
 
   describe('syncFixturesFileFromTestData', () => {
     it('writes valid JSON fixture file to disk', () => {
-      const mockTestData = {
-        manifest: {
-          globalCtx: { baseURL: 'https://www.saucedemo.com/' },
-          perTCData: {
-            'TC-010': {
-              inputs: {
-                '{{specialInput}}': { value: 'promo_code_100' },
-              },
-            },
-          },
-        },
-      };
-
-      const result = syncFixturesFileFromTestData(mockTestData, undefined, tmpFixturePath);
-      expect(fs.existsSync(tmpFixturePath)).toBe(true);
+      const result = syncFixturesFileFromTestData({
+        manifest: { perTCData: { 'TC-010': { inputs: { '{{specialInput}}': { value: 'promo_code_100' } } } } },
+      }, undefined, tmpFixturePath);
 
       const parsed = JSON.parse(fs.readFileSync(tmpFixturePath, 'utf-8'));
-      expect(parsed.baseURL).toBe('https://www.saucedemo.com/');
       expect(parsed.TC010_specialInput).toBe('promo_code_100');
       expect(result.TC010_specialInput).toBe('promo_code_100');
     });

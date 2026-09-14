@@ -19,6 +19,10 @@ import { Logger } from '../../core/logger/Logger';
 import { FRAMEWORK_CONFIG } from '../../config/framework.config';
 import { llmClient } from '../../core/llm/LLMClient';
 import { isTestCaseSelected } from '../../core/types';
+import { buildFlatTestData } from '../../core/state-manager/FixtureSync';
+import {
+  RUNTIME_SENTINEL, deriveGenericValue, isSensitivePlaceholder, resolveByIntent,
+} from './placeholderIntent';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -27,9 +31,6 @@ const STAGE_NAME = 'Test Data Generator';
 const NEXT_STAGE = '05-playwright-script-generator';
 
 const SKILL_PATH = path.resolve(__dirname, '../../skills/test-data-generation.md');
-
-/** Runtime-resolved sentinel — actual value loaded from env at execution */
-const RUNTIME_SENTINEL = 'LOADED_FROM_ENV_AT_RUNTIME';
 
 /**
  * Placeholder resolution map.
@@ -199,13 +200,12 @@ class TestDataGeneratorAgent {
 
       // ── 1. Extract explicit test data from requirements (Rule 0) ────────
       const requirementData = this._extractRequirementData(analysis);
-      this._requirementData = requirementData;
 
       // ── 2. Build global context with requirement values ─────────────────
       const globalCtx = this._buildGlobalContext(analysis, projectId, requirementData);
 
-      // ── 3. Restore known patterns from memory & requirement ────────────
-      const knownPatterns = { ...requirementData, ...this._loadMemoryPatterns(memoryContext) };
+      // ── 3. Restore known patterns from memory (requirement values still win, Rule 0)
+      const knownPatterns = this._loadMemoryPatterns(memoryContext);
 
       // ── 4. Resolve per-TC data (only for approved test cases) ───────────
       const perTCData = {};
@@ -230,6 +230,8 @@ class TestDataGeneratorAgent {
       // ── 7. Build manifest ──────────────────────────────────────────────
       const manifest = this._buildManifest({
         projectId,
+        sourceReviewId: input.reviewedTestCases.reviewId || null,
+        requirementValues: requirementData,
         globalCtx,
         perTCData,
         apiPayloadLibrary,
@@ -380,110 +382,79 @@ class TestDataGeneratorAgent {
     const unresolved = [];
     const sensitiveRefs = [];
 
-    const allPlaceholders = this._extractPlaceholders(tc);
-
-    for (const ph of allPlaceholders) {
+    for (const ph of this._extractPlaceholders(tc)) {
       const key = ph.replace(/^\{\{|\}\}$/g, '');
+      const entry = this._resolveInput(key, tc, ctx, knownPatterns);
 
-      // 1. Check memory patterns first
-      if (knownPatterns[key]) {
-        inputs[ph] = {
-          value: knownPatterns[key],
-          type: 'string',
-          sensitive: false,
-          source: 'memory',
-          note: 'Reused from previous run',
-        };
+      if (entry) {
+        inputs[ph] = entry;
+        if (entry.sensitive) sensitiveRefs.push(ph);
         continue;
       }
 
-      // 2. Check resolver map
-      const resolver = PLACEHOLDER_RESOLVERS[key];
-      if (resolver) {
-        const value = typeof resolver === 'function' ? resolver(ctx) : resolver;
-        const sensitive = this._isSensitive(key);
-        const source = value === RUNTIME_SENTINEL ? 'runtime' : 'generated';
-
-        if (sensitive) sensitiveRefs.push(ph);
-
-        inputs[ph] = {
-          value,
-          type: this._inferDataType(key, value),
-          sensitive,
-          source,
-          note: source === 'runtime' ? 'Loaded from CI/env secrets at runtime' : '',
-        };
-        continue;
-      }
-
-      // 3. Boundary-specific resolution
-      const boundaryValue = this._resolveBoundary(key, tc);
-      if (boundaryValue !== null) {
-        inputs[ph] = {
-          value: boundaryValue,
-          type: 'boundary',
-          sensitive: false,
-          source: 'generated',
-          note: `Boundary value for edge test: ${key}`,
-        };
-        continue;
-      }
-
-      // 4. Context-derived fallback
-      const contextValue = this._deriveFromContext(key, tc, ctx);
-      if (contextValue !== null) {
-        inputs[ph] = {
-          value: contextValue,
-          type: 'string',
-          sensitive: false,
-          source: 'generated',
-          note: 'Context-derived fallback',
-        };
-        continue;
-      }
-
-      // 5. Unresolvable — flag it
       unresolved.push({
         placeholder: ph,
         tcKey: tc.key,
         stepIndex: this._findPlaceholderStep(tc, ph),
         reason: `Cannot infer data type for "${key}" from context`,
-        suggestion: `Add "${key}" to PLACEHOLDER_RESOLVERS in agent.js or provide in .env`,
+        suggestion: `Provide "${key}" in the requirement, add it to PLACEHOLDER_RESOLVERS in agent.ts, or set it in the Agent 04 UI`,
       });
-
       inputs[ph] = {
-        value: `{{UNRESOLVED:${key}}}`,
-        type: 'unknown',
-        sensitive: false,
-        source: 'unresolved',
-        note: 'REQUIRES MANUAL RESOLUTION',
+        value: `{{UNRESOLVED:${key}}}`, type: 'unknown', sensitive: false, source: 'unresolved', note: 'REQUIRES MANUAL RESOLUTION',
       };
     }
 
-    // Build API payload if API TC
-    let apiPayload = null;
-    if (tc.type === 'API' && tc.apiDetails?.requestBody) {
-      apiPayload = this._resolveAPIPayload(tc.apiDetails, ctx);
-    }
-
-    // Build boundary data if Edge TC
-    let boundaryData = null;
-    if (tc.type === 'Edge') {
-      boundaryData = this._buildBoundaryData(tc);
-    }
+    const apiPayload = tc.type === 'API' && tc.apiDetails?.requestBody ? this._resolveAPIPayload(tc.apiDetails, ctx) : null;
+    const boundaryData = tc.type === 'Edge' ? this._buildBoundaryData(tc) : null;
 
     return {
       data: {
-        tcKey: tc.key,
-        type: tc.type,
-        inputs,
-        apiPayload,
-        boundaryData,
-        unresolved: unresolved.map((u) => u.placeholder),
+        tcKey: tc.key, type: tc.type, inputs, apiPayload, boundaryData, unresolved: unresolved.map((u) => u.placeholder),
       },
       unresolved,
       sensitiveRefs,
     };
+  }
+
+  /**
+   * Resolves one placeholder. Priority: requirement (Rule 0) → memory → resolver catalogue →
+   * intent (wrong / arbitrary / case-variant credential) → boundary → generic field name.
+   * @returns {Object|null} Manifest input entry, or null when the placeholder cannot be resolved
+   * @private
+   */
+  _resolveInput(key, tc, ctx, knownPatterns) {
+    const sensitive = isSensitivePlaceholder(key);
+    const requirementValue = ctx.requirementData?.[key];
+    if (requirementValue !== undefined) return this._entry(key, requirementValue, 'requirement', sensitive, 'Copied from the requirement');
+    if (knownPatterns[key] !== undefined) return this._entry(key, knownPatterns[key], 'memory', sensitive, 'Reused from previous run');
+
+    const resolver = PLACEHOLDER_RESOLVERS[key];
+    if (resolver) return this._generatedEntry(key, typeof resolver === 'function' ? resolver(ctx) : resolver, sensitive, '');
+
+    const intent = resolveByIntent(key, {
+      seed: ctx.seed, username: ctx.requirementData?.standardUsername, password: ctx.requirementData?.password,
+    });
+    if (intent) return this._entry(key, intent.value, 'generated', sensitive, intent.note);
+
+    const boundaryValue = this._resolveBoundary(key, tc);
+    if (boundaryValue !== null) {
+      return { value: boundaryValue, type: 'boundary', sensitive: false, source: 'generated', note: `Boundary value for edge test: ${key}` };
+    }
+
+    const contextValue = deriveGenericValue(key, { seed: ctx.seed, tcKey: ctx.tcKey, tcText: `${tc.name} ${tc.objective}` });
+    return contextValue === null ? null : this._generatedEntry(key, contextValue, sensitive, 'Context-derived fallback');
+  }
+
+  /** Entry for a generated value; the runtime sentinel is marked as runtime-resolved. @private */
+  _generatedEntry(key, value, sensitive, note) {
+    return value === RUNTIME_SENTINEL
+      ? this._entry(key, value, 'runtime', sensitive, 'Loaded from CI/env secrets at runtime')
+      : this._entry(key, value, 'generated', sensitive, note);
+  }
+
+  /** @private */
+  _entry(key, value, source, sensitive, note) {
+    return { value, type: this._inferDataType(key, value), sensitive, source, note };
   }
 
   /**
@@ -530,31 +501,6 @@ class TestDataGeneratorAgent {
     };
 
     return boundaryMap[lower] || null;
-  }
-
-  /**
-   * Derives a reasonable value from TC name/type context.
-   * @private
-   */
-  _deriveFromContext(key, tc, ctx) {
-    const lower = key.toLowerCase();
-    const tcCtx = `${tc.name} ${tc.objective}`.toLowerCase();
-
-    if (lower.includes('id')) return `aria_id_${ctx.seed}`;
-    if (lower.includes('code')) return `ARIA_${ctx.seed.toUpperCase().slice(0, 6)}`;
-    if (lower.includes('token')) return RUNTIME_SENTINEL;
-    if (lower.includes('message')) return `Aria test message ${ctx.seed}`;
-    if (lower.includes('title')) return `Aria Test Title ${ctx.seed}`;
-    if (lower.includes('desc')) return `Aria test description for TC ${ctx.tcKey}`;
-    if (lower.includes('count')) return '5';
-    if (lower.includes('limit')) return '10';
-    if (lower.includes('page')) return '1';
-    if (lower.includes('size')) return '20';
-    if (lower.includes('role')) return tcCtx.includes('admin') ? 'admin' : 'user';
-    if (lower.includes('status')) return 'active';
-    if (lower.includes('type')) return 'standard';
-
-    return null;
   }
 
   /**
@@ -693,6 +639,7 @@ class TestDataGeneratorAgent {
     projectId, globalCtx, perTCData, apiPayloadLibrary,
     environmentOverrides, unresolved, sensitiveRefs, totalTCs,
     totalReviewed, approvedCount, excludedCount, excludedTestCases,
+    sourceReviewId, requirementValues,
   }: any) {
     const resolvedCount = Object.values(perTCData)
       .reduce((sum: number, tc: any) => sum + Object.values(tc.inputs)
@@ -703,6 +650,8 @@ class TestDataGeneratorAgent {
     return {
       manifestId: `tdm_${Date.now()}`,
       projectId,
+      /** Agent 03 review this data was generated from — used to detect stale manifests */
+      sourceReviewId: sourceReviewId || null,
       generatedAt: new Date().toISOString(),
       seed: globalCtx.seed,
       environment: FRAMEWORK_CONFIG.environment,
@@ -714,6 +663,8 @@ class TestDataGeneratorAgent {
       resolvedCount,
       unresolvedCount,
 
+      /** Values taken from the requirement; written to the flat fixture by FixtureSync */
+      requirementValues: requirementValues || {},
       globalFixtures: globalCtx.globalFixtures,
       perTCData,
       boundaryLibrary: BOUNDARY_LIBRARY,
@@ -782,11 +733,6 @@ class TestDataGeneratorAgent {
   }
 
   /** @private */
-  _isSensitive(key) {
-    return /token|password|secret|key|credential|auth|jwt|apikey/i.test(key);
-  }
-
-  /** @private */
   _inferDataType(key, value) {
     if (typeof value === 'boolean') return 'boolean';
     if (typeof value === 'number') return 'number';
@@ -796,7 +742,7 @@ class TestDataGeneratorAgent {
     if (/phone/i.test(key)) return 'phone';
     if (/date/i.test(key)) return 'date';
     if (/amount|price|cost/i.test(key)) return 'currency';
-    if (value && value.startsWith('{')) return 'json';
+    if (typeof value === 'string' && value.startsWith('{')) return 'json';
     return 'string';
   }
 
@@ -873,11 +819,11 @@ class TestDataGeneratorAgent {
       'utf-8',
     );
 
-    // Also write clean, flat key-value fixtures file for Playwright (Rule 0 & Flat Format)
+    // Flat key-value fixture for Playwright via the shared builder (requirement values come from manifest.requirementValues)
     const fixturesDir = path.resolve(__dirname, '../../tests/fixtures');
     if (!fs.existsSync(fixturesDir)) fs.mkdirSync(fixturesDir, { recursive: true });
 
-    const flatTestData = this._buildFlatTestData(manifest, this._requirementData || {});
+    const flatTestData = buildFlatTestData(manifest);
     fs.writeFileSync(
       path.join(fixturesDir, 'test-data.json'),
       JSON.stringify(flatTestData, null, 2),
@@ -958,102 +904,6 @@ class TestDataGeneratorAgent {
     }
 
     return data;
-  }
-
-  /**
-   * Builds clean, lightweight, flat key-value JSON format for test-data.json.
-   * Enforces zero unnecessary nesting, zero duplicate code, pure attribute and value.
-   * @private
-   */
-  _buildFlatTestData(manifest: any, reqData: Record<string, any>): Record<string, any> {
-    const flat: Record<string, any> = {};
-
-    // 1. Shared / Global values strictly from requirement
-    flat.baseURL = reqData.baseURL || 'https://www.saucedemo.com/';
-    flat.password = reqData.password || 'secret_sauce';
-    flat.standardUsername = reqData.standardUsername || 'standard_user';
-    flat.lockedOutUsername = reqData.lockedOutUsername || 'locked_out_user';
-    if (reqData.problemUsername) flat.problemUsername = reqData.problemUsername;
-    if (reqData.performanceGlitchUsername) flat.performanceGlitchUsername = reqData.performanceGlitchUsername;
-    if (reqData.errorUsername) flat.errorUsername = reqData.errorUsername;
-    if (reqData.visualUsername) flat.visualUsername = reqData.visualUsername;
-    if (reqData.errorInvalidCredentials) flat.errorInvalidCredentials = reqData.errorInvalidCredentials;
-    if (reqData.errorLockedOut) flat.errorLockedOut = reqData.errorLockedOut;
-    if (reqData.errorUsernameRequired) flat.errorUsernameRequired = reqData.errorUsernameRequired;
-    if (reqData.errorPasswordRequired) flat.errorPasswordRequired = reqData.errorPasswordRequired;
-
-    // 2. Identify and promote shared placeholders (used across multiple TCs) to root to eliminate duplicates
-    const placeholderCounts = new Map<string, { count: number; value: any }>();
-    for (const tcData of Object.values(manifest.perTCData || {})) {
-      const inputs = (tcData as any).inputs || {};
-      for (const [ph, entry] of Object.entries(inputs)) {
-        const rawVal = (entry as any).value;
-        const cleanPh = ph.replace(/^\{\{|\}\}$/g, '');
-        if (!placeholderCounts.has(cleanPh)) {
-          placeholderCounts.set(cleanPh, { count: 0, value: rawVal });
-        }
-        const current = placeholderCounts.get(cleanPh)!;
-        current.count++;
-      }
-    }
-
-    // Promote shared items (count > 1) to root key if not already defined
-    for (const [cleanPh, meta] of placeholderCounts.entries()) {
-      if (meta.count > 1) {
-        if (!(['validBaseURL', 'baseURL', 'apiBaseURL', 'validPassword', 'password', 'validUsername', 'adminUsername'].includes(cleanPh))) {
-          if (!(cleanPh in flat) && meta.value !== undefined) {
-            flat[cleanPh] = meta.value;
-          }
-        }
-      }
-    }
-
-    // 3. Per-TC unique inputs (only include values unique to a single TC that are not at root)
-    for (const [tcKey, tcData] of Object.entries(manifest.perTCData || {})) {
-      const inputs = (tcData as any).inputs || {};
-      for (const [ph, entry] of Object.entries(inputs)) {
-        const rawVal = (entry as any).value;
-        const cleanPh = ph.replace(/^\{\{|\}\}$/g, '');
-
-        // If it's already in flat (root value or promoted shared value), skip it to avoid duplication!
-        if (cleanPh in flat || ['validBaseURL', 'baseURL', 'apiBaseURL', 'validPassword', 'password', 'validUsername', 'adminUsername'].includes(cleanPh)) {
-          continue;
-        }
-        if (cleanPh === 'validTestData' && typeof rawVal === 'string' && rawVal.startsWith('aria_valid_')) {
-          continue;
-        }
-
-        const formattedKey = `${tcKey.replace(/[^a-zA-Z0-9]/g, '')}_${cleanPh}`;
-        if (!(formattedKey in flat) && rawVal !== undefined) {
-          flat[formattedKey] = rawVal;
-        }
-      }
-    }
-
-    // 4. Field constraints from requirement
-    if (reqData.usernameMaxLength) flat.usernameMaxLength = reqData.usernameMaxLength;
-    if (reqData.passwordMaxLength) flat.passwordMaxLength = reqData.passwordMaxLength;
-
-    // 4. Lightweight boundary primitives
-    flat.stringMin = 'A';
-    flat.stringUnderMin = '';
-    flat.stringLong = 'A'.repeat(1001);
-    flat.stringSpecialChars = '#%&<>!@$^*()';
-    flat.stringUnicode = '🚀 中文 العربية Ñ';
-    flat.stringWhitespace = '   ';
-    flat.stringSqlInject = "' OR '1'='1'; DROP TABLE users;--";
-    flat.stringXss = "<script>alert('aria-xss-test')</script>";
-
-    flat.numberMin = 0;
-    flat.numberMax = 2147483647;
-    flat.numberUnderMin = -1;
-    flat.numberOverMax = 2147483648;
-    flat.numberZero = 0;
-    flat.numberNegative = -999;
-    flat.numberDecimal = 0.001;
-    flat.numberMaxDecimal = 999999999.99;
-
-    return flat;
   }
 
   /** @private */

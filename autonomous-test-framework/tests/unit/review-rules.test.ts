@@ -4,7 +4,7 @@ import {
   FINDING_SEVERITY,
 } from '../../core/automation-reviewer/ReviewRules';
 
-describe('ReviewRules AST Engine', () => {
+describe('ReviewRules AST Engine (detect-only)', () => {
   describe('Syntax Validation', () => {
     it('should return a BLOCKER finding for invalid JS syntax', () => {
       const invalidCode = 'const x = ;';
@@ -14,80 +14,66 @@ describe('ReviewRules AST Engine', () => {
     });
   });
 
-  describe('STYLE-001: use strict directive', () => {
-    it('should add "use strict" if missing and not a K6 file', () => {
-      const code = 'const x = 1;';
-      const { findings, patchedCode } = analyzeWithAST(code, FILE_TYPE.SPEC);
-      expect(findings.some((f) => f.ruleId === 'STYLE-001')).toBe(true);
-      // Recast might use double or single quotes depending on config
-      expect(patchedCode).toMatch(/["']use strict["'];/);
+  describe('No automatic code rewriting', () => {
+    it.each([
+      ['waitForTimeout', 'page.waitForTimeout(1000);'],
+      ['console.assert', 'console.assert(x === 1, "failed");'],
+      ['empty catch', 'try { f(); } catch(e) {}'],
+      ['missing use strict', 'const x = 1;'],
+    ])('reports but never patches: %s', (_label, code) => {
+      const { patchedCode, findings } = analyzeWithAST(code, FILE_TYPE.SPEC);
+      expect(patchedCode).toBe(code);
+      expect(findings.every((f) => f.patchable === false)).toBe(true);
+    });
+
+    it('does not require a "use strict" directive in TypeScript modules', () => {
+      const { findings } = analyzeWithAST('const x = 1;', FILE_TYPE.SPEC);
+      expect(findings.some((f) => f.ruleId === 'STYLE-001')).toBe(false);
     });
   });
 
-  describe('LOC-001: XPath Detection', () => {
-    it('should flag XPath locators starting with //', () => {
-      const code = 'page.locator("//div")';
-      const { findings } = analyzeWithAST(code, FILE_TYPE.SPEC);
-      expect(findings.some((f) => f.ruleId === 'LOC-001')).toBe(true);
+  describe('Detected issues', () => {
+    it('flags XPath locators', () => {
+      const { findings } = analyzeWithAST('page.locator("//div")', FILE_TYPE.SPEC);
+      expect(findings.some((f) => f.ruleId === 'INT-011')).toBe(true);
     });
-  });
 
-  describe('WAIT-001/002: Hard Sleep checks', () => {
-    it('should flag and patch waitForTimeout', () => {
-      const code = 'page.waitForTimeout(1000);';
-      const { findings, patchedCode } = analyzeWithAST(code, FILE_TYPE.SPEC);
-      // The rule checks for MemberExpression prop name 'waitForTimeout'
-      expect(findings.some((f) => f.ruleId === 'WAIT-002' || f.ruleId === 'WAIT-001')).toBe(true);
-      expect(patchedCode).toContain('waitForLoadState');
-      expect(patchedCode).toContain('networkidle');
+    it('flags hard sleeps', () => {
+      const { findings } = analyzeWithAST('page.waitForTimeout(1000);', FILE_TYPE.SPEC);
+      expect(findings.some((f) => f.ruleId === 'INT-008')).toBe(true);
     });
-  });
 
-  describe('ASSERT-001: console.assert', () => {
-    it('should flag and patch console.assert to expect()', () => {
-      const code = 'console.assert(x === 1, "failed");';
-      const { findings, patchedCode } = analyzeWithAST(code, FILE_TYPE.SPEC);
+    it('flags console.assert', () => {
+      const { findings } = analyzeWithAST('console.assert(x === 1, "failed");', FILE_TYPE.SPEC);
       expect(findings.some((f) => f.ruleId === 'ASSERT-001')).toBe(true);
-      expect(patchedCode).toContain('expect');
-      expect(patchedCode).toContain('toBeTruthy');
+    });
+
+    it('flags hard-coded absolute URLs', () => {
+      const { findings } = analyzeWithAST('const url = "https://example.com";', FILE_TYPE.SPEC);
+      expect(findings.some((f) => f.ruleId === 'INT-013')).toBe(true);
+    });
+
+    it('flags empty catch blocks', () => {
+      const { findings } = analyzeWithAST('try { f(); } catch(e) {}', FILE_TYPE.SPEC);
+      expect(findings.some((f) => f.ruleId === 'ERR-001')).toBe(true);
     });
   });
 
   describe('POM-001: Extend BasePage', () => {
     it('should flag POM classes that do not extend BasePage', () => {
-      const code = 'class LoginPage {}';
-      const { findings } = analyzeWithAST(code, FILE_TYPE.POM);
+      const { findings } = analyzeWithAST('class LoginPage {}', FILE_TYPE.POM);
       expect(findings.some((f) => f.ruleId === 'POM-001')).toBe(true);
     });
 
     it('should not flag POM classes that extend BasePage', () => {
-      const code = 'class LoginPage extends BasePage {}';
-      const { findings } = analyzeWithAST(code, FILE_TYPE.POM);
+      const { findings } = analyzeWithAST('class LoginPage extends BasePage {}', FILE_TYPE.POM);
       expect(findings.some((f) => f.ruleId === 'POM-001')).toBe(false);
-    });
-  });
-
-  describe('DATA-002: Hardcoded URLs', () => {
-    it('should flag hardcoded HTTP URLs in specs', () => {
-      const code = 'const url = "https://example.com";';
-      const { findings } = analyzeWithAST(code, FILE_TYPE.SPEC);
-      expect(findings.some((f) => f.ruleId === 'DATA-002')).toBe(true);
-    });
-  });
-
-  describe('ERR-001: Empty Catch Block', () => {
-    it('should flag and patch empty catch blocks', () => {
-      const code = 'try { f(); } catch(e) {}';
-      const { findings, patchedCode } = analyzeWithAST(code, FILE_TYPE.SPEC);
-      expect(findings.some((f) => f.ruleId === 'ERR-001')).toBe(true);
-      expect(patchedCode).toContain('throw e');
     });
   });
 
   describe('TypeScript Native Syntax Support', () => {
     it('should parse TypeScript interfaces, type annotations, and generics without SYNTAX-001 error', () => {
       const tsCode = `
-'use strict';
 import { test, expect, Page, Locator } from '@playwright/test';
 import { BasePage } from '../pages/BasePage';
 
@@ -100,7 +86,7 @@ export class LoginPage extends BasePage {
   readonly usernameInput: Locator;
   constructor(page: Page) {
     super(page);
-    this.usernameInput = this.page.locator('[data-test="username"]');
+    this.usernameInput = this.page.getByTestId('username');
   }
 }
 
@@ -112,6 +98,12 @@ test('typed test', { annotation: [{ type: 'TC Key', description: 'TC-001' }] }, 
       const { findings } = analyzeWithAST(tsCode, FILE_TYPE.SPEC, ['TC-001']);
       expect(findings.some((f) => f.ruleId === 'SYNTAX-001')).toBe(false);
       expect(findings.some((f) => f.ruleId === 'COMPLETENESS-001')).toBe(false);
+    });
+
+    it('reports missing test case keys', () => {
+      const code = "test('[TC-001] a', { annotation: [{ type: 'TC Key', description: 'TC-001' }] }, async () => { expect(1).toBe(1); });";
+      const { findings } = analyzeWithAST(code, FILE_TYPE.SPEC, ['TC-001', 'TC-002']);
+      expect(findings.find((f) => f.ruleId === 'COMPLETENESS-001')?.message).toContain('TC-002');
     });
   });
 });

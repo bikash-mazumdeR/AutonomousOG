@@ -1,0 +1,560 @@
+{
+  "version": 1,
+  "featureId": "F-01",
+  "testIdAttribute": "data-test",
+  "states": [
+    {
+      "name": "start",
+      "urlPath": "/",
+      "entryPath": "/",
+      "elements": [
+        {
+          "name": "loginContainerElement",
+          "strategy": "testId",
+          "args": [
+            "login-container"
+          ],
+          "tag": "div",
+          "role": "main"
+        },
+        {
+          "name": "usernameInput",
+          "strategy": "testId",
+          "args": [
+            "username"
+          ],
+          "tag": "input",
+          "role": "textbox",
+          "accessibleName": "Username",
+          "inputType": "text"
+        },
+        {
+          "name": "passwordInput",
+          "strategy": "testId",
+          "args": [
+            "password"
+          ],
+          "tag": "input",
+          "accessibleName": "Password",
+          "inputType": "password"
+        },
+        {
+          "name": "loginButton",
+          "strategy": "testId",
+          "args": [
+            "login-button"
+          ],
+          "tag": "input",
+          "role": "button",
+          "accessibleName": "Login",
+          "inputType": "submit"
+        },
+        {
+          "name": "loginCredentialsContainerElement",
+          "strategy": "testId",
+          "args": [
+            "login-credentials-container"
+          ],
+          "tag": "div"
+        },
+        {
+          "name": "loginCredentialsElement",
+          "strategy": "testId",
+          "args": [
+            "login-credentials"
+          ],
+          "tag": "div"
+        },
+        {
+          "name": "acceptedUsernamesAreHeading",
+          "strategy": "role",
+          "args": [
+            "heading",
+            "Accepted usernames are:"
+          ],
+          "tag": "h4",
+          "role": "heading",
+          "accessibleName": "Accepted usernames are:"
+        },
+        {
+          "name": "loginPasswordElement",
+          "strategy": "testId",
+          "args": [
+            "login-password"
+          ],
+          "tag": "div"
+        },
+        {
+          "name": "passwordForAllUsersHeading",
+          "strategy": "role",
+          "args": [
+            "heading",
+            "Password for all users:"
+          ],
+          "tag": "h4",
+          "role": "heading",
+          "accessibleName": "Password for all users:"
+        }
+      ]
+    },
+    {
+      "name": "inventory",
+      "urlPath": "/inventory.html",
+      "elements": [
+        {
+          "name": "headerContainerElement",
+          "strategy": "testId",
+          "args": [
+            "header-container"
+          ],
+          "tag": "header"
+        },
+        {
+          "name": "primaryHeaderElement",
+          "strategy": "testId",
+          "args": [
+            "primary-header"
+          ],
+          "tag": "div"
+        },
+        {
+          "name": "openMenuButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Open Menu"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Open Menu"
+        },
+        {
+          "name": "openMenuImage",
+          "strategy": "testId",
+          "args": [
+            "open-menu"
+          ],
+          "tag": "img",
+          "role": "img",
+          "accessibleName": "Open Menu"
+        },
+        {
+          "name": "inventorySidebarLinkButton",
+          "strategy": "testId",
+          "args": [
+            "inventory-sidebar-link"
+          ],
+          "tag": "a",
+          "role": "button",
+          "accessibleName": "All Items"
+        },
+        {
+          "name": "dynamicCatalogSidebarLinkButton",
+          "strategy": "testId",
+          "args": [
+            "dynamic-catalog-sidebar-link"
+          ],
+          "tag": "a",
+          "role": "button",
+          "accessibleName": "Dynamic Catalog"
+        },
+        {
+          "name": "aboutSidebarLink",
+          "strategy": "testId",
+          "args": [
+            "about-sidebar-link"
+          ],
+          "tag": "a",
+          "role": "link",
+          "accessibleName": "About"
+        },
+        {
+          "name": "logoutSidebarLinkButton",
+          "strategy": "testId",
+          "args": [
+            "logout-sidebar-link"
+          ],
+          "tag": "a",
+          "role": "button",
+          "accessibleName": "Logout"
+        },
+        {
+          "name": "resetSidebarLinkButton",
+          "strategy": "testId",
+          "args": [
+            "reset-sidebar-link"
+          ],
+          "tag": "a",
+          "role": "button",
+          "accessibleName": "Reset App State"
+        },
+        {
+          "name": "closeMenuButton",
+          "strategy": "text",
+          "args": [
+            "Close Menu"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Close Menu"
+        },
+        {
+          "name": "closeMenuImage",
+          "strategy": "testId",
+          "args": [
+            "close-menu"
+          ],
+          "tag": "img",
+          "role": "img",
+          "accessibleName": "Close Menu"
+        },
+        {
+          "name": "shoppingCartLinkButton",
+          "strategy": "testId",
+          "args": [
+            "shopping-cart-link"
+          ],
+          "tag": "a",
+          "role": "button",
+          "accessibleName": "Cart, empty"
+        },
+        {
+          "name": "secondaryHeaderElement",
+          "strategy": "testId",
+          "args": [
+            "secondary-header"
+          ],
+          "tag": "div"
+        },
+        {
+          "name": "titleElement",
+          "strategy": "testId",
+          "args": [
+            "title"
+          ],
+          "tag": "span"
+        },
+        {
+          "name": "activeOptionElement",
+          "strategy": "testId",
+          "args": [
+            "active-option"
+          ],
+          "tag": "span"
+        },
+        {
+          "name": "productSortContainerSelect",
+          "strategy": "testId",
+          "args": [
+            "product-sort-container"
+          ],
+          "tag": "select",
+          "role": "combobox",
+          "accessibleName": "Sort products"
+        },
+        {
+          "name": "inventoryContainerElement",
+          "strategy": "testId",
+          "args": [
+            "inventory-container"
+          ],
+          "tag": "div"
+        },
+        {
+          "name": "inventoryListElement",
+          "strategy": "testId",
+          "args": [
+            "inventory-list"
+          ],
+          "tag": "div"
+        },
+        {
+          "name": "item4ImgLinkButton",
+          "strategy": "testId",
+          "args": [
+            "item-4-img-link"
+          ],
+          "tag": "a",
+          "role": "button",
+          "accessibleName": "View details for Sauce Labs Backpack"
+        },
+        {
+          "name": "inventoryItemSauceLabsBackpackImage",
+          "strategy": "testId",
+          "args": [
+            "inventory-item-sauce-labs-backpack-img"
+          ],
+          "tag": "img",
+          "role": "img",
+          "accessibleName": "Sauce Labs Backpack"
+        },
+        {
+          "name": "item4TitleLinkButton",
+          "strategy": "testId",
+          "args": [
+            "item-4-title-link"
+          ],
+          "tag": "a",
+          "role": "button",
+          "accessibleName": "View details for Sauce Labs Backpack"
+        },
+        {
+          "name": "addToCartSauceLabsButton",
+          "strategy": "testId",
+          "args": [
+            "add-to-cart-sauce-labs-backpack"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Add to cart"
+        },
+        {
+          "name": "item0ImgLinkButton",
+          "strategy": "testId",
+          "args": [
+            "item-0-img-link"
+          ],
+          "tag": "a",
+          "role": "button",
+          "accessibleName": "View details for Sauce Labs Bike Light"
+        },
+        {
+          "name": "inventoryItemSauceLabsBikeImage",
+          "strategy": "testId",
+          "args": [
+            "inventory-item-sauce-labs-bike-light-img"
+          ],
+          "tag": "img",
+          "role": "img",
+          "accessibleName": "Sauce Labs Bike Light"
+        },
+        {
+          "name": "item0TitleLinkButton",
+          "strategy": "testId",
+          "args": [
+            "item-0-title-link"
+          ],
+          "tag": "a",
+          "role": "button",
+          "accessibleName": "View details for Sauce Labs Bike Light"
+        },
+        {
+          "name": "addToCartSauceLabsButton2",
+          "strategy": "testId",
+          "args": [
+            "add-to-cart-sauce-labs-bike-light"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Add to cart"
+        },
+        {
+          "name": "item1ImgLinkButton",
+          "strategy": "testId",
+          "args": [
+            "item-1-img-link"
+          ],
+          "tag": "a",
+          "role": "button",
+          "accessibleName": "View details for Sauce Labs Bolt T-Shirt"
+        },
+        {
+          "name": "inventoryItemSauceLabsBoltImage",
+          "strategy": "testId",
+          "args": [
+            "inventory-item-sauce-labs-bolt-t-shirt-img"
+          ],
+          "tag": "img",
+          "role": "img",
+          "accessibleName": "Sauce Labs Bolt T-Shirt"
+        },
+        {
+          "name": "item1TitleLinkButton",
+          "strategy": "testId",
+          "args": [
+            "item-1-title-link"
+          ],
+          "tag": "a",
+          "role": "button",
+          "accessibleName": "View details for Sauce Labs Bolt T-Shirt"
+        },
+        {
+          "name": "addToCartSauceLabsButton3",
+          "strategy": "testId",
+          "args": [
+            "add-to-cart-sauce-labs-bolt-t-shirt"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Add to cart"
+        },
+        {
+          "name": "item5ImgLinkButton",
+          "strategy": "testId",
+          "args": [
+            "item-5-img-link"
+          ],
+          "tag": "a",
+          "role": "button",
+          "accessibleName": "View details for Sauce Labs Fleece Jacket"
+        },
+        {
+          "name": "inventoryItemSauceLabsFleeceImage",
+          "strategy": "testId",
+          "args": [
+            "inventory-item-sauce-labs-fleece-jacket-img"
+          ],
+          "tag": "img",
+          "role": "img",
+          "accessibleName": "Sauce Labs Fleece Jacket"
+        },
+        {
+          "name": "item5TitleLinkButton",
+          "strategy": "testId",
+          "args": [
+            "item-5-title-link"
+          ],
+          "tag": "a",
+          "role": "button",
+          "accessibleName": "View details for Sauce Labs Fleece Jacket"
+        },
+        {
+          "name": "addToCartSauceLabsButton4",
+          "strategy": "testId",
+          "args": [
+            "add-to-cart-sauce-labs-fleece-jacket"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Add to cart"
+        },
+        {
+          "name": "item2ImgLinkButton",
+          "strategy": "testId",
+          "args": [
+            "item-2-img-link"
+          ],
+          "tag": "a",
+          "role": "button",
+          "accessibleName": "View details for Sauce Labs Onesie"
+        },
+        {
+          "name": "inventoryItemSauceLabsOnesieImage",
+          "strategy": "testId",
+          "args": [
+            "inventory-item-sauce-labs-onesie-img"
+          ],
+          "tag": "img",
+          "role": "img",
+          "accessibleName": "Sauce Labs Onesie"
+        },
+        {
+          "name": "item2TitleLinkButton",
+          "strategy": "testId",
+          "args": [
+            "item-2-title-link"
+          ],
+          "tag": "a",
+          "role": "button",
+          "accessibleName": "View details for Sauce Labs Onesie"
+        },
+        {
+          "name": "addToCartSauceLabsButton5",
+          "strategy": "testId",
+          "args": [
+            "add-to-cart-sauce-labs-onesie"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Add to cart"
+        },
+        {
+          "name": "item3ImgLinkButton",
+          "strategy": "testId",
+          "args": [
+            "item-3-img-link"
+          ],
+          "tag": "a",
+          "role": "button",
+          "accessibleName": "View details for Test.allTheThings() T-Shirt (Red)"
+        },
+        {
+          "name": "inventoryItemTestAllthethingsTImage",
+          "strategy": "testId",
+          "args": [
+            "inventory-item-test.allthethings()-t-shirt-(red)-img"
+          ],
+          "tag": "img",
+          "role": "img",
+          "accessibleName": "Test.allTheThings() T-Shirt (Red)"
+        },
+        {
+          "name": "item3TitleLinkButton",
+          "strategy": "testId",
+          "args": [
+            "item-3-title-link"
+          ],
+          "tag": "a",
+          "role": "button",
+          "accessibleName": "View details for Test.allTheThings() T-Shirt (Red)"
+        },
+        {
+          "name": "addToCartTestAllthethingsButton",
+          "strategy": "testId",
+          "args": [
+            "add-to-cart-test.allthethings()-t-shirt-(red)"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Add to cart"
+        },
+        {
+          "name": "footerElement",
+          "strategy": "testId",
+          "args": [
+            "footer"
+          ],
+          "tag": "footer"
+        },
+        {
+          "name": "socialXLink",
+          "strategy": "testId",
+          "args": [
+            "social-x"
+          ],
+          "tag": "a",
+          "role": "link",
+          "accessibleName": "X"
+        },
+        {
+          "name": "socialFacebookLink",
+          "strategy": "testId",
+          "args": [
+            "social-facebook"
+          ],
+          "tag": "a",
+          "role": "link",
+          "accessibleName": "Facebook"
+        },
+        {
+          "name": "socialLinkedinLink",
+          "strategy": "testId",
+          "args": [
+            "social-linkedin"
+          ],
+          "tag": "a",
+          "role": "link",
+          "accessibleName": "LinkedIn"
+        },
+        {
+          "name": "footerCopyElement",
+          "strategy": "testId",
+          "args": [
+            "footer-copy"
+          ],
+          "tag": "div"
+        }
+      ]
+    }
+  ]
+}

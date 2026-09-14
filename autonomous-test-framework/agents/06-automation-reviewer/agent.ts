@@ -423,7 +423,6 @@ Return ONLY the raw JSON array.
         specFiles: scripts.specFiles,
         k6Files: scripts.k6Files,
         pomFiles: scripts.pomFiles,
-        helperFiles: scripts.helperFiles || [],
       },
     };
   }
