@@ -170,6 +170,19 @@
       margin-top: 2px;
     }
 
+    /* ── Token Usage Card ────────────────────────────────────────────────── */
+    .token-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .token-row:last-child { border-bottom: none; }
+    .token-label { color: var(--text-muted); }
+    .token-value { color: var(--text); font-weight: 600; font-family: monospace; }
+
     /* ── Advisory Banner (Amber) ─────────────────────────────────────────── */
     .advisory-card {
       background: rgba(30, 41, 59, 0.75);
@@ -727,6 +740,27 @@
         </div>
       </div>
 
+      <!-- Token Usage Card -->
+      <div class="card hidden" id="tokenCard">
+        <div class="card-title"><span>🪙</span> Token Usage</div>
+        <div class="token-row">
+          <span class="token-label">Prompt tokens</span>
+          <span class="token-value" id="tokPrompt">—</span>
+        </div>
+        <div class="token-row">
+          <span class="token-label">Completion tokens</span>
+          <span class="token-value" id="tokCompletion">—</span>
+        </div>
+        <div class="token-row">
+          <span class="token-label">Total tokens</span>
+          <span class="token-value" id="tokTotal">—</span>
+        </div>
+        <div class="token-row">
+          <span class="token-label">Estimated cost</span>
+          <span class="token-value" id="tokCost">—</span>
+        </div>
+      </div>
+
       <!-- Scope Advisory Banner (Only shown if excluded TCs exist) -->
       <div class="advisory-card hidden" id="scopeAdvisoryCard">
         <div class="advisory-header">
@@ -1100,6 +1134,17 @@
       }
     }
 
+    // ── Update Token Usage Card ────────────────────────────────────────────────
+    function updateTokenCard(usage) {
+      const tokenCard = document.getElementById('tokenCard');
+      if (!usage) { tokenCard.classList.add('hidden'); return; }
+      document.getElementById('tokPrompt').textContent     = (usage.promptTokens || 0).toLocaleString();
+      document.getElementById('tokCompletion').textContent = (usage.completionTokens || 0).toLocaleString();
+      document.getElementById('tokTotal').textContent      = (usage.totalTokens || 0).toLocaleString();
+      document.getElementById('tokCost').textContent       = '$' + (usage.estimatedCost || 0).toFixed(6);
+      tokenCard.classList.remove('hidden');
+    }
+
     // ── Render Results View ───────────────────────────────────────────────────
     function renderResults(data, approvedCount, excludedCount) {
       const scripts = data.playwrightScripts || {};
@@ -1123,6 +1168,9 @@
       document.getElementById('resPomCount').textContent = pomFiles.length;
       document.getElementById('resApprovedTcs').textContent = scripts.approvedCount || approvedCount;
       document.getElementById('resExcludedTcs').textContent = scripts.excludedCount || excludedCount;
+
+      // Token usage
+      updateTokenCard(data.stage?.usage);
 
       // Scope Advisory Banner
       const advisoryCard = document.getElementById('scopeAdvisoryCard');

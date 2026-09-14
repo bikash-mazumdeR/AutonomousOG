@@ -1309,74 +1309,65 @@
     };
 
     // ── Gherkin Step & Feature Formatters ─────────────────────────────────
+    // Mirrors agents/02-test-case-generator/utils.ts (convertTestStepsToGherkin / buildScenarioTags).
+    const GHERKIN_KEYWORDS = ['Given', 'When', 'Then', 'And', 'But'];
+    const TYPE_TAG_NAMES = ['positive', 'negative', 'edge', 'api', 'performance'];
+
+    function isTcSelected(tc) {
+      return !!tc && tc.selected !== false && tc.status !== 'OBSOLETE' && !tc.isObsolete;
+    }
+
+    function normalizeGherkinKeyword(keyword) {
+      const raw = String(keyword || '').trim();
+      const cap = raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+      return GHERKIN_KEYWORDS.includes(cap) ? cap : 'When';
+    }
+
     function convertTestStepsToGherkin(tc) {
-      const steps = tc?.testSteps || [];
-      const result = [];
-
-      if (steps.length === 0) {
-        result.push({ keyword: 'Given', text: 'the application state is prepared' });
-        result.push({ keyword: 'When', text: `the test action for "${tc?.key || 'TC'}" is executed` });
-        result.push({ keyword: 'Then', text: `the expected outcome is validated: ${tc?.objective || 'Success'}` });
-        return result;
-      }
-
-      for (let stepIdx = 0; stepIdx < steps.length; stepIdx++) {
-        const step = steps[stepIdx];
-        const desc = (step.description || '').trim();
-        const data = (step.testData || '').trim();
-        const expected = (step.expectedResult || '').trim();
-
-        const isVerification = /^(verify|validate|check|confirm|ensure)/i.test(desc);
-        const isNav = /^(navigate|open|given|go to)/i.test(desc);
-
-        if (isVerification) {
-          const thenText = expected || desc;
-          result.push({ keyword: 'Then', text: thenText });
-        } else {
-          const keyword = step.keyword || ((stepIdx === 0 && isNav) ? 'Given' : 'When');
-          result.push({ keyword, text: desc });
-
-          if (data && !/^\((leave blank|none|no token.*)\)$/i.test(data)) {
-            result.push({ keyword: 'And', text: `with test data "${data}"` });
-          }
-
-          if (expected && expected.toLowerCase() !== desc.toLowerCase()) {
-            result.push({ keyword: 'Then', text: expected });
-          }
+      const lines = [];
+      for (const step of (tc?.testSteps || [])) {
+        const keyword = normalizeGherkinKeyword(step.keyword);
+        const desc = String(step.description || '').trim();
+        const expected = String(step.expectedResult || '').trim();
+        if (keyword !== 'Given' && keyword !== 'When') {
+          lines.push({ keyword, text: desc || expected });
+          if (desc && expected && expected !== desc) lines.push({ keyword: 'And', text: expected });
+          continue;
         }
+        lines.push({ keyword, text: desc });
+        const data = String(step.testData || '').trim();
+        if (data) lines.push({ keyword: 'And', text: `with test data "${data}"` });
+        expected.split('\n').map(s => s.trim()).filter(Boolean)
+          .forEach((text, idx) => lines.push({ keyword: idx === 0 ? 'Then' : 'And', text }));
       }
+      return lines;
+    }
 
-      return result;
+    function toGherkinTag(value) {
+      return `@${String(value).toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '')}`;
+    }
+
+    function buildScenarioTags(tc) {
+      const tags = [toGherkinTag(tc.type || 'Positive')];
+      (tc.requirementRefs || []).forEach(ref => tags.push(toGherkinTag(ref)));
+      (tc.labels || []).forEach(label => {
+        const tag = toGherkinTag(label);
+        if (!TYPE_TAG_NAMES.includes(tag.slice(1))) tags.push(tag);
+      });
+      if (tc.apiDetails?.method) tags.push(toGherkinTag(`method-${tc.apiDetails.method}`));
+      if (tc.apiDetails?.expectedStatusCode) tags.push(toGherkinTag(`status-${tc.apiDetails.expectedStatusCode}`));
+      if (tc.performanceRef?.scenario) tags.push(toGherkinTag(tc.performanceRef.scenario));
+      if (tc.key) tags.push(toGherkinTag(tc.key));
+      if (!isTcSelected(tc)) tags.push('@obsolete');
+      return [...new Set(tags)];
     }
 
     function buildGherkinScenarioText(tc) {
-      const tags = [];
-      if (tc.type) tags.push(`@${tc.type.toLowerCase()}`);
-      if (Array.isArray(tc.labels)) {
-        for (const l of tc.labels) {
-          const clean = `@${String(l).toLowerCase().replace(/[^a-z0-9_-]/g, '')}`;
-          if (!tags.includes(clean)) tags.push(clean);
-        }
-      }
-      if (tc.key) tags.push(`@${tc.key.toLowerCase()}`);
-      if (tc.status === 'OBSOLETE' || tc.isObsolete) tags.push('@obsolete');
-
-      let scenarioTitle = tc.name || tc.objective || tc.key;
-      if (scenarioTitle.includes('—')) {
-        scenarioTitle = scenarioTitle.split('—').slice(1).join('—').trim();
-      } else if (scenarioTitle.includes(' - ')) {
-        scenarioTitle = scenarioTitle.split(' - ').slice(1).join(' - ').trim();
-      } else {
-        scenarioTitle = scenarioTitle.replace(/^\[.*?\]\s*/g, '').trim();
-      }
-
-      const gherkinSteps = convertTestStepsToGherkin(tc);
-      const stepLines = gherkinSteps.map((s) => `    ${s.keyword} ${s.text}`);
-
+      const title = String(tc.name || tc.objective || tc.key || '').trim();
       return [
-        `  ${tags.join(' ')}`,
-        `  Scenario: [${tc.key}] ${scenarioTitle}`,
-        ...stepLines,
+        `  ${buildScenarioTags(tc).join(' ')}`,
+        `  Scenario: [${tc.key}] ${title}`,
+        ...convertTestStepsToGherkin(tc).map((s) => `    ${s.keyword} ${s.text}`),
       ].join('\n');
     }
 
@@ -1394,18 +1385,8 @@
     }
 
     function computeStepGherkinLine(kw, desc, data, expected) {
-      const isVerification = /^(verify|validate|check|confirm|ensure)/i.test(desc);
-      if (isVerification) {
-        return `Then ${expected || desc}`;
-      }
-      let line = `${kw || 'When'} ${desc || '[step description]'}`;
-      if (data && !/^\((leave blank|none|no token.*)\)$/i.test(data)) {
-        line += `\nAnd with test data "${data}"`;
-      }
-      if (expected && expected.toLowerCase() !== desc.toLowerCase()) {
-        line += `\nThen ${expected}`;
-      }
-      return line;
+      const step = { keyword: kw, description: desc || '[step description]', testData: data, expectedResult: expected };
+      return convertTestStepsToGherkin({ testSteps: [step] }).map(l => `${l.keyword} ${l.text}`).join('\n');
     }
 
     function updateGherkinFeatureSnippet() {
@@ -1413,7 +1394,6 @@
       const tc = allTestCases.find(t => t.key === currentEditingKey) || {};
       const stepCards = Array.from(DOM.modalStepsList.querySelectorAll('.step-card'));
       const testSteps = stepCards.map((card, idx) => ({
-        index: idx + 1,
         keyword: card.querySelector('.step-kw')?.value || 'When',
         description: (card.querySelector('.step-desc')?.value || '').trim(),
         testData: (card.querySelector('.step-data')?.value || '').trim(),
@@ -1448,11 +1428,11 @@
         featureMap.set(f.id, f.name);
         for (const s of (f.userStories || [])) {
           const selectedForStory = selectedTCs.filter(tc => {
-            const sid = tc.traceabilityLinks?.userStoryId || tc.userStoryId;
+            const sid = tc.userStoryId;
             return sid === s.id;
           });
           const unselectedForStory = unselectedTCs.filter(tc => {
-            const sid = tc.traceabilityLinks?.userStoryId || tc.userStoryId;
+            const sid = tc.userStoryId;
             return sid === s.id;
           });
 
@@ -1490,8 +1470,8 @@
         key: tc.key,
         name: tc.name,
         type: tc.type,
-        userStoryId: tc.traceabilityLinks?.userStoryId || tc.userStoryId || 'US-01',
-        featureName: featureMap.get(tc.traceabilityLinks?.featureId) || 'General Features',
+        userStoryId: tc.userStoryId || 'US-01',
+        featureName: featureMap.get(tc.featureId) || 'General Features',
         reason: 'Excluded by user during Agent 02 approval stage'
       }));
 
@@ -1616,7 +1596,7 @@
       filtered.forEach(tc => {
         const tr = document.createElement('tr');
         const typeClass = (tc.type || 'positive').toLowerCase();
-        const story = tc.traceabilityLinks?.userStoryId || tc.userStoryId || '—';
+        const story = tc.userStoryId || '—';
         const stepsCount = Array.isArray(tc.testSteps) ? tc.testSteps.length : 0;
         
         tr.innerHTML = `
@@ -2244,7 +2224,6 @@
 
       const stepCards = Array.from(DOM.modalStepsList.querySelectorAll('.step-card'));
       const testSteps = stepCards.map((card, idx) => ({
-        index: idx + 1,
         keyword: card.querySelector('.step-kw')?.value || 'When',
         description: (card.querySelector('.step-desc')?.value || '').trim(),
         testData: (card.querySelector('.step-data')?.value || '').trim(),

@@ -1,261 +1,201 @@
 'use strict';
 
 /**
- * @fileoverview Deterministic Gherkin to Zephyr Scale Test Case Parser.
- * Converts BDD Gherkin .feature scenarios into structured ZephyrTestCase objects.
- * Enables Gherkin-only LLM generation to achieve ~78% token reduction while
- * maintaining 100% downstream pipeline compatibility.
+ * @fileoverview Strict Gherkin parser for Agent 02 LLM output.
+ * Accepts only the constrained grammar defined in skills/test-case-generation.md so every
+ * scenario maps losslessly onto Zephyr-style steps:
+ *
+ *   (Given|When) <action>
+ *   [And with test data "<value>"]
+ *   Then <expected result>
+ *   [And <additional expected result>]*
+ *
+ * Anything outside the grammar is reported as an error for the self-correction loop
+ * instead of being guessed.
  *
  * @module GherkinToZephyrParser
- * @version 1.0.0
+ * @version 2.0.0
  */
 
-import * as crypto from 'crypto';
-import { TC_TYPE, TC_STATUS, AUTOMATION_STATUS, PRIORITY } from '../constants';
-import { sanitizeName, truncate, estimateTime } from '../utils';
+import { TEST_DATA_LINE } from '../constants';
 
-export interface GherkinParseOptions {
-  featureId?: string;
-  featureName?: string;
-  storyId?: string;
-  riskLevel?: string;
+export type ActionKeyword = 'Given' | 'When';
+
+/** A parsed step block. */
+export interface ParsedStep {
+  keyword: ActionKeyword;
+  description: string;
+  testData: string;
+  /** Assertions joined with "\n". */
+  expectedResult: string;
 }
 
-/**
- * Parses a Gherkin feature file string into an array of Zephyr-compatible test case objects.
- */
-export function parseGherkinToZephyr(
-  content: string,
-  options: GherkinParseOptions = {}
-): any[] {
-  const featureName = options.featureName || 'Default Feature';
-  const featureId = options.featureId || 'F001';
-  const storyId = options.storyId || 'US001';
-  const riskLevel = options.riskLevel || 'MEDIUM';
-
-  const lines = content.split('\n');
-  const testCases: any[] = [];
-
-  let accumulatedTags: string[] = [];
-  let currentScenario: string | null = null;
-  let currentScenarioTags: string[] = [];
-  let currentSteps: any[] = [];
-  let currentStep: any = null;
-  let counter = 1;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-
-    // Skip empty lines and comment lines outside steps
-    if (!line || line.startsWith('#')) continue;
-
-    // Feature title extraction if not provided
-    const featureMatch = line.match(/^Feature:\s*(.*)$/i);
-    if (featureMatch && !options.featureName) {
-      options.featureName = featureMatch[1].trim();
-      continue;
-    }
-
-    // Capture Tags
-    if (line.startsWith('@')) {
-      const tags = line
-        .split(/\s+/)
-        .map((t) => t.replace(/^@/, '').trim())
-        .filter(Boolean);
-      accumulatedTags.push(...tags);
-      continue;
-    }
-
-    // Capture Scenario or Scenario Outline
-    const scenarioMatch = line.match(/^Scenario(?:\s+Outline)?:\s*(.*)$/i);
-    if (scenarioMatch) {
-      if (currentScenario) {
-        if (currentStep) currentSteps.push(currentStep);
-        testCases.push(
-          buildZephyrTCFromGherkin(
-            currentScenario,
-            currentScenarioTags,
-            currentSteps,
-            { featureId, featureName, storyId, riskLevel },
-            counter++
-          )
-        );
-      }
-
-      currentScenario = scenarioMatch[1].trim();
-      currentScenarioTags = [...accumulatedTags];
-      accumulatedTags = [];
-      currentSteps = [];
-      currentStep = null;
-      continue;
-    }
-
-    // Capture Gherkin Steps (Given, When, Then, And, But)
-    const stepMatch = line.match(/^(Given|When|Then|And|But)\s+(.*)$/i);
-    if (stepMatch && currentScenario) {
-      const keyword = stepMatch[1].toUpperCase();
-      const text = stepMatch[2].trim();
-
-      // Check if step specifies test data: 'And with test data "..."'
-      const dataMatch = text.match(/^with test data\s+"(.*)"$/i);
-      if (dataMatch && currentStep) {
-        currentStep.testData = dataMatch[1];
-        continue;
-      }
-
-      if (keyword === 'THEN') {
-        if (currentStep && !currentStep.expectedResult) {
-          currentStep.expectedResult = text;
-        } else {
-          if (currentStep) currentSteps.push(currentStep);
-          currentStep = {
-            index: currentSteps.length + 1,
-            description: `Verify ${text}`,
-            testData: '',
-            expectedResult: text,
-          };
-        }
-      } else {
-        // GIVEN, WHEN, AND, BUT
-        if (currentStep) currentSteps.push(currentStep);
-        currentStep = {
-          index: currentSteps.length + 1,
-          description: text,
-          testData: '',
-          expectedResult: '',
-        };
-      }
-    }
-  }
-
-  // Finalize last scenario
-  if (currentScenario) {
-    if (currentStep) currentSteps.push(currentStep);
-    testCases.push(
-      buildZephyrTCFromGherkin(
-        currentScenario,
-        currentScenarioTags,
-        currentSteps,
-        { featureId, featureName, storyId, riskLevel },
-        counter++
-      )
-    );
-  }
-
-  return testCases;
+/** A parsed scenario with its grammar errors. */
+export interface ParsedScenario {
+  title: string;
+  /** Lower-cased tags without the leading "@". */
+  tags: string[];
+  steps: ParsedStep[];
+  line: number;
+  errors: string[];
 }
 
-/**
- * Builds a single ZephyrTestCase object from parsed Gherkin scenario data.
- * @private
- */
-function buildZephyrTCFromGherkin(
-  scenarioTitle: string,
-  tags: string[],
-  steps: any[],
-  meta: { featureId: string; featureName: string; storyId: string; riskLevel: string },
-  fallbackIndex: number
-): any {
-  // 1. Resolve TC Key
-  let key = `TC-${String(fallbackIndex).padStart(3, '0')}`;
-  const keyTag = tags.find((t) => /^tc-\d+$/i.test(t));
-  if (keyTag) {
-    key = keyTag.toUpperCase();
+/** Parser output. */
+export interface GherkinParseResult {
+  scenarios: ParsedScenario[];
+  /** Errors not attributable to a scenario. */
+  errors: string[];
+}
+
+interface StepDraft {
+  keyword: ActionKeyword;
+  description: string;
+  testData: string;
+  expectations: string[];
+  line: number;
+}
+
+interface ParserState {
+  result: GherkinParseResult;
+  pendingTags: string[];
+  scenario: ParsedScenario | null;
+  draft: StepDraft | null;
+}
+
+const STEP_LINE = /^(Given|When|Then|And|But)\b\s*(.*)$/i;
+const SCENARIO_LINE = /^Scenario:\s*(.*)$/i;
+const OUTLINE_LINE = /^Scenario (?:Outline|Template):\s*(.*)$/i;
+const UNSUPPORTED_BLOCK = /^(Examples|Background|Rule):/i;
+const TC_KEY_PREFIX = /^\[TC-\d+\]\s*/i;
+const SNIPPET_LENGTH = 60;
+
+function snippet(text: string): string {
+  return text.length > SNIPPET_LENGTH ? `${text.slice(0, SNIPPET_LENGTH - 3)}...` : text;
+}
+
+function addError(state: ParserState, message: string): void {
+  (state.scenario ? state.scenario.errors : state.result.errors).push(message);
+}
+
+function flushDraft(state: ParserState): void {
+  const { draft, scenario } = state;
+  if (!draft || !scenario) return;
+  if (draft.expectations.length === 0) {
+    addError(state, `Line ${draft.line}: "${draft.keyword} ${snippet(draft.description)}" has no Then expected result`);
   }
-  const titleKeyMatch = scenarioTitle.match(/\[(TC-\d+)\]/i);
-  if (titleKeyMatch) {
-    key = titleKeyMatch[1].toUpperCase();
-  }
-
-  // 2. Resolve TC Type
-  let type: string = TC_TYPE.POSITIVE;
-  if (tags.some((t) => /^neg/i.test(t))) type = TC_TYPE.NEGATIVE;
-  else if (tags.some((t) => /^edge/i.test(t))) type = TC_TYPE.EDGE;
-  else if (tags.some((t) => /^api/i.test(t))) type = TC_TYPE.API;
-  else if (tags.some((t) => /^perf/i.test(t))) type = TC_TYPE.PERFORMANCE;
-
-  // 3. Resolve Priority
-  let priority: string = PRIORITY.MEDIUM;
-  if (tags.some((t) => /critical|p1|priority:high/i.test(t))) priority = PRIORITY.HIGH;
-  else if (tags.some((t) => /high/i.test(t))) priority = PRIORITY.HIGH;
-  else if (tags.some((t) => /low|p3|priority:low/i.test(t))) priority = PRIORITY.LOW;
-  else if (meta.riskLevel === 'CRITICAL' || meta.riskLevel === 'HIGH') priority = PRIORITY.HIGH;
-
-  // 4. Resolve Labels
-  const labels = tags.filter(
-    (t) => !/^(tc-\d+|positive|negative|edge|api|performance|priority:.*)$/i.test(t)
-  );
-  if (!labels.map((l) => l.toLowerCase()).includes(type.toLowerCase())) {
-    labels.unshift(type);
-  }
-
-  // 5. Clean Title & Objective
-  const cleanTitle = scenarioTitle.replace(/^\[TC-\d+\]\s*/i, '').trim();
-  const uniqueName = `[${meta.storyId}] ${sanitizeName(cleanTitle)}`;
-  const objective = `Verify that: ${cleanTitle}`;
-
-  // 6. Ensure all steps have non-empty expectedResult
-  steps.forEach((s, idx) => {
-    s.index = idx + 1;
-    if (!s.expectedResult) {
-      s.expectedResult = idx === steps.length - 1 ? 'Action completed successfully' : 'Step executed';
-    }
+  scenario.steps.push({
+    keyword: draft.keyword,
+    description: draft.description,
+    testData: draft.testData,
+    expectedResult: draft.expectations.join('\n'),
   });
+  state.draft = null;
+}
 
-  // 7. Folders
-  const folder = `/${meta.featureName}/${type === TC_TYPE.API || type === TC_TYPE.PERFORMANCE ? type : type}`;
+function closeScenario(state: ParserState): void {
+  flushDraft(state);
+  const { scenario } = state;
+  if (!scenario) return;
+  if (!scenario.steps.some((step) => step.keyword === 'Given')) scenario.errors.push('Scenario has no Given setup step');
+  if (!scenario.steps.some((step) => step.keyword === 'When')) scenario.errors.push('Scenario has no When action');
+  state.result.scenarios.push(scenario);
+  state.scenario = null;
+}
 
-  // 8. Construct API and Performance details
-  const apiDetails = type === TC_TYPE.API ? {
-    method: 'GET',
-    endpoint: '/api',
-    headers: { 'Content-Type': 'application/json' },
-    requestBody: {},
-    expectedStatusCode: 200,
-  } : null;
-
-  const performanceRef = type === TC_TYPE.PERFORMANCE ? {
-    k6ScriptPath: `tests/k6/${meta.featureId}-${key.toLowerCase()}-perf.js`,
-    scenario: 'load',
-    vus: 10,
-    duration: '30s',
-    thresholds: 'global',
-    targetEndpoint: '/api',
-    description: cleanTitle,
-  } : null;
-
-  // 9. Hash
-  const hashContent = cleanTitle + steps.map((s) => s.description).join('');
-  const hash = crypto.createHash('md5').update(hashContent).digest('hex').slice(0, 12);
-
-  return {
-    key,
-    name: uniqueName,
-    objective,
-    precondition: 'Application is running and accessible.',
-    folder,
-    status: TC_STATUS.DRAFT,
-    priority,
-    labels: [...new Set(labels)],
-    component: meta.featureName,
-    owner: 'ARIA-AutoGenerated',
-    estimatedTime: estimateTime(type, steps.length),
-    type,
-    featureId: meta.featureId,
-    userStoryId: meta.storyId,
-    testSteps: steps,
-    apiDetails,
-    performanceRef,
-    automatable: true,
-    automationStatus: AUTOMATION_STATUS.NOT_AUTOMATED,
-    playwrightSpecRef: null,
-    hash,
-    traceabilityLinks: {
-      featureId: meta.featureId,
-      userStoryId: meta.storyId,
-      acceptanceCriterionIndex: 0,
-      businessRuleIds: [],
-    },
-    createdAt: new Date().toISOString(),
+function openScenario(state: ParserState, rawTitle: string, lineNo: number): void {
+  closeScenario(state);
+  state.scenario = {
+    title: rawTitle.replace(TC_KEY_PREFIX, '').trim(),
+    tags: state.pendingTags,
+    steps: [],
+    line: lineNo,
+    errors: [],
   };
+  state.pendingTags = [];
+  if (!state.scenario.title) addError(state, `Line ${lineNo}: Scenario has no title`);
+}
+
+function attachTestData(state: ParserState, data: string, lineNo: number): void {
+  const { draft } = state;
+  if (!draft || draft.expectations.length > 0) {
+    addError(state, `Line ${lineNo}: "And with test data" must directly follow its Given/When action (before Then)`);
+    return;
+  }
+  if (draft.testData) {
+    addError(state, `Line ${lineNo}: duplicate test data line for "${snippet(draft.description)}"`);
+    return;
+  }
+  draft.testData = data.trim();
+}
+
+function processStep(state: ParserState, keyword: string, text: string, lineNo: number): void {
+  if (!text) {
+    addError(state, `Line ${lineNo}: "${keyword}" step has no text`);
+    return;
+  }
+  if (keyword === 'Given' || keyword === 'When') {
+    flushDraft(state);
+    state.draft = {
+      keyword, description: text, testData: '', expectations: [], line: lineNo,
+    };
+    return;
+  }
+  if (keyword === 'Then') {
+    if (state.draft) state.draft.expectations.push(text);
+    else addError(state, `Line ${lineNo}: "Then ${snippet(text)}" has no preceding Given/When action`);
+    return;
+  }
+  const dataMatch = text.match(TEST_DATA_LINE);
+  if (dataMatch) {
+    attachTestData(state, dataMatch[1], lineNo);
+  } else if (state.draft && state.draft.expectations.length > 0) {
+    state.draft.expectations.push(text);
+  } else {
+    addError(state, `Line ${lineNo}: "${keyword} ${snippet(text)}" continues an action — every Given/When action needs its own Then; start a new When block instead`);
+  }
+}
+
+function processLine(state: ParserState, line: string, lineNo: number): void {
+  if (!line || line.startsWith('#') || line.startsWith('```')) return;
+  if (line.startsWith('@')) {
+    state.pendingTags.push(...line.split(/\s+/).map((tag) => tag.replace(/^@/, '').replace(/,$/, '').toLowerCase()).filter(Boolean));
+    return;
+  }
+  const outline = line.match(OUTLINE_LINE);
+  const scenario = outline || line.match(SCENARIO_LINE);
+  if (scenario) {
+    openScenario(state, scenario[1], lineNo);
+    if (outline) addError(state, `Line ${lineNo}: Scenario Outline is not allowed — write one Scenario per test case`);
+    return;
+  }
+  const unsupported = line.match(UNSUPPORTED_BLOCK);
+  if (unsupported) {
+    addError(state, `Line ${lineNo}: "${unsupported[1]}:" blocks are not allowed`);
+    return;
+  }
+  const step = line.match(STEP_LINE);
+  if (step && state.scenario) {
+    const keyword = step[1].charAt(0).toUpperCase() + step[1].slice(1).toLowerCase();
+    processStep(state, keyword, step[2].trim(), lineNo);
+  } else if (state.scenario) {
+    addError(state, `Line ${lineNo}: unexpected text "${snippet(line)}" — only Given/When/Then/And steps are allowed inside a Scenario`);
+  }
+  // Text outside scenarios (Feature header, narrative, prose) is ignored.
+}
+
+/**
+ * Parses LLM Gherkin output into scenarios using the strict Agent 02 grammar.
+ * @param {string} content - Raw LLM output (code fences tolerated)
+ * @returns {GherkinParseResult}
+ */
+export function parseGherkinScenarios(content: string): GherkinParseResult {
+  const state: ParserState = {
+    result: { scenarios: [], errors: [] }, pendingTags: [], scenario: null, draft: null,
+  };
+  String(content || '').split(/\r?\n/).forEach((raw, idx) => processLine(state, raw.trim(), idx + 1));
+  closeScenario(state);
+  if (state.pendingTags.length > 0) {
+    state.result.errors.push(`Tags "${state.pendingTags.map((tag) => `@${tag}`).join(' ')}" are not followed by a Scenario`);
+  }
+  return state.result;
 }

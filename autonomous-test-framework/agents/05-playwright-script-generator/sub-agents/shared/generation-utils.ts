@@ -233,7 +233,7 @@ export function cleanContext(
       cleaned.groupMeta?.featureId ||
       cleaned.group?.featureId ||
       cleaned.featureId ||
-      cleaned.tc?.traceabilityLinks?.featureId;
+      cleaned.tc?.featureId;
 
     if (Array.isArray(cleaned.analysis.features)) {
       const matchedFeature = cleaned.analysis.features.find(
@@ -270,7 +270,7 @@ export function cleanContext(
     delete cleaned.manifest;
   }
 
-  // 3. Prune test cases to minimal execution fields (removes traceabilityLinks, dataManifestId, redundant payload data)
+  // 3. Prune test cases to minimal execution fields (removes requirementRefs, dataManifestId, redundant payload data)
   if (Array.isArray(cleaned.group?.testCases)) {
     cleaned.group = {
       ...cleaned.group,

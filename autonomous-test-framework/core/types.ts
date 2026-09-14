@@ -52,14 +52,85 @@ export interface WarningEntry {
 
 // ─── Test Case & Execution ────────────────────────────────────────────────────
 
+/** Gherkin keyword stored on a test step (Agent 02 emits only Given/When; UI edits may use Then/And). */
+export type GherkinKeyword = 'Given' | 'When' | 'Then' | 'And' | 'But';
+
+/** One Zephyr-style step: a Gherkin action paired with its observable expected result(s). */
+export interface TestStep {
+  keyword?: GherkinKeyword;
+  description: string;
+  testData: string;
+  /** One or more assertions separated by "\n" (first renders as Then, the rest as And). */
+  expectedResult: string;
+  [key: string]: any;
+}
+
+/** API request details — present only on type "API" test cases. */
+export interface ApiDetails {
+  method: string;
+  endpoint: string;
+  requestBody: Record<string, any> | any[] | null;
+  expectedStatusCode: number;
+}
+
+/** K6 scenario reference — present only on type "Performance" test cases. */
+export interface PerformanceRef {
+  scenario: string;
+  targetEndpoint: string;
+}
+
+/** Test case as produced by Agent 02 and enriched by Agents 03/04. */
 export interface TestCase {
-  tcKey: string;
-  title: string;
+  key: string;
+  name: string;
+  objective: string;
+  precondition: string;
   type: string;
   priority: string;
-  steps: Array<{ action: string; expected: string }>;
-  tags?: string[];
+  labels: string[];
+  featureId: string;
+  userStoryId: string;
+  /** Story-local requirement ids this test verifies, e.g. ["AC-2", "BR-1"]. */
+  requirementRefs: string[];
+  testSteps: TestStep[];
+  apiDetails?: ApiDetails;
+  performanceRef?: PerformanceRef;
+  hash: string;
+  /** false when the user excluded the test case during Agent 02 approval. */
+  selected: boolean;
   [key: string]: any;
+}
+
+/** Pipeline artifact persisted by Agent 02 under the "testCases" key. */
+export interface TestCasesArtifact {
+  zephyrExport: {
+    totalTestCases: number;
+    testCases: TestCase[];
+  };
+}
+
+/** Legacy exclusion marker written by pre-3.0 artifacts; still honoured when reading. */
+export const LEGACY_OBSOLETE_STATUS = 'OBSOLETE';
+
+/**
+ * Whether a test case is in the user-selected scope.
+ * Tolerates legacy artifacts that marked exclusion via status/isObsolete.
+ * @param {Partial<TestCase> | null | undefined} tc
+ * @returns {boolean}
+ */
+export function isTestCaseSelected(tc: Partial<TestCase> | null | undefined): boolean {
+  return Boolean(tc) && tc!.selected !== false && tc!.status !== LEGACY_OBSOLETE_STATUS && !tc!.isObsolete;
+}
+
+/**
+ * Sets the selection flag and clears legacy exclusion markers so the flag is authoritative.
+ * @param {Partial<TestCase>} tc
+ * @param {boolean} selected
+ */
+export function setTestCaseSelected(tc: Partial<TestCase>, selected: boolean): void {
+  tc.selected = selected;
+  delete tc.isObsolete;
+  if (tc.status === LEGACY_OBSOLETE_STATUS) delete tc.status;
 }
 
 export interface TestResult {
@@ -191,9 +262,9 @@ export interface StageState {
 
 export interface PipelineArtifacts {
   requirements: string | Record<string, any> | null;
-  analyzedRequirements: AnalyzedRequirement | null;
-  testCases: TestCase[] | null;
-  reviewedTestCases: TestCase[] | null;
+  analyzedRequirements?: AnalyzedRequirement | null;
+  testCases: TestCasesArtifact | null;
+  reviewedTestCases: Record<string, any> | null;
   testData: Record<string, any> | null;
   playwrightScripts: Record<string, string> | null;
   reviewedScripts: Record<string, string> | null;

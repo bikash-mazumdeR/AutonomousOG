@@ -17,6 +17,7 @@ import { memoryEngine } from '../../core/project-memory/MemoryEngine';
 import { approvalGate } from '../../core/approval-gate/ApprovalGate';
 import { Logger } from '../../core/logger/Logger';
 import { FRAMEWORK_CONFIG } from '../../config/framework.config';
+import { isTestCaseSelected } from '../../core/types';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -141,12 +142,12 @@ class TestCaseReviewerAgent {
       const memoryContext = await memoryEngine.getContextForStage(STAGE_ID);
       await stateManager.markStageRunning(STAGE_ID);
 
-      const { zephyrExport, k6ScenarioIndex } = input.testCases;
+      const { zephyrExport } = input.testCases;
       const analysis = input.analyzedRequirements || {};
       const allTCs = zephyrExport.testCases || [];
 
       // Only review test cases selected by user during Agent 02 stage
-      const isSelected = (tc: any) => tc.status !== 'OBSOLETE' && !tc.isObsolete && tc.selected !== false;
+      const isSelected = (tc: any) => isTestCaseSelected(tc);
       const selectedTCs = allTCs.filter(isSelected);
       const unselectedTCs = allTCs.filter((tc: any) => !isSelected(tc));
 
@@ -212,7 +213,6 @@ class TestCaseReviewerAgent {
         coverageMatrix,
         qualityScore,
         decision,
-        k6ScenarioIndex,
         zephyrExport,
         informationalInsights,
       });
@@ -277,11 +277,11 @@ class TestCaseReviewerAgent {
       featureMap.set(f.id, f.name);
       for (const s of (f.userStories || [])) {
         const selectedForStory = selectedTCs.filter((tc: any) => {
-          const sid = tc.traceabilityLinks?.userStoryId || tc.userStoryId;
+          const sid = tc.userStoryId;
           return sid === s.id;
         });
         const unselectedForStory = unselectedTCs.filter((tc: any) => {
-          const sid = tc.traceabilityLinks?.userStoryId || tc.userStoryId;
+          const sid = tc.userStoryId;
           return sid === s.id;
         });
 
@@ -329,8 +329,8 @@ class TestCaseReviewerAgent {
       key: tc.key,
       name: tc.name,
       type: tc.type,
-      userStoryId: tc.traceabilityLinks?.userStoryId || tc.userStoryId || 'US-01',
-      featureName: featureMap.get(tc.traceabilityLinks?.featureId) || 'General Features',
+      userStoryId: tc.userStoryId || 'US-01',
+      featureName: featureMap.get(tc.featureId) || 'General Features',
       reason: 'Excluded by user during Agent 02 approval stage',
     }));
 
@@ -358,7 +358,8 @@ class TestCaseReviewerAgent {
     const unique = [];
 
     for (const tc of testCases) {
-      const nameKey = tc.name.toLowerCase().trim();
+      // Titles are only unique within a story (Agent 02 no longer prefixes names with the story id)
+      const nameKey = `${tc.userStoryId || ''}|${String(tc.name || '').toLowerCase().trim()}`;
       const hashKey = tc.hash;
 
       if (seen.has(hashKey)) {
@@ -636,8 +637,8 @@ class TestCaseReviewerAgent {
    */
   _buildCoverageMatrix(reviewedTCs: any[], analysis: any, unselectedTCs: any[] = []) {
     const features = (analysis.features || []).map((f: any) => {
-      const featureTCs = reviewedTCs.filter((tc: any) => tc.traceabilityLinks?.featureId === f.id);
-      const featureUnselected = unselectedTCs.filter((tc: any) => (tc.traceabilityLinks?.featureId || tc.featureId) === f.id);
+      const featureTCs = reviewedTCs.filter((tc: any) => tc.featureId === f.id);
+      const featureUnselected = unselectedTCs.filter((tc: any) => tc.featureId === f.id);
       const isAffectedByUnselected = featureUnselected.length > 0;
       const mins = MIN_COVERAGE[f.riskLevel as keyof typeof MIN_COVERAGE] || MIN_COVERAGE.MEDIUM;
 
@@ -794,33 +795,7 @@ class TestCaseReviewerAgent {
         'Set the correct HTTP status code (200, 201, 400, 401, etc.).',
       );
       api.expectedStatusCode = 200;
-    }
-
-    // Negative TCs must not expect 200
-    if (tc.type === 'API' && tc.name.includes('[NEG]') && api.expectedStatusCode === 200) {
-      this._addAnnotation(
-        tc.key,
-        REVIEW_DIMENSION.API,
-        SEVERITY.MAJOR,
-        'Negative API TC expects HTTP 200 — this is likely incorrect.',
-        REVIEW_ACTION.FLAGGED,
-        'Set the correct error code (400, 401, 403, 404, etc.) for this negative scenario.',
-      );
-    }
-
-    // Auth check
-    if (api.authRequired === undefined) {
-      this._addAnnotation(
-        tc.key,
-        REVIEW_DIMENSION.API,
-        SEVERITY.MINOR,
-        'authRequired is undefined.',
-        REVIEW_ACTION.REWRITTEN,
-        'Explicitly set authRequired to true or false.',
-      );
-      api.authRequired = true;
-    }
-  }
+    }  }
 
   // ── Dimension 7: Performance TC Review ───────────────────────────────────
 
@@ -836,23 +811,10 @@ class TestCaseReviewerAgent {
         SEVERITY.BLOCKER,
         'Performance TC missing performanceRef block.',
         REVIEW_ACTION.REJECTED,
-        'Populate performanceRef with k6ScriptPath, scenario, vus, duration, thresholds.',
+        'Populate performanceRef with scenario and targetEndpoint.',
       );
       tc.reviewStatus = 'REJECTED';
       return;
-    }
-
-    // Script path naming convention check
-    const scriptPathRe = /^tests\/k6\/F-?\d{1,3}-US-?\d{1,3}-(load|stress|spike|soak)-test\.js$/;
-    if (!scriptPathRe.test(ref.k6ScriptPath)) {
-      this._addAnnotation(
-        tc.key,
-        REVIEW_DIMENSION.PERFORMANCE,
-        SEVERITY.MINOR,
-        `k6ScriptPath "${ref.k6ScriptPath}" doesn't follow naming convention.`,
-        REVIEW_ACTION.FLAGGED,
-        'Use: tests/k6/{featureId}-{storyId}-{scenario}-test.js',
-      );
     }
 
     // Scenario check
@@ -866,19 +828,6 @@ class TestCaseReviewerAgent {
         `Use one of: ${[...VALID_K6_SCENARIOS].join(', ')}`,
       );
       ref.scenario = 'load';
-    }
-
-    // Thresholds must be 'global'
-    if (ref.thresholds !== 'global') {
-      this._addAnnotation(
-        tc.key,
-        REVIEW_DIMENSION.PERFORMANCE,
-        SEVERITY.MINOR,
-        `thresholds is "${ref.thresholds}" — should be "global" per framework config.`,
-        REVIEW_ACTION.REWRITTEN,
-        'Set thresholds to "global" to use K6_CONFIG values.',
-      );
-      ref.thresholds = 'global';
     }
 
     // Target endpoint still a placeholder
@@ -900,30 +849,80 @@ class TestCaseReviewerAgent {
    * @private
    */
   _reviewTraceability(tc, analysis) {
-    const links = tc.traceabilityLinks;
     const features = (analysis.features || []);
 
-    if (!links || !links.featureId || !links.userStoryId) {
+    if (!tc.featureId || !tc.userStoryId) {
       this._addAnnotation(
         tc.key,
         REVIEW_DIMENSION.TRACEABILITY,
         SEVERITY.MAJOR,
-        'Missing traceabilityLinks — TC cannot be traced to a requirement.',
+        'Missing featureId/userStoryId — TC cannot be traced to a requirement.',
         REVIEW_ACTION.FLAGGED,
         'Assign featureId and userStoryId from the requirements analysis.',
       );
       return;
     }
 
-    const featureExists = features.some((f) => f.id === links.featureId);
-    if (!featureExists && features.length > 0) {
+    const feature = features.find((f) => f.id === tc.featureId);
+    if (!feature && features.length > 0) {
       this._addAnnotation(
         tc.key,
         REVIEW_DIMENSION.TRACEABILITY,
         SEVERITY.MAJOR,
-        `featureId "${links.featureId}" not found in requirements analysis.`,
+        `featureId "${tc.featureId}" not found in requirements analysis.`,
         REVIEW_ACTION.FLAGGED,
         'Correct the featureId or check if requirement was modified.',
+      );
+      return;
+    }
+
+    if (feature) this._reviewRequirementRefs(tc, feature);
+  }
+
+  /**
+   * Validates that requirementRefs (AC-N / BR-N) exist on the test case's user story.
+   * @private
+   */
+  _reviewRequirementRefs(tc: any, feature: any) {
+    const story = (feature.userStories || []).find((s: any) => s.id === tc.userStoryId);
+    if (!story) {
+      this._addAnnotation(
+        tc.key,
+        REVIEW_DIMENSION.TRACEABILITY,
+        SEVERITY.MAJOR,
+        `userStoryId "${tc.userStoryId}" not found in feature "${feature.id}".`,
+        REVIEW_ACTION.FLAGGED,
+        'Re-run Agent 02 — the requirement analysis may have changed.',
+      );
+      return;
+    }
+
+    const refs = Array.isArray(tc.requirementRefs) ? tc.requirementRefs : [];
+    if (refs.length === 0) {
+      this._addAnnotation(
+        tc.key,
+        REVIEW_DIMENSION.TRACEABILITY,
+        SEVERITY.MINOR,
+        'No requirementRefs — TC is not linked to a specific acceptance criterion or business rule.',
+        REVIEW_ACTION.FLAGGED,
+        'Reference the covered AC-N / BR-N (regenerate with Agent 02).',
+      );
+      return;
+    }
+
+    const counts: Record<string, number> = { AC: (story.acceptanceCriteria || []).length, BR: (story.businessRules || []).length };
+    const invalid = refs.filter((ref: string) => {
+      const [prefix, num] = String(ref).split('-');
+      return !Object.prototype.hasOwnProperty.call(counts, prefix) || !(Number(num) >= 1 && Number(num) <= counts[prefix]);
+    });
+    if (invalid.length > 0) {
+      this._addAnnotation(
+        tc.key,
+        REVIEW_DIMENSION.TRACEABILITY,
+        SEVERITY.MAJOR,
+        `requirementRefs ${invalid.join(', ')} do not exist on story ${story.id}.`,
+        REVIEW_ACTION.FLAGGED,
+        'Re-run Agent 02 — the requirement analysis may have changed.',
       );
     }
   }
@@ -1071,7 +1070,7 @@ class TestCaseReviewerAgent {
    * @private
    */
   _buildOutput({
-    originalTCs, selectedTCs, unselectedTCs, reviewedTCs, coverageMatrix, qualityScore, decision, k6ScenarioIndex, zephyrExport, informationalInsights,
+    originalTCs, selectedTCs, unselectedTCs, reviewedTCs, coverageMatrix, qualityScore, decision, zephyrExport, informationalInsights,
   }: any) {
     const approvedTCs = reviewedTCs.filter((tc: any) => tc.reviewStatus !== 'REJECTED');
     const rejectedTCs = reviewedTCs.filter((tc: any) => tc.reviewStatus === 'REJECTED');
@@ -1081,7 +1080,7 @@ class TestCaseReviewerAgent {
     // Keep all TCs in reviewedZephyrExport with appropriate status so unselected aren't lost
     const finalExportTCs = [
       ...approvedTCs,
-      ...(unselectedTCs || []).map((t: any) => ({ ...t, reviewStatus: 'EXCLUDED', status: 'OBSOLETE', isObsolete: true, selected: false })),
+      ...(unselectedTCs || []).map((t: any) => ({ ...t, reviewStatus: 'EXCLUDED', selected: false })),
     ];
 
     return {
@@ -1103,7 +1102,6 @@ class TestCaseReviewerAgent {
         totalTestCases: approvedTCs.length,
       },
 
-      k6ScenarioIndex,
       reviewAnnotations: this._annotations,
       coverageMatrix,
       qualityScore,

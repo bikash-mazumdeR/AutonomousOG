@@ -29,7 +29,8 @@ For EVERY test case verify:
 □ every step has a non-empty expectedResult
 □ no step uses vague language ("verify it works", "check something")
 □ testData is populated (or explicitly marked N/A)
-□ traceabilityLinks.featureId and userStoryId are valid
+□ featureId and userStoryId are valid
+□ requirementRefs (AC-N / BR-N) exist on the user story
 ```
 
 ### Dimension 2: Coverage Adequacy Review
@@ -38,8 +39,8 @@ For EVERY feature/user story verify:
 □ ≥1 positive TC exists
 □ ≥1 negative TC exists
 □ ≥1 edge TC exists (for CRITICAL/HIGH risk)
-□ API TCs cover: 200, 400, 401, 403 at minimum
-□ No acceptance criterion is orphaned (without a TC)
+□ API TCs exist only for documented endpoints and use the documented status codes
+□ No acceptance criterion is orphaned (no TC lists it in requirementRefs)
 □ CRITICAL features have smoke-labelled TCs
 □ State transitions each have a TC
 ```
@@ -83,20 +84,17 @@ For every API TC verify:
 □ method matches the operation (GET for read, POST for create, etc.)
 □ expectedStatusCode is realistic (not just 200 for everything)
 □ requestBody structure is logical
-□ authRequired is correctly set
+□ endpoint and expectedStatusCode come from the documented integration point / requirement
 □ negative API TCs don't share same expectedStatusCode as positive
-□ At least one test for missing auth header (401)
-□ At least one test for wrong role (403) if RBAC is in scope
+□ Auth (401) and RBAC (403) tests exist only when the requirements document them
 ```
 
 ### Dimension 7: Performance TC Review
 ```
 For every Performance TC verify:
-□ k6ScriptPath follows naming convention: tests/k6/{featureId}-{storyId}-{scenario}-test.js
 □ scenario is one of: load | stress | spike | soak
-□ thresholds is set to 'global' (as per framework config)
 □ targetEndpoint is not '{{targetEndpoint}}' (must be resolved or flagged)
-□ vus and duration match K6_CONFIG values
+□ VUs, duration and thresholds come from the global K6_CONFIG (not stored per TC)
 ```
 
 ### Dimension 8: Traceability Review

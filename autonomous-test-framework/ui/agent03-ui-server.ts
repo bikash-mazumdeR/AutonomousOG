@@ -7,6 +7,7 @@ import { Logger } from '../core/logger/Logger';
 import path from 'path';
 import * as http from 'http';
 import { syncFeatureFiles } from '../agents/02-test-case-generator/utils';
+import { isTestCaseSelected } from '../core/types';
 
 const app = express();
 const PORT = parseInt(process.env.AGENT03_UI_PORT || '3002', 10);
@@ -38,7 +39,7 @@ function broadcastSSE(data: any) {
 // ── Advisory Insights Helper ────────────────────────────────────────────────
 function computeRequirementMappingInsights(requirements: any, testCasesOutput: any) {
   const allTCs: any[] = testCasesOutput?.zephyrExport?.testCases || testCasesOutput?.testCases || [];
-  const isSelected = (tc: any) => tc.status !== 'OBSOLETE' && !tc.isObsolete && tc.selected !== false;
+  const isSelected = (tc: any) => isTestCaseSelected(tc);
   const selectedTCs = allTCs.filter(isSelected);
   const unselectedTCs = allTCs.filter((tc: any) => !isSelected(tc));
 
@@ -50,11 +51,11 @@ function computeRequirementMappingInsights(requirements: any, testCasesOutput: a
     featureMap.set(f.id, f.name);
     for (const s of (f.userStories || [])) {
       const selectedForStory = selectedTCs.filter((tc: any) => {
-        const sid = tc.traceabilityLinks?.userStoryId || tc.userStoryId;
+        const sid = tc.userStoryId;
         return sid === s.id;
       });
       const unselectedForStory = unselectedTCs.filter((tc: any) => {
-        const sid = tc.traceabilityLinks?.userStoryId || tc.userStoryId;
+        const sid = tc.userStoryId;
         return sid === s.id;
       });
 
@@ -92,8 +93,8 @@ function computeRequirementMappingInsights(requirements: any, testCasesOutput: a
     key: tc.key,
     name: tc.name,
     type: tc.type,
-    userStoryId: tc.traceabilityLinks?.userStoryId || tc.userStoryId || 'US-01',
-    featureName: featureMap.get(tc.traceabilityLinks?.featureId) || 'General Features',
+    userStoryId: tc.userStoryId || 'US-01',
+    featureName: featureMap.get(tc.featureId) || 'General Features',
     reason: 'Excluded by user during Agent 02 approval stage',
   }));
 
@@ -388,8 +389,7 @@ const updateReviewedTestCaseHandler = async (req: Request, res: Response) => {
     if (typeof precondition === 'string') targetTC.precondition = precondition.trim();
     if (Array.isArray(reviewNotes)) targetTC.reviewNotes = reviewNotes;
     if (Array.isArray(testSteps)) {
-      targetTC.testSteps = testSteps.map((step: any, idx: number) => ({
-        index: idx + 1,
+      targetTC.testSteps = testSteps.map((step: any) => ({
         keyword: step.keyword || undefined,
         description: (step.description || '').trim(),
         testData: (step.testData || '').trim(),

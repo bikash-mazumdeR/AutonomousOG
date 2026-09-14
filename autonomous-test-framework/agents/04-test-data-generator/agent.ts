@@ -18,6 +18,7 @@ import { approvalGate } from '../../core/approval-gate/ApprovalGate';
 import { Logger } from '../../core/logger/Logger';
 import { FRAMEWORK_CONFIG } from '../../config/framework.config';
 import { llmClient } from '../../core/llm/LLMClient';
+import { isTestCaseSelected } from '../../core/types';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -176,7 +177,7 @@ class TestDataGeneratorAgent {
       const memoryContext = await memoryEngine.getContextForStage(STAGE_ID);
       await stateManager.markStageRunning(STAGE_ID);
 
-      const { reviewedZephyrExport, k6ScenarioIndex } = input.reviewedTestCases;
+      const { reviewedZephyrExport } = input.reviewedTestCases;
       const analysis = input.analyzedRequirements || {};
       const allTestCases = reviewedZephyrExport?.testCases || [];
       const { projectId } = FRAMEWORK_CONFIG;
@@ -184,10 +185,7 @@ class TestDataGeneratorAgent {
       // ── Approved Scope Enforcement ──────────────────────────────────────────
       // Test data is strictly generated ONLY for approved test cases
       const isApproved = (tc: any) =>
-        tc.reviewStatus !== 'REJECTED' &&
-        tc.status !== 'OBSOLETE' &&
-        !tc.isObsolete &&
-        tc.selected !== false;
+        tc.reviewStatus !== 'REJECTED' && isTestCaseSelected(tc);
 
       const approvedTestCases = allTestCases.filter(isApproved);
       const excludedTestCases = allTestCases.filter((tc: any) => !isApproved(tc));
@@ -262,7 +260,6 @@ class TestDataGeneratorAgent {
           ...reviewedZephyrExport,
           testCases: enrichedApprovedTestCases,
         },
-        k6ScenarioIndex,
         summary: this._buildSummary(manifest),
       };
 

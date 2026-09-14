@@ -11,8 +11,10 @@ import { stateManager, STAGE_STATUS } from '../../core/state-manager/StateManage
 import { memoryEngine } from '../../core/project-memory/MemoryEngine';
 import { approvalGate } from '../../core/approval-gate/ApprovalGate';
 import { ensureFixturesFileSynced, FIXTURES_PATH } from '../../core/state-manager/FixtureSync';
+import { llmClient } from '../../core/llm/LLMClient';
 import { Logger } from '../../core/logger/Logger';
 import { FRAMEWORK_CONFIG } from '../../config/framework.config';
+import { isTestCaseSelected } from '../../core/types';
 
 import { UIScriptGenerator } from './sub-agents/ui-script-generator';
 import { APIScriptGenerator } from './sub-agents/api-script-generator';
@@ -65,10 +67,7 @@ class PlaywrightScriptGeneratorAgent {
       // ── Approved Scope Enforcement ──────────────────────────────────────────
       // Automation scripts are strictly generated ONLY for approved test cases
       const isApproved = (tc: any) =>
-        tc.reviewStatus !== 'REJECTED' &&
-        tc.status !== 'OBSOLETE' &&
-        !tc.isObsolete &&
-        tc.selected !== false;
+        tc.reviewStatus !== 'REJECTED' && isTestCaseSelected(tc);
 
       // input.testData (Agent 04) is only trustworthy for scope when its approved
       // TC key set still matches the latest input.reviewedTestCases (Agent 02/03)
@@ -256,8 +255,9 @@ class PlaywrightScriptGeneratorAgent {
         generatedAt: new Date().toISOString(),
       };
 
+      const usage = llmClient.getStageUsage(STAGE_ID);
       await stateManager.setPipelineArtifact('playwrightScripts', output);
-      await stateManager.markStageCompleted(STAGE_ID, output);
+      await stateManager.markStageCompleted(STAGE_ID, output, usage);
 
       const durationMs = Date.now() - startMs;
       const agentResult = this._buildAgentResult(output, [], durationMs);
@@ -297,7 +297,7 @@ class PlaywrightScriptGeneratorAgent {
     });
 
     for (const tc of testCases) {
-      const fid = tc.traceabilityLinks?.featureId || 'UNKNOWN';
+      const fid = tc.featureId || 'UNKNOWN';
       if (!groups[fid]) {
         const feat = featureMap[fid] || { id: fid, name: `Feature_${fid}` };
         groups[fid] = {

@@ -4,6 +4,7 @@ import { stateManager } from '../core/state-manager/StateManager';
 import { llmClient } from '../core/llm/LLMClient';
 import { memoryEngine } from '../core/project-memory/MemoryEngine';
 import { syncFeatureFiles } from '../agents/02-test-case-generator/utils';
+import { isTestCaseSelected, setTestCaseSelected } from '../core/types';
 import { Logger } from '../core/logger/Logger';
 import path from 'path';
 import * as http from 'http';
@@ -218,7 +219,7 @@ app.post('/api/agent02/chat', async (req: Request, res: Response) => {
 // ── Advisory Insights Helper ────────────────────────────────────────────────
 function computeRequirementMappingInsights(requirements: any, testCasesOutput: any) {
   const allTCs: any[] = testCasesOutput?.zephyrExport?.testCases || testCasesOutput?.testCases || [];
-  const isSelected = (tc: any) => tc.status !== 'OBSOLETE' && !tc.isObsolete && tc.selected !== false;
+  const isSelected = (tc: any) => isTestCaseSelected(tc);
   const selectedTCs = allTCs.filter(isSelected);
   const unselectedTCs = allTCs.filter((tc: any) => !isSelected(tc));
 
@@ -230,11 +231,11 @@ function computeRequirementMappingInsights(requirements: any, testCasesOutput: a
     featureMap.set(f.id, f.name);
     for (const s of (f.userStories || [])) {
       const selectedForStory = selectedTCs.filter((tc: any) => {
-        const sid = tc.traceabilityLinks?.userStoryId || tc.userStoryId;
+        const sid = tc.userStoryId;
         return sid === s.id;
       });
       const unselectedForStory = unselectedTCs.filter((tc: any) => {
-        const sid = tc.traceabilityLinks?.userStoryId || tc.userStoryId;
+        const sid = tc.userStoryId;
         return sid === s.id;
       });
 
@@ -272,8 +273,8 @@ function computeRequirementMappingInsights(requirements: any, testCasesOutput: a
     key: tc.key,
     name: tc.name,
     type: tc.type,
-    userStoryId: tc.traceabilityLinks?.userStoryId || tc.userStoryId || 'US-01',
-    featureName: featureMap.get(tc.traceabilityLinks?.featureId) || 'General Features',
+    userStoryId: tc.userStoryId || 'US-01',
+    featureName: featureMap.get(tc.featureId) || 'General Features',
     reason: 'Excluded by user during Agent 02 approval stage',
   }));
 
@@ -303,15 +304,7 @@ app.post('/api/agent02/approve', async (req: Request, res: Response) => {
       
       // Explicitly set approved and obsolete flags
       for (const tc of allTCs) {
-        if (uncheckedTestCaseKeys.includes(tc.key)) {
-          tc.status = 'OBSOLETE';
-          tc.isObsolete = true;
-          tc.selected = false;
-        } else {
-          if (tc.status === 'OBSOLETE') tc.status = 'Draft';
-          tc.isObsolete = false;
-          tc.selected = true;
-        }
+        setTestCaseSelected(tc, !uncheckedTestCaseKeys.includes(tc.key));
       }
       
       const requirements = await stateManager.getPipelineArtifact('analyzedRequirements');
@@ -319,19 +312,8 @@ app.post('/api/agent02/approve', async (req: Request, res: Response) => {
       // Resync feature files (will add @obsolete to ignored tests)
       syncFeatureFiles(requirements, allTCs, logger);
       
-      // Rewrite k6ScenarioIndex excluding obsolete ones
-      const k6ScenarioIndex = allTCs
-        .filter((tc: any) => tc.type === 'PERFORMANCE' && tc.performanceRef && tc.status !== 'OBSOLETE' && !tc.isObsolete && tc.selected !== false)
-        .map((tc: any) => ({
-          tcKey:          tc.key,
-          scriptPath:     tc.performanceRef.k6ScriptPath,
-          scenario:       tc.performanceRef.scenario,
-          targetEndpoint: tc.performanceRef.targetEndpoint,
-          featureId:      tc.traceabilityLinks?.featureId,
-          storyId:        tc.traceabilityLinks?.userStoryId,
-        }));
+      delete testCasesOutput.k6ScenarioIndex; // legacy artifact key — no longer produced or read
       
-      testCasesOutput.k6ScenarioIndex = k6ScenarioIndex;
       
       // Save updated artifacts
       await stateManager.setPipelineArtifact('testCases', testCasesOutput);
@@ -508,8 +490,8 @@ const updateTestCaseHandler = async (req: Request, res: Response) => {
     if (typeof objective === 'string') targetTC.objective = objective.trim();
     if (typeof precondition === 'string') targetTC.precondition = precondition.trim();
     if (Array.isArray(testSteps)) {
-      targetTC.testSteps = testSteps.map((step: any, idx: number) => ({
-        index: idx + 1,
+      targetTC.testSteps = testSteps.map((step: any) => ({
+        keyword: step.keyword || undefined,
         description: (step.description || '').trim(),
         testData: (step.testData || '').trim(),
         expectedResult: (step.expectedResult || '').trim(),
