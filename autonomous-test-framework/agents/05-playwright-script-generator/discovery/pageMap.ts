@@ -30,12 +30,57 @@ export interface PageState {
   elements: PageElement[];
 }
 
+/** Current page map schema version (v2 adds discovery traces and verified flows). */
+export const PAGE_MAP_VERSION = 2 as const;
+
+/** One action discovery performed, tagged with the state it ran in. */
+export interface TraceAction {
+  stepIndex: number;
+  state: string;
+  element?: string;
+  op: string;
+  value?: { binding?: string; literal?: string };
+}
+
+/** Consecutive actions a test case performed in one state, and the state they led to. */
+export interface TraceRun {
+  state: string;
+  actions: TraceAction[];
+  reachedState: string;
+}
+
+/** What discovery verified while executing one test case's steps. */
+export interface TestCaseTrace {
+  tcKey: string;
+  runs: TraceRun[];
+  /** State the browser was in after each step's actions (step index → state name). */
+  stateAfterStep: Record<number, string>;
+}
+
+/** One action of a verified flow; `param` names its value argument when the action takes one. */
+export interface FlowAction {
+  element?: string;
+  op: string;
+  param?: string;
+}
+
+/** An action run that several test cases performed identically during discovery. */
+export interface VerifiedFlow {
+  id: string;
+  name: string;
+  state: string;
+  actions: FlowAction[];
+  usedBy: string[];
+}
+
 /** Page map for one feature. */
 export interface PageMap {
-  version: 1;
+  version: 1 | typeof PAGE_MAP_VERSION;
   featureId: string;
   testIdAttribute?: string;
   states: PageState[];
+  traces?: TestCaseTrace[];
+  flows?: VerifiedFlow[];
 }
 
 /**
@@ -46,7 +91,7 @@ export interface PageMap {
  */
 export function emptyPageMap(featureId: string, testIdAttribute?: string): PageMap {
   return {
-    version: 1, featureId, testIdAttribute, states: [],
+    version: PAGE_MAP_VERSION, featureId, testIdAttribute, states: [], traces: [], flows: [],
   };
 }
 
@@ -60,8 +105,14 @@ export function loadPageMap(file: string, testIdAttribute?: string): PageMap | n
   if (!fs.existsSync(file)) return null;
   try {
     const map = JSON.parse(fs.readFileSync(file, 'utf-8'));
-    if (map?.version !== 1 || !Array.isArray(map.states)) return null;
-    return map.testIdAttribute === testIdAttribute ? map : null;
+    if (![1, PAGE_MAP_VERSION].includes(map?.version) || !Array.isArray(map.states)) return null;
+    if (map.testIdAttribute !== testIdAttribute) return null;
+    return {
+      ...map,
+      version: PAGE_MAP_VERSION,
+      traces: Array.isArray(map.traces) ? map.traces : [],
+      flows: Array.isArray(map.flows) ? map.flows : [],
+    };
   } catch {
     return null;
   }

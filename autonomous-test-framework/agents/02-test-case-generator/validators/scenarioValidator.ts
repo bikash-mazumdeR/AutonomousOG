@@ -241,20 +241,53 @@ function uncoveredRuleWarnings(accepted: ValidatedScenario[], ctx: ScenarioConte
     .map((br) => `[${ctx.feature.id}/${ctx.story.id}] ${br.id} ("${snippet(br.text)}") is not verified by any scenario`);
 }
 
+interface PriorIndex {
+  titleIndex: Map<string, number>;
+  steps: Set<string>;
+}
+
+type Placement = { action: 'add' } | { action: 'replace'; index: number } | { action: 'ignore' };
+
+function scenarioKeys(scenario: ValidatedScenario): { title: string; steps: string } {
+  return { title: `title:${scenario.title.toLowerCase()}`, steps: `steps:${computeStepsHash(scenario.type, scenario.steps)}` };
+}
+
+function indexPrior(prior: ValidatedScenario[]): PriorIndex {
+  const keys = prior.map(scenarioKeys);
+  return { titleIndex: new Map(keys.map((key, idx) => [key.title, idx])), steps: new Set(keys.map((key) => key.steps)) };
+}
+
+/**
+ * Flags duplicates within one output and relates a valid scenario to previously accepted ones:
+ * the same title replaces the accepted version (count unchanged); the same steps under a new title is ignored.
+ */
+function placeScenario(scenario: ValidatedScenario, errors: string[], seen: Set<string>, prior: PriorIndex): Placement {
+  const keys = scenarioKeys(scenario);
+  if (seen.has(keys.title)) errors.push('duplicates the title of an earlier scenario');
+  if (seen.has(keys.steps)) errors.push('duplicates the steps of an earlier scenario');
+  seen.add(keys.title);
+  seen.add(keys.steps);
+  const index = prior.titleIndex.get(keys.title);
+  if (index !== undefined) return { action: 'replace', index };
+  return prior.steps.has(keys.steps) ? { action: 'ignore' } : { action: 'add' };
+}
+
 /**
  * Validates one story's parsed scenarios against grammar, grounding, gates and coverage rules.
+ * Scenarios accepted in earlier self-correction attempts (`prior`) are kept and coverage is judged on the union.
  * @param {GherkinParseResult} parsed
  * @param {ScenarioContext} ctx
- * @returns {StoryValidationResult}
+ * @param {ValidatedScenario[]} [prior]
+ * @returns {StoryValidationResult} scenarios = prior scenarios (possibly replaced) plus newly accepted ones
  */
-export function validateStoryScenarios(parsed: GherkinParseResult, ctx: ScenarioContext): StoryValidationResult {
+export function validateStoryScenarios(parsed: GherkinParseResult, ctx: ScenarioContext, prior: ValidatedScenario[] = []): StoryValidationResult {
   const errors = parsed.errors.map((e) => `Output: ${e}`);
   const warnings: string[] = [];
-  const accepted: ValidatedScenario[] = [];
-  const seenTitles = new Set<string>();
-  const seenHashes = new Set<string>();
+  const accepted: ValidatedScenario[] = [...prior];
+  const priorIndex = indexPrior(prior);
+  const seen = new Set<string>();
 
-  if (parsed.scenarios.length === 0) errors.push('No "Scenario:" blocks were found in the output');
+  if (parsed.scenarios.length === 0 && prior.length === 0) errors.push('No "Scenario:" blocks were found in the output');
   for (const scenario of parsed.scenarios) {
     const outcome = validateScenario(scenario, ctx);
     const label = `Scenario "${snippet(scenario.title || '(untitled)')}" (line ${scenario.line})`;
@@ -262,16 +295,16 @@ export function validateStoryScenarios(parsed: GherkinParseResult, ctx: Scenario
       warnings.push(`[${ctx.story.id}] Dropped ${label}: @${outcome.excludedTypeTag} scenarios are excluded for this run`);
       continue;
     }
-    if (outcome.scenario) {
-      const titleKey = outcome.scenario.title.toLowerCase();
-      const hash = computeStepsHash(outcome.scenario.type, outcome.scenario.steps);
-      if (seenTitles.has(titleKey)) outcome.errors.push('duplicates the title of an earlier scenario');
-      if (seenHashes.has(hash)) outcome.errors.push('duplicates the steps of an earlier scenario');
-      seenTitles.add(titleKey);
-      seenHashes.add(hash);
+    const placement = outcome.scenario ? placeScenario(outcome.scenario, outcome.errors, seen, priorIndex) : null;
+    if (outcome.errors.length > 0 || !outcome.scenario || !placement) {
+      errors.push(...outcome.errors.map((e) => `${label}: ${e}`));
+    } else if (placement.action === 'replace') {
+      accepted[placement.index] = outcome.scenario;
+    } else if (placement.action === 'ignore') {
+      warnings.push(`[${ctx.story.id}] Ignored ${label}: repeats the steps of a scenario accepted in an earlier attempt`);
+    } else {
+      accepted.push(outcome.scenario);
     }
-    if (outcome.errors.length > 0 || !outcome.scenario) errors.push(...outcome.errors.map((e) => `${label}: ${e}`));
-    else accepted.push(outcome.scenario);
   }
 
   errors.push(...checkStoryCoverage(accepted, ctx));

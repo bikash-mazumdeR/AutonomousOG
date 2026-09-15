@@ -16,6 +16,16 @@ export class F01Page extends BasePage {
     await this.navigate("/");
   }
 
+  /**
+   * Verified action sequence in state "start": fill usernameInput, fill passwordInput, click loginButton. Performs actions only and asserts nothing (verified by TC-015, TC-016, TC-038, TC-040).
+   * @param {{ usernameInput: string, passwordInput: string }} values
+   */
+  async startClickLoginButtonFlow(values: { usernameInput: string; passwordInput: string }): Promise<void> {
+    await this.usernameInput.fill(values.usernameInput);
+    await this.passwordInput.fill(values.passwordInput);
+    await this.loginButton.click();
+  }
+
   /** main (state: start) */
   get loginContainerElement(): Locator {
     return this.page.getByTestId("login-container");
@@ -59,6 +69,16 @@ export class F01Page extends BasePage {
   /** heading "Password for all users:" (state: start) */
   get passwordForAllUsersHeading(): Locator {
     return this.page.getByRole("heading", { name: "Password for all users:", exact: true });
+  }
+
+  /** alert (state: start) */
+  get errorElement(): Locator {
+    return this.page.getByTestId("error");
+  }
+
+  /** button "Dismiss error" (state: start) */
+  get errorButton(): Locator {
+    return this.page.getByTestId("error-button");
   }
 
   /** header (state: inventory) */

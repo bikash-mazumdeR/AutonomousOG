@@ -8,7 +8,13 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { isTestCaseSelected, GherkinKeyword } from '../../core/types';
+import { isTestCaseSelected, GherkinKeyword, REVIEW_STATUS } from '../../core/types';
+
+/** Feature file tags for test cases excluded from automation at review. */
+const REVIEW_STATUS_TAGS: Readonly<Record<string, string>> = Object.freeze({
+  [REVIEW_STATUS.HELD]: '@held',
+  [REVIEW_STATUS.MANUAL]: '@manual',
+});
 import { TC_TYPE, TYPE_TAGS } from './constants';
 
 const FEATURES_DIR = path.resolve(__dirname, '../../tests/features');
@@ -107,6 +113,7 @@ export function buildScenarioTags(tc: any): string[] {
   if (tc.performanceRef?.scenario) tags.push(toTag(tc.performanceRef.scenario));
   if (tc.key) tags.push(toTag(tc.key));
   if (!isTestCaseSelected(tc)) tags.push('@obsolete');
+  if (REVIEW_STATUS_TAGS[tc.reviewStatus]) tags.push(REVIEW_STATUS_TAGS[tc.reviewStatus]);
   return [...new Set(tags)];
 }
 

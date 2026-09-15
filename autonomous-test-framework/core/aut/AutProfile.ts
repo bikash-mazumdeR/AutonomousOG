@@ -12,6 +12,15 @@ import { projectPaths, toProjectSlug, PROJECTS_CONFIG_ROOT } from './projectPath
 export type AuthStrategy = 'none' | 'form' | 'storageState' | 'apiToken';
 export type BrowserName = 'chromium' | 'firefox' | 'webkit';
 
+/** @enum {string} Where test credentials live. */
+export const CREDENTIAL_STORAGE = Object.freeze({
+  /** Environment variable references only; values are never stored (default). */
+  ENV: 'env',
+  /** Stored as fixture values — for public test applications whose credentials are not secret. */
+  FIXTURE: 'fixture',
+} as const);
+export type CredentialStorage = typeof CREDENTIAL_STORAGE[keyof typeof CREDENTIAL_STORAGE];
+
 /** AUT profile schema (projects/<slug>/aut-profile.json). */
 export interface AutProfile {
   projectId: string;
@@ -31,6 +40,8 @@ export interface AutProfile {
     strategy: AuthStrategy;
     credentialEnvVars?: Record<string, string>;
     loginStateDescription?: string;
+    /** Where test credentials live; defaults to "env". */
+    credentialStorage?: CredentialStorage;
   };
   secretsEnvVars: string[];
   api?: { basePathEnv?: string; authHeaderEnv?: string };
@@ -100,6 +111,10 @@ export function validateAutProfile(raw: any): string[] {
   validateDiscovery(raw.discovery, errors);
   if (!raw.auth || !AUTH_STRATEGIES.includes(raw.auth.strategy)) errors.push(`auth.strategy must be one of ${AUTH_STRATEGIES.join(', ')}`);
   if (raw.auth?.credentialEnvVars) validateEnvNames(raw.auth.credentialEnvVars, 'auth.credentialEnvVars', errors);
+  const storages: string[] = Object.values(CREDENTIAL_STORAGE);
+  if (raw.auth?.credentialStorage !== undefined && !storages.includes(raw.auth.credentialStorage)) {
+    errors.push(`auth.credentialStorage must be one of ${storages.join(', ')}`);
+  }
   if (!Array.isArray(raw.secretsEnvVars)) errors.push('secretsEnvVars must be an array');
   else validateEnvNames(raw.secretsEnvVars, 'secretsEnvVars', errors);
   if (!isStringArray(raw.couplingGuardTokens)) errors.push('couplingGuardTokens must be an array of strings');

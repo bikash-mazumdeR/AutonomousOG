@@ -107,8 +107,10 @@ export const TITLE_LENGTH = Object.freeze({ MIN: 10, MAX: 120 });
 /** Out-of-scope phrases shorter than this are too generic to match safely. */
 export const MIN_OUT_OF_SCOPE_PHRASE_LENGTH = 12;
 
+/** Temperature 0 + a fixed seed keep generation reproducible for identical inputs. */
 export const LLM_SETTINGS = Object.freeze({
-  TEMPERATURE: 0.1,
+  TEMPERATURE: 0,
+  SEED: 42,
   MAX_TOKENS: 8192,
 });
 

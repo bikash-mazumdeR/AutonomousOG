@@ -114,6 +114,34 @@ export class StateDatabase {
       )
     `);
 
+    // Project clarifications: questions routed to the stage that owns the answer, kept across pipeline runs
+    this._db.exec(`
+      CREATE TABLE IF NOT EXISTS project_clarifications (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        dedupe_key TEXT NOT NULL,
+        source_stage TEXT NOT NULL,
+        owning_stage TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        rule_id TEXT,
+        tc_key TEXT,
+        feature_id TEXT,
+        requirement_ref TEXT,
+        question TEXT NOT NULL,
+        context_json TEXT,
+        status TEXT NOT NULL,
+        answer TEXT,
+        answered_by TEXT,
+        ask_rounds INTEGER NOT NULL DEFAULT 1,
+        subject_hash TEXT,
+        raised_run_id TEXT,
+        last_seen_run_id TEXT,
+        asked_at TEXT NOT NULL,
+        answered_at TEXT,
+        UNIQUE (project_id, dedupe_key)
+      )
+    `);
+
     // Errors/Warnings log table
     this._db.exec(`
       CREATE TABLE IF NOT EXISTS logs (

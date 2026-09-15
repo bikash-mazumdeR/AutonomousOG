@@ -305,6 +305,12 @@ FRAMEWORK_MAX_THREADS=4
 SELF_REVIEW_RETRIES=2
 SPEC_BATCH_SIZE=10
 
+# AWS Bedrock (primary LLM; Gemini is the fallback)
+AWS_BEARER_TOKEN_BEDROCK=...           # Bedrock API key (bearer token)
+AWS_REGION=us-east-1
+BEDROCK_MODEL_DEFAULT=...              # Bedrock model / inference-profile ID
+LLM_MODEL_01=...                       # Per-agent Bedrock model (01, 02, 05, 06, 10); falls back to BEDROCK_MODEL_DEFAULT
+
 # Multi-LLM Model Configuration
 GEMINI_API_KEY=AQ...                   # Google Gemini API key
 OPENAI_API_KEY=sk-...                  # OpenAI API key (optional)

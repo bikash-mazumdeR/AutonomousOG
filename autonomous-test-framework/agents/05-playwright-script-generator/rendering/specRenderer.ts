@@ -6,7 +6,9 @@
  */
 
 import * as path from 'path';
-import { GENERATED_MARKER, SLA_PATTERN } from '../constants';
+import { GENERATED_MARKER } from '../constants';
+import { SLA_PATTERN } from '../../../core/readiness/readinessConstants';
+import { browserTag } from '../../../core/readiness/browserTargets';
 import { AutomationTestCase } from '../contracts/automationTestCase';
 
 /** A test case with its validated body. */
@@ -28,6 +30,8 @@ export interface UiSpecParams extends SpecRenderContext {
   pomImport: string;
   fixtureImport: string;
   envImport: string;
+  /** Statements every test starts with, rendered once as test.beforeEach. */
+  hook?: string[];
   tests: RenderedTest[];
 }
 
@@ -73,12 +77,14 @@ export function renderTestTitle(tc: AutomationTestCase): string {
 }
 
 /**
- * Tags from the test case type and labels.
+ * Tags from the test case type and labels, plus a browser tag for each browser the test case targets (the browser
+ * projects in playwright.config.ts run a tagged test only in its own browser).
  * @param {AutomationTestCase} tc
  * @returns {string[]}
  */
 export function renderTags(tc: AutomationTestCase): string[] {
-  return [...new Set([tc.type, ...tc.labels].map(slug).filter(Boolean).map((tag) => `@${tag}`))];
+  const browserTags = (tc.targetBrowsers || []).filter((target) => target.engine).map((target) => browserTag(target.engine as string));
+  return [...new Set([...[tc.type, ...tc.labels].map(slug).filter(Boolean).map((tag) => `@${tag}`), ...browserTags])];
 }
 
 /**
@@ -136,13 +142,18 @@ function dataFixtureLines(): string[] {
   ];
 }
 
+function renderHook(hook: string[]): string {
+  return ['  test.beforeEach(async ({ page, featurePage, data }) => {', indent(hook.join('\n'), 4), '  });'].join('\n');
+}
+
 /**
- * Renders a UI spec file.
+ * Renders a UI spec file. `hook` statements run in test.beforeEach before every test body.
  * @param {UiSpecParams} p
  * @returns {string}
  */
 export function renderUiSpec(p: UiSpecParams): string {
-  const usesEnv = p.tests.some((t) => /\benv\(/.test(t.body));
+  const hook = p.hook || [];
+  const usesEnv = [...hook, ...p.tests.map((t) => t.body)].some((code) => /\benv\(/.test(code));
   return [
     ...header(p),
     "import { test as base, expect } from '@playwright/test';",
@@ -158,6 +169,7 @@ export function renderUiSpec(p: UiSpecParams): string {
     '});',
     '',
     `test.describe(${JSON.stringify(p.featureId)}, () => {`,
+    ...(hook.length > 0 ? [renderHook(hook), ''] : []),
     p.tests.map((t) => renderTestBlock(t.tc, t.body, '{ page, featurePage, data, browser }')).join('\n\n'),
     '});',
     '',

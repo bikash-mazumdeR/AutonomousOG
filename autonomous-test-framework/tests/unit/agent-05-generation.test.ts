@@ -2,7 +2,7 @@
  * @fileoverview Unit tests for Agent 05 body normalisation and discovery planner page operations.
  */
 
-import { unwrapFunctionBody } from '../../agents/05-playwright-script-generator/generation/testBodyGenerator';
+import { buildGenerationPayload, unwrapFunctionBody } from '../../agents/05-playwright-script-generator/generation/testBodyGenerator';
 import {
   buildPlannerRequest,
   validateNavigationPlan,
@@ -52,5 +52,30 @@ describe('navigation planner page operations', () => {
   it('tells the planner which actions were already executed', () => {
     const request = JSON.parse(buildPlannerRequest(tc, [state], state, 2, [{ stepIndex: 1, element: 'submitButton', op: 'click' }]));
     expect(request.executedActions).toEqual([{ stepIndex: 1, element: 'submitButton', op: 'click' }]);
+  });
+});
+
+describe('generation payload', () => {
+  it('passes applicable flows and verified states for each test case', () => {
+    const payload: any = buildGenerationPayload({
+      mode: 'UI',
+      featureId: 'F-01',
+      testCases: [tc],
+      systemPrompt: 'contract',
+      priorReviewFindings: [],
+      maxRetries: 0,
+      concurrency: 1,
+      renderHarness: () => '',
+      flowsByTcKey: new Map([['TC-001', [{
+        member: 'startClickSubmitButtonFlow',
+        params: ['codeInput'],
+        actions: [],
+        stepIndexes: [2],
+        calls: [{ codeInput: { kind: 'data' as const, key: 'validCode', expression: 'data.validCode' } }],
+      }]]]),
+      verifiedStatesByTcKey: new Map([['TC-001', { 2: { state: 'dashboard', urlPath: '/dashboard.html' } }]]),
+    }, [tc]);
+    expect(payload.testCases[0].applicableFlows).toEqual([{ member: 'startClickSubmitButtonFlow', coversSteps: [2], calls: [{ codeInput: 'data.validCode' }] }]);
+    expect(payload.testCases[0].verifiedStates).toEqual({ 2: { state: 'dashboard', urlPath: '/dashboard.html' } });
   });
 });

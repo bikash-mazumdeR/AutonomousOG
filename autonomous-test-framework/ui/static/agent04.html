@@ -736,6 +736,7 @@
     }
     .toast.show { opacity: 1; transform: translateY(0); }
   </style>
+  <script src="/pipeline-nav.js"></script>
 </head>
 <body>
 
@@ -1076,49 +1077,9 @@
     const chatHistory = [];
 
     // ── Pipeline Bar Definition (11 Agents) ───────────────────────────────────
-    const PIPELINE_STAGES = [
-      { num: '01', name: 'Requirement Analyzer' },
-      { num: '02', name: 'Test Case Generator' },
-      { num: '03', name: 'Test Case Reviewer' },
-      { num: '04', name: 'Test Data Generator' },
-      { num: '05', name: 'Script Generator' },
-      { num: '06', name: 'Script Reviewer' },
-      { num: '07', name: 'Test Runner' },
-      { num: '08', name: 'Bug Reporter' },
-      { num: '09', name: 'Report Generator' },
-      { num: '10', name: 'Auto Healer' },
-      { num: '11', name: 'Retest Agent' },
-    ];
-
     function renderPipelineBar() {
-      const container = document.getElementById('pipelineBar');
-      container.innerHTML = '';
-
-      PIPELINE_STAGES.forEach((st, idx) => {
-        const node = document.createElement('div');
-        node.className = 'step-node';
-        const numInt = parseInt(st.num, 10);
-
-        if (numInt < 4) {
-          node.classList.add('done');
-          node.innerHTML = '✓';
-          node.title = `Stage ${st.num}: ${st.name} (Completed)`;
-        } else if (numInt === 4) {
-          node.classList.add('active');
-          node.innerHTML = st.num;
-          node.title = `Stage ${st.num}: ${st.name} (Active)`;
-        } else {
-          node.innerHTML = st.num;
-          node.title = `Stage ${st.num}: ${st.name}`;
-        }
-        container.appendChild(node);
-
-        if (idx < PIPELINE_STAGES.length - 1) {
-          const connector = document.createElement('div');
-          connector.className = 'step-connector' + (numInt < 4 ? ' done' : '');
-          container.appendChild(connector);
-        }
-      });
+      // Shared bar: completed stages can be revisited
+      AriaPipelineNav.start(4);
     }
 
     // ── Toast Utility ─────────────────────────────────────────────────────────
@@ -1232,7 +1193,7 @@
       renderPerTcTable(manifest, reviewedTCs);
 
       // Render Global Fixtures Table
-      renderGlobalFixturesTable(manifest.globalFixtures || {}, flat);
+      renderGlobalFixturesTable(manifest, flat);
 
       // Render Boundary Boxes
       renderBoundaryBoxes(manifest.boundaryCatalog || {});
@@ -1298,22 +1259,25 @@
       });
     }
 
-    function renderGlobalFixturesTable(globalFixtures, flat) {
+    // Root fixture keys shared by several test cases (not <TCKEY>_name keys, not generated boundary constants)
+    function sharedFlatValues(manifest, flat) {
+      const tcPrefixes = new Set(Object.keys(manifest.perTCData || {}).map(k => k.replace(/[^a-zA-Z0-9]/g, '')));
+      return Object.fromEntries(Object.entries(flat || {})
+        .filter(([key]) => !/^(string|number)[A-Z]/.test(key) && !tcPrefixes.has(key.split('_')[0])));
+    }
+
+    function renderGlobalFixturesTable(manifest, flat) {
       const tbody = document.getElementById('globalFixturesTableBody');
       tbody.innerHTML = '';
 
       const items = [
-        { prop: 'Base URL', key: 'baseURL', val: flat.baseURL || globalFixtures.baseURL, cat: 'Network' },
-        { prop: 'Standard Username', key: 'standardUsername', val: flat.standardUsername || globalFixtures.adminCredentials?.username, cat: 'Credential' },
-        { prop: 'Default Password', key: 'password', val: flat.password ? '••••••••' : 'secret_sauce', cat: 'Credential' },
-        { prop: 'Locked Out User', key: 'lockedOutUsername', val: flat.lockedOutUsername, cat: 'Credential' },
-        { prop: 'Problem User', key: 'problemUsername', val: flat.problemUsername, cat: 'Credential' },
-        { prop: 'Performance Glitch User', key: 'performanceGlitchUsername', val: flat.performanceGlitchUsername, cat: 'Credential' },
-        { prop: 'Visual User', key: 'visualUsername', val: flat.visualUsername, cat: 'Credential' },
-        { prop: 'Error Invalid Credentials', key: 'errorInvalidCredentials', val: flat.errorInvalidCredentials, cat: 'Validation' },
-        { prop: 'Error Username Required', key: 'errorUsernameRequired', val: flat.errorUsernameRequired, cat: 'Validation' },
-        { prop: 'Error Password Required', key: 'errorPasswordRequired', val: flat.errorPasswordRequired, cat: 'Validation' },
+        ...Object.entries(sharedFlatValues(manifest, flat)).map(([key, val]) => ({ prop: 'Shared value', key, val, cat: 'Fixture' })),
+        ...(manifest.runtimeBindings || []).map(b => ({ prop: b.placeholder, key: b.envVar, val: 'read from the environment at runtime', cat: 'Runtime' })),
       ];
+      if (!items.length) {
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color: var(--text-dim); padding: 24px;">No shared values — every value belongs to a single test case.</td></tr>';
+        return;
+      }
 
       items.forEach(it => {
         if (!it.val) return;
@@ -1395,7 +1359,8 @@
       currentWorkingObj = {};
       for (const [ph, meta] of Object.entries(tcEntry.inputs || {})) {
         const cleanK = ph.replace(/^\{\{|\}\}$/g, '');
-        currentWorkingObj[cleanK] = meta?.value ?? '';
+        // Credentials are edited as the name of the environment variable that holds them
+        currentWorkingObj[cleanK] = meta?.envVar ?? meta?.value ?? '';
       }
 
       modalTitle.textContent = `Test Data — [${tcKey}]`;
@@ -1411,22 +1376,14 @@
       currentModalMode = 'global';
       currentModalTcKey = null;
 
-      const flat = stateData?.flatTestData || {};
       const manifest = stateData?.testData?.manifest || {};
-      const gf = manifest.globalFixtures || {};
+      const runtime = Object.fromEntries((manifest.runtimeBindings || []).map(b => [b.placeholder.replace(/^\{\{|\}\}$/g, ''), b.envVar]));
 
-      currentWorkingObj = {
-        baseURL: flat.baseURL || gf.baseURL || 'https://www.saucedemo.com/',
-        standardUsername: flat.standardUsername || gf.adminCredentials?.username || 'standard_user',
-        password: flat.password || gf.adminCredentials?.password || 'secret_sauce',
-        lockedOutUsername: flat.lockedOutUsername || 'locked_out_user',
-        problemUsername: flat.problemUsername || 'problem_user',
-        errorInvalidCredentials: flat.errorInvalidCredentials || 'Epic sadface: Username and password do not match any user in this service'
-      };
+      currentWorkingObj = { ...sharedFlatValues(manifest, stateData?.flatTestData || {}), ...runtime };
 
-      modalTitle.textContent = 'Global Fixtures & Credentials';
-      modalBadge.textContent = 'CENTRALIZED FIXTURES';
-      document.getElementById('modalScopeNote').textContent = 'Directly modifies root fixtures';
+      modalTitle.textContent = 'Shared Values & Runtime Bindings';
+      modalBadge.textContent = 'SHARED ACROSS TEST CASES';
+      document.getElementById('modalScopeNote').textContent = 'Applies to every test case using the placeholder; credentials take an environment variable name';
 
       populateModalViews();
       setModalTab('fields');

@@ -24,6 +24,10 @@ export class OpenAIProvider implements LLMProvider {
       payload.response_format = { type: 'json_object' };
     }
 
+    if (options.seed !== undefined) {
+      payload.seed = options.seed;
+    }
+
     const response = await axios.post(this.baseUrl, payload, {
       headers: {
         'Authorization': `Bearer ${this.apiKey}`,

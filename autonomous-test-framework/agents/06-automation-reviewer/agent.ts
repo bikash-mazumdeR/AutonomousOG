@@ -17,6 +17,7 @@ import { approvalGate } from '../../core/approval-gate/ApprovalGate';
 import {
   FILE_TYPE, FINDING_SEVERITY, ANALYSIS_RULES, analyzeWithAST,
 } from '../../core/automation-reviewer/ReviewRules';
+import { FRAMEWORK_ROOT } from '../../core/aut/projectPaths';
 import { Logger } from '../../core/logger/Logger';
 import { FRAMEWORK_CONFIG } from '../../config/framework.config';
 import { llmClient } from '../../core/llm/LLMClient';
@@ -44,6 +45,12 @@ const SCORE_DEDUCTIONS = Object.freeze({
   MINOR: 2,
   INFO: 0,
 });
+
+/** LLM review findings are advisory: only deterministic rules may block a file (and so REJECT the review). */
+const LLM_MAX_SEVERITY = FINDING_SEVERITY.MAJOR;
+
+/** Agent 05 outcome whose tests are expected in a generated spec. */
+const GENERATED_STATUS = 'GENERATED';
 
 // ─── AutomationReviewerAgent ──────────────────────────────────────────────────
 
@@ -95,8 +102,9 @@ class AutomationReviewerAgent {
 
       // ── 2. Review each file ────────────────────────────────────────────
       const fileReviews = [];
+      const expectedKeysByFile = this._expectedKeysByFile(scripts);
       for (const file of allFiles) {
-        const review = await this._reviewFile(file, brokenSelectors);
+        const review = await this._reviewFile(file, brokenSelectors, expectedKeysByFile.get(path.resolve(file.path)));
         fileReviews.push(review);
       }
 
@@ -167,6 +175,7 @@ class AutomationReviewerAgent {
     const prompt = `
 You are a Senior Test Automation Architect. Review the following Playwright test script for LOGICAL and FUNCTIONAL flaws.
 Ignore style and formatting (handled by static analysis).
+Judge the code only against the Agent 05 contract in your instructions; never suggest changes that break it.
 
 Focus on:
 1. Missing essential assertions.
@@ -214,15 +223,18 @@ Return ONLY the raw JSON array.
 
   /**
    * Reviews a single file through all applicable dimensions.
+   * @param {Object} file
+   * @param {string[]} brokenSelectors
+   * @param {string[]} [expectedKeys] - Test case keys Agent 05 generated into this spec
    * @private
    */
-  async _reviewFile(file, brokenSelectors) {
+  async _reviewFile(file, brokenSelectors, expectedKeys?: string[]) {
     const source = fs.readFileSync(file.path, 'utf-8');
     const lines = source.split('\n');
     let current = source;
 
     // Run AST-based review
-    const { findings, patchedCode } = analyzeWithAST(current, file.type);
+    const { findings, patchedCode } = analyzeWithAST(current, file.type, file.type === FILE_TYPE.SPEC ? expectedKeys : undefined);
     const patches = [];
 
     if (patchedCode !== current) {
@@ -264,7 +276,7 @@ Return ONLY the raw JSON array.
         findings.push({
           ruleId: lf.ruleId || 'LOGIC-AI',
           dimension: lf.dimension || 'FUNCTIONAL_LOGIC',
-          severity: lf.severity || FINDING_SEVERITY.MAJOR,
+          severity: lf.severity === FINDING_SEVERITY.BLOCKER ? LLM_MAX_SEVERITY : (lf.severity || FINDING_SEVERITY.MAJOR),
           message: lf.message,
           suggestion: lf.suggestion || 'Review and correct test logic.',
           patchable: false,
@@ -295,6 +307,22 @@ Return ONLY the raw JSON array.
       patches,
       qualityScore: score,
     };
+  }
+
+  /**
+   * Generated test case keys per spec file (absolute path), so completeness is checked against Agent 05's output.
+   * @param {Object} scripts - playwrightScripts artifact
+   * @returns {Map<string, string[]>}
+   * @private
+   */
+  _expectedKeysByFile(scripts: { testCases?: Array<{ tcKey: string; status: string; file?: string }> }): Map<string, string[]> {
+    const keysByFile = new Map<string, string[]>();
+    for (const result of scripts.testCases || []) {
+      if (result.status !== GENERATED_STATUS || !result.file) continue;
+      const file = path.resolve(FRAMEWORK_ROOT, result.file);
+      keysByFile.set(file, [...(keysByFile.get(file) || []), result.tcKey]);
+    }
+    return keysByFile;
   }
 
   // ── Scoring ───────────────────────────────────────────────────────────────

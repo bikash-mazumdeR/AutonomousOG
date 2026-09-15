@@ -444,6 +444,7 @@
     .chat-input-area input { flex: 1; height: 38px; box-sizing: border-box; background: var(--surface2); border: 1px solid var(--border); padding: 0 12px; border-radius: 6px; color: var(--text); }
     .chat-input-area .btn { height: 38px; min-width: 90px; }
   </style>
+  <script src="/pipeline-nav.js"></script>
 </head>
 <body>
 
@@ -582,6 +583,7 @@
   <!-- Bottom Action Bar -->
   <div class="action-bar hidden" id="actionBar">
     <div class="hint">Review the generated test cases above.</div>
+    <button id="chatBtn" class="btn btn-ghost" title="Ask ARIA about the generated test cases">💬 Chat with ARIA</button>
     <button id="reGenBtn" class="btn btn-ghost" title="Re-generate test cases with updated options or requirements">
       <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M23 4v6h-6"></path>
@@ -754,29 +756,8 @@
 
   <script>
     // ── Pipeline Bar ──────────────────────────────────────────────────────
-    const STAGES = [
-      'Req Analyzer','Test Generator','Test Reviewer','Data Generator',
-      'Script Generator','Code Reviewer','Test Runner','Bug Reporter',
-      'Report Generator','Auto Healer','Re-Test Agent',
-    ];
-    (function renderPipeline() {
-      const bar = document.getElementById('pipelineBar');
-      STAGES.forEach((name, i) => {
-        const node = document.createElement('div');
-        if (i === 0) node.className = 'step-node done'; // Agent 01 done
-        else if (i === 1) node.className = 'step-node active'; // Agent 02 active
-        else node.className = 'step-node';
-        
-        node.title = `Agent ${String(i+1).padStart(2,'0')}: ${name}`;
-        node.textContent = i + 1;
-        bar.appendChild(node);
-        if (i < STAGES.length - 1) {
-          const conn = document.createElement('div');
-          conn.className = 'step-connector' + (i === 0 ? ' done' : '');
-          bar.appendChild(conn);
-        }
-      });
-    })();
+    // Shared bar: completed stages can be revisited
+    AriaPipelineNav.start(2);
 
     // ── State ─────────────────────────────────────────────────────────────
     let requiredTypes = { positive: true, negative: true, edge: true, api: false, perf: false };
@@ -1307,7 +1288,7 @@
         <div class="step-fields-grid">
           <div class="form-field">
             <label>Test Data (And with test data "...")</label>
-            <input type="text" class="form-input step-data" placeholder="e.g. standard_user / secret_sauce" value="${escapeHtml(step.testData || '')}">
+            <input type="text" class="form-input step-data" placeholder="e.g. {{validUsername}} / {{validPassword}}" value="${escapeHtml(step.testData || '')}">
           </div>
           <div class="form-field">
             <label>Expected Result (Then ...)</label>

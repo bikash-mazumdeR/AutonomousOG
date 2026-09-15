@@ -8,9 +8,9 @@ import { ResolvedAutProfile } from '../../../../core/aut/AutProfile';
 import { ProjectPaths } from '../../../../core/aut/projectPaths';
 import { ChatFn } from '../../types';
 import { GenerationMode } from '../../constants';
-import {
-  AutomationTestCase, MissingItem, ReadinessContext, assessReadiness,
-} from '../../contracts/automationTestCase';
+import { AutomationTestCase } from '../../contracts/automationTestCase';
+import { assessReadiness } from '../../../../core/readiness/readinessRules';
+import { MissingItem, READINESS_PHASE, ReadinessContext } from '../../../../core/readiness/readinessTypes';
 import { TestOutcome } from '../../generation/testBodyGenerator';
 
 /** Everything a sub-agent needs to generate one feature. */
@@ -63,11 +63,13 @@ export function fileStem(featureId: string): string {
 export function readinessContext(mode: GenerationMode, profile: ResolvedAutProfile): ReadinessContext {
   return {
     mode,
+    phase: READINESS_PHASE.GENERATION,
     baseURL: profile.baseURL,
     baseUrlEnv: profile.baseUrlEnv,
     authStrategy: profile.auth.strategy,
     apiAuthHeaderEnv: profile.api?.authHeaderEnv,
     thresholdEnv: profile.performance?.thresholdEnv,
+    browsers: profile.browsers,
   };
 }
 

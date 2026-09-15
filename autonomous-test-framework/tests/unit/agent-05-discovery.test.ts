@@ -27,10 +27,64 @@ const START_PAGE = `<!doctype html><html><head><title>Sample</title></head><body
 
 const DASHBOARD_PAGE = '<!doctype html><html><body><h1 data-qa="welcome">Welcome</h1></body></html>';
 
+const signInCase = (tcKey: string): AutomationTestCase => ({
+  tcKey,
+  title: 'Valid access code opens the dashboard',
+  type: 'Positive',
+  priority: 'High',
+  labels: [],
+  featureId: 'F-01',
+  userStoryId: 'US-01',
+  requirementRefs: ['AC-1'],
+  objective: '',
+  precondition: '',
+  steps: [
+    {
+      index: 1, keyword: 'Given', action: 'the user is on the sign-in page', expected: ['The sign-in form is displayed'], testData: '', data: [],
+    },
+    {
+      index: 2, keyword: 'When', action: 'the user signs in with a valid access code', expected: ['The dashboard is displayed'], testData: '{{validCode}}', data: [{ token: '{{validCode}}', fixtureKey: 'validCode' }],
+    },
+  ],
+});
+
+const signInPlans = () => [
+  {
+    actions: [
+      { stepIndex: 2, element: 'codeInput', op: 'fill', value: { binding: '{{validCode}}' } },
+      { stepIndex: 2, element: 'submitButton', op: 'click' },
+    ],
+    stopReason: 'NEEDS_NEW_STATE',
+    nextStep: 3,
+  },
+  { actions: [], stopReason: 'COMPLETE' },
+];
+
 describe('Agent 05 live DOM discovery', () => {
   let server: http.Server;
   let baseURL: string;
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'aria-discovery-'));
+
+  const profile = (): ResolvedAutProfile => ({
+    projectId: 'sample',
+    slug: 'sample',
+    displayName: 'Sample',
+    baseUrlEnv: 'SAMPLE_BASE_URL',
+    baseURL,
+    testIdAttribute: 'data-qa',
+    browsers: ['chromium'],
+    discovery: { entryPaths: ['/'], maxDepth: 2, executeTestSteps: true },
+    auth: { strategy: 'none' },
+    secretsEnvVars: [],
+    couplingGuardTokens: [],
+  });
+
+  const discover = (featureId: string, testCases: AutomationTestCase[], plans: unknown[]) => {
+    const chat: ChatFn = jest.fn(async () => JSON.stringify(plans.shift()));
+    return discoverFeature({
+      featureId, testCases, profile: profile(), pageMapFile: path.join(tmp, `${featureId}.json`), fixtureValues: { validCode: 'ABC123' }, plannerSystemPrompt: 'planner', chat, logger: console,
+    });
+  };
 
   beforeAll(async () => {
     server = http.createServer((req, res) => {
@@ -64,62 +118,39 @@ describe('Agent 05 live DOM discovery', () => {
     }
   });
 
-  it('reaches deeper states by executing planned steps with verified elements and bound data', async () => {
-    const tc: AutomationTestCase = {
-      tcKey: 'TC-001',
-      title: 'Valid access code opens the dashboard',
-      type: 'Positive',
-      priority: 'High',
-      labels: [],
-      featureId: 'F-01',
-      userStoryId: 'US-01',
-      requirementRefs: ['AC-1'],
-      objective: '',
-      precondition: '',
-      steps: [
-        {
-          index: 1, keyword: 'Given', action: 'the user is on the sign-in page', expected: ['The sign-in form is displayed'], testData: '', data: [],
-        },
-        {
-          index: 2, keyword: 'When', action: 'the user signs in with a valid access code', expected: ['The dashboard is displayed'], testData: '{{validCode}}', data: [{ token: '{{validCode}}', fixtureKey: 'validCode' }],
-        },
-      ],
-    };
-    const profile: ResolvedAutProfile = {
-      projectId: 'sample',
-      slug: 'sample',
-      displayName: 'Sample',
-      baseUrlEnv: 'SAMPLE_BASE_URL',
-      baseURL,
-      testIdAttribute: 'data-qa',
-      browsers: ['chromium'],
-      discovery: { entryPaths: ['/'], maxDepth: 2, executeTestSteps: true },
-      auth: { strategy: 'none' },
-      secretsEnvVars: [],
-      couplingGuardTokens: [],
-    };
-    const plans = [
-      {
-        actions: [
-          { stepIndex: 2, element: 'codeInput', op: 'fill', value: { binding: '{{validCode}}' } },
-          { stepIndex: 2, element: 'submitButton', op: 'click' },
-        ],
-        stopReason: 'NEEDS_NEW_STATE',
-        nextStep: 3,
-      },
-      { actions: [], stopReason: 'COMPLETE' },
-    ];
-    const chat: ChatFn = jest.fn(async () => JSON.stringify(plans.shift()));
-    const pageMapFile = path.join(tmp, 'F-01.json');
-
-    const result = await discoverFeature({
-      featureId: 'F-01', testCases: [tc], profile, pageMapFile, fixtureValues: { validCode: 'ABC123' }, plannerSystemPrompt: 'planner', chat, logger: console,
-    });
+  it('reaches deeper states by executing planned steps and records the verified actions as a trace', async () => {
+    const result = await discover('F-01', [signInCase('TC-001')], signInPlans());
 
     expect(result.issues.size).toBe(0);
     expect(result.pageMap.states.map((s) => [s.name, s.urlPath, s.entryPath])).toEqual([['start', '/', '/'], ['dashboard', '/dashboard.html', undefined]]);
     expect(result.pageMap.states[1].elements.map((e) => e.name)).toContain('welcomeHeading');
-    expect(JSON.parse(fs.readFileSync(pageMapFile, 'utf-8')).states).toHaveLength(2);
+    expect(result.pageMap.version).toBe(2);
+    expect(result.pageMap.traces).toEqual([{
+      tcKey: 'TC-001',
+      runs: [{
+        state: 'start',
+        reachedState: 'dashboard',
+        actions: [
+          { stepIndex: 2, state: 'start', element: 'codeInput', op: 'fill', value: { binding: '{{validCode}}' } },
+          { stepIndex: 2, state: 'start', element: 'submitButton', op: 'click' },
+        ],
+      }],
+      stateAfterStep: { 1: 'start', 2: 'dashboard' },
+    }]);
+    expect(result.pageMap.flows).toEqual([]);
+    expect(JSON.parse(fs.readFileSync(path.join(tmp, 'F-01.json'), 'utf-8')).states).toHaveLength(2);
+  });
+
+  it('turns an action sequence two test cases performed identically into one verified flow', async () => {
+    const result = await discover('F-03', [signInCase('TC-001'), signInCase('TC-002')], [...signInPlans(), ...signInPlans()]);
+
+    expect(result.issues.size).toBe(0);
+    expect(result.pageMap.flows).toEqual([expect.objectContaining({
+      name: 'startClickSubmitButtonFlow',
+      state: 'start',
+      usedBy: ['TC-001', 'TC-002'],
+      actions: [{ element: 'codeInput', op: 'fill', param: 'codeInput' }, { element: 'submitButton', op: 'click' }],
+    })]);
   });
 
   it('reports unreachable applications as NEEDS_CONTEXT instead of guessing', async () => {

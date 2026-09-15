@@ -306,6 +306,7 @@
     .alert-success { background: var(--success-bg); border: 1px solid var(--success); color: var(--success); }
     .alert-danger  { background: var(--danger-bg);  border: 1px solid var(--danger);  color: var(--danger); }
   </style>
+  <script src="/pipeline-nav.js"></script>
 </head>
 <body>
 
@@ -360,6 +361,13 @@
             <input type="text" id="projectNameInput" placeholder="e.g. E-Commerce Checkout" />
           </div>
 
+          <div class="form-group mt-12">
+            <label>
+              <input type="checkbox" id="reanalyzeInput" />
+              Force re-analysis <span style="color:var(--text-dim)">(ignore the saved analysis for unchanged requirements)</span>
+            </label>
+          </div>
+
           <button class="btn btn-primary btn-block mt-12" id="runBtn">
             ▶ Run Analysis
           </button>
@@ -383,12 +391,11 @@
             <span class="badge badge-warning" id="ambCount"></span>
           </div>
           <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px">
-            ARIA found the following questions about the requirements. Please answer each one so the analysis can be refined.
+            ARIA found these open questions. Questions marked <b>Blocking</b> must be answered before you can proceed; the others are optional — answer what you know, save, and proceed.
           </p>
           <div id="ambCards"></div>
-          <button class="btn btn-primary btn-block" id="submitAnswersBtn">
-            🔄 Submit Answers &amp; Re-analyze
-          </button>
+          <button class="btn btn-primary btn-block" id="submitAnswersBtn">💾 Save Answers</button>
+          <button class="btn btn-outline btn-block mt-12" id="reanalyzeAnswersBtn">🔄 Save Answers &amp; Re-analyze</button>
         </div>
       </div>
 
@@ -461,6 +468,7 @@
 <!-- ── Bottom action bar ───────────────────────────────────────────────────── -->
 <div class="action-bar hidden" id="actionBar">
   <span class="hint" id="actionBarHint">Analysis complete — verify understanding or proceed to next agent.</span>
+  <button class="btn btn-outline" id="newAnalysisBtn">↺ New Analysis</button>
   <button class="btn btn-outline" id="chatBtn">💬 Chat with ARIA</button>
   <button class="btn btn-success" id="proceedBtn">Proceed to Agent 02 →</button>
 </div>
@@ -508,27 +516,8 @@
 
 <!-- ── Scripts ─────────────────────────────────────────────────────────────── -->
 <script>
-// ── Pipeline steps ─────────────────────────────────────────────────────────
-const STAGES = [
-  'Req Analyzer','Test Generator','Test Reviewer','Data Generator',
-  'Script Generator','Code Reviewer','Test Runner','Bug Reporter',
-  'Report Generator','Auto Healer','Re-Test Agent',
-];
-(function renderPipeline() {
-  const bar = document.getElementById('pipelineBar');
-  STAGES.forEach((name, i) => {
-    const node = document.createElement('div');
-    node.className = 'step-node' + (i === 0 ? ' active' : '');
-    node.title = `Agent ${String(i+1).padStart(2,'0')}: ${name}`;
-    node.textContent = i + 1;
-    bar.appendChild(node);
-    if (i < STAGES.length - 1) {
-      const conn = document.createElement('div');
-      conn.className = 'step-connector';
-      bar.appendChild(conn);
-    }
-  });
-})();
+// ── Pipeline steps (shared bar: completed stages can be revisited) ─────────
+AriaPipelineNav.start(1);
 
 // ── State ──────────────────────────────────────────────────────────────────
 // BUG-FIX NOTES:
@@ -618,6 +607,7 @@ async function startAnalysis() {
   // Build form data
   const fd = new FormData();
   fd.append('projectName', projectName);
+  if (document.getElementById('reanalyzeInput').checked) fd.append('reanalyze', 'true');
   if (activeTab === 'upload') {
     fd.append('file', selectedFile);
   } else {
@@ -757,24 +747,34 @@ function onAnalysisComplete(report) {
   document.getElementById('statStories').textContent      = report.totalUserStories ?? '—';
   document.getElementById('statIntegrations').textContent = (report.integrationPoints || []).length;
   const pending = (report.ambiguities || []).filter(a => !a.resolved);
+  const blocking = pending.filter(isBlockingAmbiguity);
   document.getElementById('statAmbiguities').textContent  = pending.length;
   document.getElementById('summaryBadge').innerHTML =
-    `<span class="badge ${pending.length ? 'badge-warning' : 'badge-success'}">` +
-    (pending.length ? '⚠ Ambiguities Pending' : '✓ COMPLETED') + '</span>';
+    `<span class="badge ${blocking.length ? 'badge-danger' : pending.length ? 'badge-warning' : 'badge-success'}">` +
+    (blocking.length ? '⛔ Blocking Questions' : pending.length ? '⚠ Open Questions (optional)' : '✓ COMPLETED') + '</span>';
 
   // Token card
   document.getElementById('tokenCard').classList.remove('hidden');
 
-  // Show ambiguities if any
-  if (pending.length > 0) {
-    renderAmbiguities(pending);
-    showOnly('phaseRunning','phaseAmbiguities');
-  } else {
-    renderResults(report);
-    showOnly('phaseRunning','phaseResults');
-    document.getElementById('actionBar').classList.remove('hidden');
-    buildModalSummary(report);
+  if (pending.length > 0) renderAmbiguities(pending);
+  // Only blocking questions stop the user; optional ones stay listed next to the results
+  if (blocking.length > 0) {
+    document.getElementById('actionBar').classList.add('hidden');
+    showOnly('phaseRunning', 'phaseAmbiguities');
+    return;
   }
+  renderResults(report);
+  showOnly('phaseRunning', ...(pending.length ? ['phaseAmbiguities'] : []), 'phaseResults');
+  document.getElementById('actionBarHint').textContent = pending.length
+    ? `${pending.length} open question(s) — answer them now or proceed; later agents skip only behaviour that depends on them.`
+    : 'Analysis complete — verify understanding or proceed to next agent.';
+  document.getElementById('actionBar').classList.remove('hidden');
+  buildModalSummary(report);
+}
+
+/** An ambiguity that makes its feature untestable until it is answered. */
+function isBlockingAmbiguity(amb) {
+  return amb.blockingTestGeneration === true || String(amb.blockingTestGeneration).toLowerCase() === 'true';
 }
 
 // ── Update token card ──────────────────────────────────────────────────────
@@ -791,61 +791,93 @@ function updateTokenCard(usage) {
 function renderAmbiguities(pending) {
   const container = document.getElementById('ambCards');
   container.innerHTML = '';
-  document.getElementById('ambCount').textContent = pending.length + ' pending';
+  const blockingCount = pending.filter(isBlockingAmbiguity).length;
+  document.getElementById('ambCount').textContent = `${pending.length} open` + (blockingCount ? ` · ${blockingCount} blocking` : '');
 
   pending.forEach((amb, idx) => {
+    const blocking = isBlockingAmbiguity(amb);
     const card = document.createElement('div');
     card.className = 'amb-card';
     card.innerHTML = `
       <div class="amb-header">
-        <span class="badge badge-warning">⚠ ${amb.id || ('AMB-' + String(idx+1).padStart(2,'0'))}</span>
+        <span class="badge ${blocking ? 'badge-danger' : 'badge-warning'}">${blocking ? '⛔' : '⚠'} ${escHtml(amb.id || ('AMB-' + String(idx+1).padStart(2,'0')))} · ${blocking ? 'Blocking' : 'Optional'}</span>
       </div>
       <div class="amb-question">${escHtml(amb.question || amb.description || '')}</div>
       <textarea class="amb-answer" data-question="${escHtml(amb.question || '')}"
-                data-id="${escHtml(amb.id || '')}"
+                data-id="${escHtml(amb.id || '')}" data-blocking="${blocking}"
                 placeholder="Your answer…" style="min-height:70px"></textarea>
     `;
     container.appendChild(card);
   });
 
   document.getElementById('phaseAmbiguities').classList.remove('hidden');
-  
-  // Re-enable the submit button in case it was disabled from a previous round
-  const btn = document.getElementById('submitAnswersBtn');
-  btn.disabled = false;
-  btn.textContent = '🔄 Submit Answers & Re-analyze';
+  resetAnswerButtons();
 }
 
 // ── Submit clarification answers ───────────────────────────────────────────
-document.getElementById('submitAnswersBtn').addEventListener('click', async () => {
-  const textareas = document.querySelectorAll('.amb-answer');
+const SAVE_ANSWERS_LABEL = '💾 Save Answers';
+const REANALYZE_ANSWERS_LABEL = '🔄 Save Answers & Re-analyze';
+
+function resetAnswerButtons() {
+  const saveBtn = document.getElementById('submitAnswersBtn');
+  const reanalyzeBtn = document.getElementById('reanalyzeAnswersBtn');
+  [saveBtn, reanalyzeBtn].forEach(b => { b.disabled = false; b.classList.remove('btn-loading'); });
+  saveBtn.textContent = SAVE_ANSWERS_LABEL;
+  reanalyzeBtn.textContent = REANALYZE_ANSWERS_LABEL;
+}
+
+/** Typed answers; every blocking question must be answered. Returns null when the input is incomplete. */
+function collectAnswers() {
   const answers = [];
-  let missingCount = 0;
-
-  textareas.forEach(ta => {
+  let missingBlocking = 0;
+  document.querySelectorAll('.amb-answer').forEach(ta => {
     const answer = ta.value.trim();
-    if (!answer) { missingCount++; return; }
-    answers.push({ id: ta.dataset.id, question: ta.dataset.question, answer });
+    if (answer) answers.push({ id: ta.dataset.id, question: ta.dataset.question, answer });
+    else if (ta.dataset.blocking === 'true') missingBlocking++;
   });
+  if (missingBlocking > 0) { alert(`Please answer the ${missingBlocking} blocking question(s).`); return null; }
+  if (answers.length === 0) { alert('Type at least one answer, or use "Proceed to Agent 02" to continue without answering.'); return null; }
+  return answers;
+}
 
-  if (missingCount > 0) {
-    alert(`Please answer all ${missingCount} remaining question(s).`); return;
-  }
+async function saveAnswers(answers) {
+  const resp = await fetch('/api/agent01/clarify', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ answers }),
+  });
+  const result = await resp.json();
+  if (!resp.ok) throw new Error(result.error || 'Could not save the answers');
+  return result;
+}
 
+// Save: record the answers and mark those questions resolved in the current analysis — no new LLM run
+document.getElementById('submitAnswersBtn').addEventListener('click', async () => {
+  const answers = collectAnswers();
+  if (!answers) return;
   const btn = document.getElementById('submitAnswersBtn');
-  btn.disabled = true; 
-  btn.textContent = 'Saving answers…';
-  btn.classList.add('btn-loading');
-
+  btn.disabled = true; btn.textContent = 'Saving answers…'; btn.classList.add('btn-loading');
   try {
-    const resp = await fetch('/api/agent01/clarify', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ answers }),
-    });
-    if (!resp.ok) throw new Error((await resp.json()).error);
+    const result = await saveAnswers(answers);
+    if (result.report) {
+      analysisCompleted = true;
+      onAnalysisComplete(result.report);
+    }
+  } catch (e) {
+    alert('Error: ' + e.message);
+  } finally {
+    resetAnswerButtons();
+  }
+});
 
+// Re-analyze: record the answers, then run the full analysis again with them
+document.getElementById('reanalyzeAnswersBtn').addEventListener('click', async () => {
+  const answers = collectAnswers();
+  if (!answers) return;
+  const btn = document.getElementById('reanalyzeAnswersBtn');
+  btn.disabled = true; btn.textContent = 'Saving answers…'; btn.classList.add('btn-loading');
+  try {
+    await saveAnswers(answers);
     btn.textContent = 'Re-analyzing with your answers…';
-
     const fd = new FormData();
     fd.append('projectName', document.getElementById('projectNameInput').value.trim() || 'ARIA Project');
     if (selectedFile) fd.append('file', selectedFile);
@@ -860,14 +892,11 @@ document.getElementById('submitAnswersBtn').addEventListener('click', async () =
     connectSSE();
 
     await fetch('/api/agent01/run', { method: 'POST', body: fd });
-    btn.classList.remove('btn-loading');
     startPolling();
-
   } catch (e) {
-    btn.classList.remove('btn-loading');
     alert('Error: ' + e.message);
-    btn.disabled = false; 
-    btn.textContent = '🔄 Submit Answers & Re-analyze';
+  } finally {
+    resetAnswerButtons();
   }
 });
 
@@ -1065,6 +1094,31 @@ function escHtml(str) {
 document.getElementById('chatInput').addEventListener('input', function() {
   this.style.height = 'auto';
   this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+});
+// ── Reopening this page (pipeline navigation) shows the saved analysis ─────
+(async function restoreSavedAnalysis() {
+  try {
+    const resp = await fetch('/api/agent01/state');
+    const data = await resp.json();
+    if (data.running) {
+      showOnly('phaseRunning');
+      connectSSE();
+      startPolling();
+      return;
+    }
+    const finished = ['COMPLETED', 'AWAITING', 'APPROVED'].includes(data.stage?.status) || data.stage?.approval === 'APPROVED';
+    if (finished && data.report) {
+      analysisCompleted = true;
+      onAnalysisComplete(data.report);
+      if (data.stage?.usage) updateTokenCard(data.stage.usage);
+    }
+  } catch (_) { /* stay on the input form */ }
+})();
+
+// Start over from the results view
+document.getElementById('newAnalysisBtn').addEventListener('click', () => {
+  document.getElementById('actionBar').classList.add('hidden');
+  showOnly('phaseInput');
 });
 </script>
 </body>

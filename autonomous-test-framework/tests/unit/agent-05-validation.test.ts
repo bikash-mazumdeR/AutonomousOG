@@ -6,8 +6,9 @@ import { AutomationTestCase } from '../../agents/05-playwright-script-generator/
 import { PageContract } from '../../agents/05-playwright-script-generator/rendering/pomRenderer';
 import { renderUiSpec } from '../../agents/05-playwright-script-generator/rendering/specRenderer';
 import {
-  GeneratedTest, hexToRgbVariants, validateGeneratedTest,
+  GeneratedTest, discoveryProvenance, hexToRgbVariants, validateGeneratedTest,
 } from '../../agents/05-playwright-script-generator/validation/integrityValidator';
+import { FlowUsage } from '../../agents/05-playwright-script-generator/discovery/flowExtractor';
 import { generateTestBodies } from '../../agents/05-playwright-script-generator/generation/testBodyGenerator';
 import { ChatFn } from '../../agents/05-playwright-script-generator/types';
 
@@ -179,5 +180,105 @@ describe('Agent 05 generation loop', () => {
     expect(needs[0].status).toBe('NEEDS_CONTEXT');
     const missing = await generateTestBodies(request(0), async () => 'not json');
     expect(missing[0].status).toBe('BLOCKED');
+  });
+});
+
+describe('Agent 05 verified flows and discovery-verified values', () => {
+  const flowMember = {
+    name: 'startClickSubmitButtonFlow',
+    kind: 'flow' as const,
+    state: 'start',
+    description: 'Verified action sequence.',
+    flowId: 'flow-a',
+    params: ['pinInput'],
+    actions: [{ member: 'pinInput', op: 'fill' }, { member: 'submitButton', op: 'click' }],
+  };
+  const flowContract: PageContract = { ...contract, members: [...contract.members, flowMember] };
+  const usage: FlowUsage = {
+    member: flowMember.name,
+    params: flowMember.params,
+    actions: flowMember.actions,
+    stepIndexes: [2],
+    calls: [{ pinInput: { kind: 'data', key: 'validPin', expression: 'data.validPin' } }],
+  };
+  const inline = 'await featurePage.pinInput.fill(data.validPin);\nawait featurePage.submitButton.click();';
+  const withFlowCall = (call: string) => withBody(validBody.replace(inline, call));
+  const validateFlow = (entry: GeneratedTest, flows: FlowUsage[] = [usage]) => validateGeneratedTest(entry, {
+    mode: 'UI', tc, contract: flowContract, harness: harness(entry.body as string), flows,
+  });
+
+  it('accepts a verified flow called with exactly its arguments', () => {
+    expect(validateFlow(withFlowCall('await featurePage.startClickSubmitButtonFlow({ pinInput: data.validPin });'))).toEqual([]);
+  });
+
+  it('rejects flows not verified for the test case, wrong arguments and unawaited calls', () => {
+    const call = 'await featurePage.startClickSubmitButtonFlow({ pinInput: data.validPin });';
+    expect(validateFlow(withFlowCall(call), []).join('\n')).toContain('is not a verified flow for TC-001');
+    const extra = 'await featurePage.startClickSubmitButtonFlow({ pinInput: data.validPin, extra: data.validPin });';
+    expect(validateFlow(withFlowCall(extra)).join('\n')).toContain('arguments must be exactly ({ pinInput: data.validPin })');
+    const unawaited = 'featurePage.startClickSubmitButtonFlow({ pinInput: data.validPin });';
+    expect(validateFlow(withFlowCall(unawaited)).join('\n')).toContain('must be awaited');
+  });
+
+  it('rejects performing a verified flow action by action', () => {
+    expect(validateFlow(validEntry).join('\n')).toContain('call featurePage.startClickSubmitButtonFlow(...) instead');
+  });
+
+  const urlTc: AutomationTestCase = {
+    ...tc,
+    steps: [tc.steps[0], { ...tc.steps[1], expected: ['The dashboard page is displayed within 5000 ms'] }],
+  };
+  const urlEntry = (assertion: string): GeneratedTest => ({
+    tcKey: 'TC-001',
+    status: 'GENERATED',
+    body: [
+      'await featurePage.openStart();',
+      'await expect(featurePage.signInForm).toBeVisible();',
+      'await featurePage.pinInput.fill(data.validPin);',
+      'await featurePage.submitButton.click();',
+      assertion,
+    ].join('\n'),
+    stepAssertions: [
+      { stepIndex: 1, assertions: ['await expect(featurePage.signInForm).toBeVisible();'] },
+      { stepIndex: 2, assertions: [assertion] },
+    ],
+  });
+  const urlCtx = (entry: GeneratedTest, verifiedStates?: Record<number, { state: string; urlPath: string }>) => ({
+    mode: 'UI' as const,
+    tc: urlTc,
+    contract,
+    verifiedStates,
+    harness: renderUiSpec({
+      projectSlug: 'sample',
+      featureId: 'F-01',
+      sourceReviewId: 'r1',
+      pageObject: 'F01Page',
+      pomImport: '../pages/F01Page',
+      fixtureImport: '../fixtures/test-data.json',
+      envImport: '../../../helpers/env',
+      tests: [{ tc: urlTc, body: entry.body as string }],
+    }),
+  });
+  const dashboard = { 2: { state: 'dashboard', urlPath: '/dashboard.html' } };
+
+  it('accepts a URL path verified by discovery when the step names that state, and records its provenance', () => {
+    const entry = urlEntry('await expect(page).toHaveURL(/dashboard\\.html/, { timeout: 5000 });');
+    expect(validateGeneratedTest(entry, urlCtx(entry, dashboard))).toEqual([]);
+    expect(discoveryProvenance(entry, urlCtx(entry, dashboard))).toEqual([{
+      stepIndex: 2, assertion: (entry.stepAssertions as any)[1].assertions[0], state: 'dashboard', urlPath: '/dashboard.html',
+    }]);
+  });
+
+  it('rejects the verified path without discovery, for an unnamed state, or for non-URL assertions', () => {
+    const entry = urlEntry('await expect(page).toHaveURL(/dashboard\\.html/);');
+    expect(validateGeneratedTest(entry, urlCtx(entry)).join('\n')).toContain('"html" does not appear');
+    expect(validateGeneratedTest(entry, urlCtx(entry, { 2: { state: 'accountSettings', urlPath: '/dashboard.html' } })).join('\n')).toContain('does not appear');
+    const text = urlEntry("await expect(featurePage.errorBanner).toHaveText('/dashboard.html');");
+    expect(validateGeneratedTest(text, urlCtx(text, dashboard)).join('\n')).toContain('does not appear');
+  });
+
+  it('allows a timeout only when the step states it', () => {
+    const entry = urlEntry('await expect(page).toHaveURL(/dashboard\\.html/, { timeout: 3000 });');
+    expect(validateGeneratedTest(entry, urlCtx(entry, dashboard)).join('\n')).toContain('timeout must be a number stated');
   });
 });

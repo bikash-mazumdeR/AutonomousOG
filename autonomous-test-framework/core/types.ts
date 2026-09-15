@@ -101,11 +101,25 @@ export interface TestCase {
   [key: string]: any;
 }
 
+/** Inputs and runtime facts behind one Agent 02 generation, used to explain count changes between runs. */
+export interface GenerationMeta {
+  /** Agent 01 input fingerprint ('' for analyses produced before fingerprinting). */
+  requirementsFingerprint: string;
+  analysisFingerprint: string;
+  /** Skill + learnings + memory rules/feedback injected into the prompt. */
+  promptFingerprint: string;
+  excludedTypes: string[];
+  storyCount: number;
+  modelsUsed: string[];
+  attemptsByStory: Record<string, number>;
+}
+
 /** Pipeline artifact persisted by Agent 02 under the "testCases" key. */
 export interface TestCasesArtifact {
   zephyrExport: {
     totalTestCases: number;
     testCases: TestCase[];
+    generationMeta?: GenerationMeta;
   };
 }
 
@@ -131,6 +145,45 @@ export function setTestCaseSelected(tc: Partial<TestCase>, selected: boolean): v
   tc.selected = selected;
   delete tc.isObsolete;
   if (tc.status === LEGACY_OBSOLETE_STATUS) delete tc.status;
+}
+
+/** @enum {string} Agent 03 review outcome of a test case. */
+export const REVIEW_STATUS = Object.freeze({
+  PASSED: 'PASSED',
+  FLAGGED: 'FLAGGED',
+  /** Set by the Agent 03 UI when a reviewer rewrote steps. */
+  REWRITTEN: 'REWRITTEN',
+  REJECTED: 'REJECTED',
+  /** Not automatable until open clarifications are answered. */
+  HELD: 'HELD',
+  MANUAL: 'MANUAL',
+  EXCLUDED: 'EXCLUDED',
+} as const);
+
+const AUTOMATABLE_REVIEW_STATUSES: ReadonlySet<string> = new Set([REVIEW_STATUS.PASSED, REVIEW_STATUS.FLAGGED, REVIEW_STATUS.REWRITTEN]);
+
+/**
+ * Whether a reviewed test case may proceed to test data and automation: selected, and passed (or flagged) in review.
+ * Held, manual, rejected and excluded test cases never proceed, even with automatic approval.
+ * @param {Partial<TestCase> | null | undefined} tc
+ * @returns {boolean}
+ */
+export function isAutomationApproved(tc: Partial<TestCase> | null | undefined): boolean {
+  return isTestCaseSelected(tc) && AUTOMATABLE_REVIEW_STATUSES.has(String(tc!.reviewStatus || REVIEW_STATUS.PASSED));
+}
+
+/**
+ * Why a reviewed test case does not proceed to automation.
+ * @param {Partial<TestCase> | null | undefined} tc
+ * @returns {string}
+ */
+export function reviewExclusionReason(tc: Partial<TestCase> | null | undefined): string {
+  switch (tc?.reviewStatus) {
+    case REVIEW_STATUS.REJECTED: return 'Rejected in Agent 03 review';
+    case REVIEW_STATUS.HELD: return 'Held in Agent 03 — awaiting clarification';
+    case REVIEW_STATUS.MANUAL: return 'Manual test case';
+    default: return 'Excluded by user selection';
+  }
 }
 
 export interface TestResult {
@@ -268,7 +321,14 @@ export interface AutomationTestCaseResult {
   file?: string;
   testTitle?: string;
   stepAssertions?: Array<{ stepIndex: number; assertions: string[] }>;
-  missing?: Array<{ kind: string; detail: string }>;
+  /** Statements the spec runs in beforeEach before this test's body. */
+  sharedSetup?: string[];
+  /** Assertions whose value came from a discovery-verified state rather than the test case text. */
+  provenance?: Array<{ stepIndex: number; assertion: string; state: string; urlPath: string }>;
+  /** Missing information, with the stage it was asked of and the clarification id once written back. */
+  missing?: Array<{
+    kind: string; detail: string; ruleId?: string; stepIndex?: number; subject?: string; owningStage?: string; clarificationId?: string;
+  }>;
   reason?: string;
 }
 
@@ -283,6 +343,8 @@ export interface PlaywrightScriptsArtifact {
   pageMapFiles: string[];
   testCases: AutomationTestCaseResult[];
   warnings: string[];
+  /** Clarifications written back for NEEDS_CONTEXT gaps (environment issues counted once per project). */
+  clarifications?: { raised: number; environment: number; resolved: number };
 }
 
 export interface PipelineArtifacts {

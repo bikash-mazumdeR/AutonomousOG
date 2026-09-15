@@ -17,7 +17,12 @@ import { memoryEngine } from '../../core/project-memory/MemoryEngine';
 import { approvalGate } from '../../core/approval-gate/ApprovalGate';
 import { Logger } from '../../core/logger/Logger';
 import { FRAMEWORK_CONFIG } from '../../config/framework.config';
-import { isTestCaseSelected } from '../../core/types';
+import { isAutomationApproved, isTestCaseSelected, REVIEW_STATUS } from '../../core/types';
+import { ClarificationStore } from '../../core/clarifications/ClarificationStore';
+import { loadAutProfile } from '../../core/aut/AutProfile';
+import { applyClarificationAnswers } from './readiness/applyAnswers';
+import { holdUnreadyTestCases } from './readiness/holdReview';
+import { collectOpenClarifications, describeOpenClarifications } from './readiness/reviewReadiness';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -173,6 +178,10 @@ class TestCaseReviewerAgent {
         removed: selectedTCs.length - dedupedTCs.length,
       });
 
+      // ── Phase 1b: Apply answers to earlier clarifications ─────────────
+      const store = await this._clarificationStore();
+      const appliedAnswers = applyClarificationAnswers(dedupedTCs, store);
+
       // ── Phase 2: Per-TC Multi-Dimensional Review ───────────────────────
       const reviewedTCs = dedupedTCs.map((tc: any) => this._reviewSingleTC(tc, analysis));
 
@@ -194,6 +203,12 @@ class TestCaseReviewerAgent {
 
       // ── Phase 7: Apply Improvement Rules from Memory ──────────────────
       this._applyMemoryImprovements(reviewedTCs, memoryContext.improvementRules);
+
+      // ── Phase 7b: Automation Readiness — hold and ask (after every status change above) ──
+      const hold = holdUnreadyTestCases(reviewedTCs, store, { thresholdEnv: this._thresholdEnv() });
+      this._logger.info('Automation readiness evaluated', {
+        held: hold.held.length, manual: hold.manual.length, appliedAnswers: appliedAnswers.length,
+      });
 
       // ── Phase 8: Calculate Quality Score ──────────────────────────────
       const qualityScore = this._calculateQualityScore(reviewedTCs, coverageMatrix);
@@ -241,6 +256,7 @@ class TestCaseReviewerAgent {
         summary: this._buildApprovalSummary(output),
         fullOutput: output,
         warnings,
+        clarifications: describeOpenClarifications(output.openClarifications),
       });
 
       agentResult.approvalStatus = gateResult.status;
@@ -444,18 +460,16 @@ class TestCaseReviewerAgent {
       if (tc.reviewStatus !== 'REJECTED') tc.reviewStatus = 'FLAGGED';
     }
 
-    // Precondition check
+    // Precondition check — never defaulted; the readiness hold asks for it
     if (!tc.precondition || tc.precondition.includes('undefined')) {
       this._addAnnotation(
         tc.key,
         REVIEW_DIMENSION.COMPLETENESS,
         SEVERITY.MINOR,
         'Precondition is missing or contains "undefined".',
-        REVIEW_ACTION.REWRITTEN,
-        'Specify the system state required before this test begins.',
+        REVIEW_ACTION.FLAGGED,
+        'Answer the clarification question with the state required before this test begins.',
       );
-      tc.precondition = 'Application is running and accessible. User with appropriate role is available.';
-      tc.rewrittenSteps = (tc.rewrittenSteps || 0) + 1;
     }
 
     // Minimum steps check
@@ -480,11 +494,10 @@ class TestCaseReviewerAgent {
             REVIEW_DIMENSION.COMPLETENESS,
             SEVERITY.MAJOR,
             `Step ${idx + 1} has no expected result.`,
-            REVIEW_ACTION.REWRITTEN,
-            'Every step must have a measurable expected result.',
+            REVIEW_ACTION.FLAGGED,
+            'Every step must have a measurable expected result; answer the clarification question.',
           );
-          tc.testSteps[idx].expectedResult = '[REQUIRES CLARIFICATION — expected result not specified]';
-          tc.rewrittenSteps = (tc.rewrittenSteps || 0) + 1;
+          if (tc.reviewStatus !== 'REJECTED') tc.reviewStatus = 'FLAGGED';
         }
       });
     }
@@ -529,17 +542,16 @@ class TestCaseReviewerAgent {
       const score = this._scoreStep(step);
 
       if (score <= 2) {
-        const rewritten = this._rewriteStep(step, tc);
         this._addAnnotation(
           tc.key,
           REVIEW_DIMENSION.STEP_QUALITY,
           SEVERITY.MAJOR,
-          `Step ${idx + 1} quality score: ${score}/5 — "${step.description.slice(0, 60)}"`,
-          REVIEW_ACTION.REWRITTEN,
-          `Rewritten as: "${rewritten.description.slice(0, 60)}"`,
+          `Step ${idx + 1} quality score: ${score}/5 — "${String(step.description || '').slice(0, 60)}"`,
+          REVIEW_ACTION.FLAGGED,
+          'State the exact action, its test data and an observable expected result; unclear steps are held with a question.',
         );
-        tc.rewrittenSteps = (tc.rewrittenSteps || 0) + 1;
-        return { ...rewritten, _rewrittenByReviewer: true };
+        if (tc.reviewStatus !== 'REJECTED') tc.reviewStatus = 'FLAGGED';
+        return step;
       }
 
       if (score === 3) {
@@ -575,25 +587,6 @@ class TestCaseReviewerAgent {
     if (step.testData === undefined || step.testData === null) score -= 1;
 
     return Math.max(1, score);
-  }
-
-  /**
-   * Rewrites a low-quality step.
-   * @private
-   */
-  _rewriteStep(step, tc) {
-    const action = step.description || 'Perform the required action';
-    const data = step.testData || '{{testData}}';
-    const expected = step.expectedResult || 'Expected outcome is achieved without errors';
-
-    return {
-      ...step,
-      description: `[REWRITTEN-BY-AGENT-03] ${action.replace(/check if|verify it|make sure/gi, 'Confirm that')}`,
-      testData: data || 'N/A',
-      expectedResult: expected.length < 10
-        ? `Action completes successfully. System response is as designed for: ${tc.objective?.slice(0, 60) || 'this test case'}`
-        : expected,
-    };
   }
 
   // ── Dimension 4: Data Placeholder Validation ──────────────────────────────
@@ -766,10 +759,9 @@ class TestCaseReviewerAgent {
         REVIEW_DIMENSION.API,
         SEVERITY.MAJOR,
         `Invalid HTTP method: "${api.method}"`,
-        REVIEW_ACTION.REWRITTEN,
+        REVIEW_ACTION.FLAGGED,
         `Use one of: ${[...VALID_HTTP_METHODS].join(', ')}`,
       );
-      api.method = 'GET';
     }
 
     // Endpoint check
@@ -791,11 +783,11 @@ class TestCaseReviewerAgent {
         REVIEW_DIMENSION.API,
         SEVERITY.MAJOR,
         'expectedStatusCode is missing or not a number.',
-        REVIEW_ACTION.REWRITTEN,
-        'Set the correct HTTP status code (200, 201, 400, 401, etc.).',
+        REVIEW_ACTION.FLAGGED,
+        'Set the documented HTTP status code.',
       );
-      api.expectedStatusCode = 200;
-    }  }
+    }
+  }
 
   // ── Dimension 7: Performance TC Review ───────────────────────────────────
 
@@ -824,10 +816,9 @@ class TestCaseReviewerAgent {
         REVIEW_DIMENSION.PERFORMANCE,
         SEVERITY.MAJOR,
         `Invalid K6 scenario: "${ref.scenario}"`,
-        REVIEW_ACTION.REWRITTEN,
+        REVIEW_ACTION.FLAGGED,
         `Use one of: ${[...VALID_K6_SCENARIOS].join(', ')}`,
       );
-      ref.scenario = 'load';
     }
 
     // Target endpoint still a placeholder
@@ -1072,14 +1063,15 @@ class TestCaseReviewerAgent {
   _buildOutput({
     originalTCs, selectedTCs, unselectedTCs, reviewedTCs, coverageMatrix, qualityScore, decision, zephyrExport, informationalInsights,
   }: any) {
-    const approvedTCs = reviewedTCs.filter((tc: any) => tc.reviewStatus !== 'REJECTED');
-    const rejectedTCs = reviewedTCs.filter((tc: any) => tc.reviewStatus === 'REJECTED');
+    const keptTCs = reviewedTCs.filter((tc: any) => tc.reviewStatus !== REVIEW_STATUS.REJECTED);
+    const approvedTCs = keptTCs.filter((tc: any) => isAutomationApproved(tc));
+    const rejectedTCs = reviewedTCs.filter((tc: any) => tc.reviewStatus === REVIEW_STATUS.REJECTED);
     const rewrittenTCs = reviewedTCs.filter((tc: any) => tc.rewrittenSteps > 0);
     const blockers = this._annotations.filter((a: any) => a.severity === SEVERITY.BLOCKER);
 
-    // Keep all TCs in reviewedZephyrExport with appropriate status so unselected aren't lost
+    // Keep held, manual and unselected TCs in the export with their status so nothing is lost
     const finalExportTCs = [
-      ...approvedTCs,
+      ...keptTCs,
       ...(unselectedTCs || []).map((t: any) => ({ ...t, reviewStatus: 'EXCLUDED', selected: false })),
     ];
 
@@ -1092,6 +1084,9 @@ class TestCaseReviewerAgent {
       unselectedCount: (unselectedTCs || []).length,
       approvedCount: approvedTCs.length,
       rejectedCount: rejectedTCs.length,
+      heldCount: keptTCs.filter((tc: any) => tc.reviewStatus === REVIEW_STATUS.HELD).length,
+      manualCount: keptTCs.filter((tc: any) => tc.reviewStatus === REVIEW_STATUS.MANUAL).length,
+      openClarifications: collectOpenClarifications(keptTCs),
       rewrittenCount: rewrittenTCs.length,
       duplicatesRemoved: (selectedTCs || []).length - reviewedTCs.length,
       reviewDecision: decision,
@@ -1156,6 +1151,9 @@ class TestCaseReviewerAgent {
       'Excluded / Unselected TCs': output.unselectedCount || 0,
       'Approved TCs': output.approvedCount,
       'Rejected TCs': output.rejectedCount,
+      'Held TCs (awaiting answers)': output.heldCount || 0,
+      'Manual TCs': output.manualCount || 0,
+      'Open Clarifications': (output.openClarifications || []).length,
       'Rewritten TCs': output.rewrittenCount,
       'Duplicates Removed': output.duplicatesRemoved,
       'Blockers Found': output.blockers.length,
@@ -1175,7 +1173,7 @@ class TestCaseReviewerAgent {
       stageName: STAGE_NAME,
       status: STAGE_STATUS.COMPLETED,
       output,
-      clarifications: [],
+      clarifications: describeOpenClarifications(output.openClarifications || []),
       warnings,
       memoryUpdate: {
         qualityGrade: output.qualityScore.grade,
@@ -1186,6 +1184,29 @@ class TestCaseReviewerAgent {
       approvalStatus: 'PENDING',
       approvalComment: '',
     };
+  }
+
+  // ── Clarifications ────────────────────────────────────────────────────────
+
+  /**
+   * Clarification store of the current project and run.
+   * @private
+   */
+  async _clarificationStore() {
+    const { runId } = await stateManager.getFullState();
+    return new ClarificationStore(stateManager.getProjectId(), runId);
+  }
+
+  /**
+   * Performance threshold env var from the AUT profile, when the project has one.
+   * @private
+   */
+  _thresholdEnv() {
+    try {
+      return loadAutProfile(stateManager.getProjectId()).performance?.thresholdEnv;
+    } catch {
+      return undefined;
+    }
   }
 
   // ── Annotation Helper ─────────────────────────────────────────────────────

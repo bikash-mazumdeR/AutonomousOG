@@ -1,5 +1,5 @@
 /**
- * @fileoverview Unit tests for Agent 05 routing, chunking, JSON parsing, prompt assembly and construction.
+ * @fileoverview Unit tests for Agent 05 routing, JSON parsing, prompt assembly and construction.
  */
 
 import * as fs from 'fs';
@@ -7,7 +7,6 @@ import * as os from 'os';
 import * as path from 'path';
 import {
   partitionByType,
-  chunkArray,
   parseJsonObject,
   loadGenerationPrompt,
   loadDiscoveryPrompt,
@@ -49,11 +48,6 @@ describe('Agent 05 routing & helpers', () => {
     expect(uiTCs.map((t) => t.key)).toEqual(['TC-001', 'TC-002', 'TC-007', 'TC-009']);
     expect(apiTCs.map((t) => t.key)).toEqual(['TC-003', 'TC-004', 'TC-008']);
     expect(perfTCs.map((t) => t.key)).toEqual(['TC-005', 'TC-006']);
-  });
-
-  it('splits items into chunks', () => {
-    expect(chunkArray([1, 2, 3, 4, 5, 6, 7], 3)).toEqual([[1, 2, 3], [4, 5, 6], [7]]);
-    expect(chunkArray([], 3)).toEqual([]);
   });
 
   it('parses the JSON object out of an LLM response and rejects prose', () => {

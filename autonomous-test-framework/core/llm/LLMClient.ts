@@ -8,8 +8,20 @@ import { OpenAIProvider } from './providers/OpenAIProvider';
 import { AnthropicProvider } from './providers/AnthropicProvider';
 import { GeminiProvider } from './providers/GeminiProvider';
 import { LiteLLMProvider } from './providers/LiteLLMProvider';
+import { BedrockProvider } from './providers/BedrockProvider';
 import { TokenUsage } from '../types';
 import axios from 'axios';
+import * as fs from 'fs';
+import * as path from 'path';
+
+const DEFAULT_FALLBACK_PINS_PATH = path.resolve(__dirname, '../../.state/llm-fallback-pins.json');
+const DEFAULT_FALLBACK_PIN_TTL_MS = 30 * 60 * 1000;
+
+/** A fallback model that worked for a stage, persisted so later runs skip exhausted candidates. */
+interface FallbackPin {
+  model: string;
+  pinnedAt: number;
+}
 
 const logger = new Logger('LLMClient');
 
@@ -24,7 +36,12 @@ export class LLMClient {
   /** Tracks the last-known-working candidate index per stageId (sticky fallback). */
   private _activeCandidateIndex: Map<string, number> = new Map();
 
-  constructor() {
+  /** Models that actually served each stage in this process. */
+  private _stageModels: Map<string, Set<string>> = new Map();
+  private _pinsPath: string;
+
+  constructor(options: { fallbackPinsPath?: string } = {}) {
+    this._pinsPath = options.fallbackPinsPath || DEFAULT_FALLBACK_PINS_PATH;
     this._initializeProviders();
   }
 
@@ -42,6 +59,7 @@ export class LLMClient {
       this._providers.set('openai',    proxy);
       this._providers.set('anthropic', proxy);
       this._providers.set('gemini',    proxy);
+      this._providers.set('bedrock',   proxy);
       this._providers.set('litellm',   proxy);
       logger.info('LiteLLM proxy mode active — all chat calls routed through proxy.', { proxyUrl });
       return;
@@ -56,6 +74,9 @@ export class LLMClient {
     }
     if (process.env.GEMINI_API_KEY) {
       this._providers.set('gemini', new GeminiProvider(process.env.GEMINI_API_KEY));
+    }
+    if (process.env.AWS_BEARER_TOKEN_BEDROCK) {
+      this._providers.set('bedrock', new BedrockProvider(process.env.AWS_BEARER_TOKEN_BEDROCK, process.env.AWS_REGION || 'us-east-1'));
     }
   }
 
@@ -130,8 +151,9 @@ export class LLMClient {
 
   private async _chatInternal(stageId: string, payload: any): Promise<LLMClientResponse> {
     const llmConfig = (FRAMEWORK_CONFIG as any).llm;
+    // A per-agent model (stageModels) wins over the shared profile the stage is mapped to
     const modelType = llmConfig.stageMapping[stageId] || 'default';
-    const modelInfo = llmConfig.models[modelType] || llmConfig.models.default;
+    const modelInfo = llmConfig.stageModels?.[stageId] || llmConfig.models[modelType] || llmConfig.models.default;
 
     // Build the full ordered candidate list: [primary, ...fallbacks]
     const candidates: Array<{ provider: string; model: string }> = [
@@ -140,13 +162,18 @@ export class LLMClient {
     ];
 
     // Start from the last-known-working candidate for this stage
-    const startIndex = this._activeCandidateIndex.get(stageId) || 0;
+    const startIndex = this._resolveStartIndex(stageId, candidates);
     let lastError: any;
 
     for (let offset = 0; offset < candidates.length; offset++) {
       const i = (startIndex + offset) % candidates.length;
       const { provider: providerName, model: modelName } = candidates[i];
       const provider = this._providers.get(providerName);
+
+      if (!modelName) {
+        logger.warn(`No model configured for provider "${providerName}" — skipping candidate.`, { stageId });
+        continue;
+      }
 
       if (!provider) {
         logger.warn(`Provider "${providerName}" not configured — skipping candidate "${modelName}".`, { stageId });
@@ -166,6 +193,7 @@ export class LLMClient {
             model: modelName,
             messages: payload.messages,
             temperature: payload.temperature,
+            seed: payload.seed,
             max_tokens: payload.max_tokens,
             json: payload.json,
           });
@@ -177,10 +205,12 @@ export class LLMClient {
           response.usage?.completionTokens || 0
         );
         this._trackUsage(stageId, usage);
+        this._recordServedModel(stageId, modelName, i === 0);
 
         if (offset > 0) {
           // Persist the working index so future calls skip the exhausted primary
           this._activeCandidateIndex.set(stageId, i);
+          this._persistPin(stageId, i === 0 ? null : modelName);
           logger.info(`✅ Fallback model "${modelName}" succeeded — pinning for future calls.`, { stageId, pinnedIndex: i });
         }
 
@@ -205,10 +235,70 @@ export class LLMClient {
   }
 
   /**
-   * Resets the sticky fallback index for a stage (call at stage start).
+   * Resets per-stage fallback state (call at stage start). A persisted pin survives until its TTL
+   * (LLM_FALLBACK_PIN_TTL_MS) expires, so a new run does not re-hit models that were just exhausted.
    */
   resetStageFallback(stageId: string) {
     this._activeCandidateIndex.delete(stageId);
+    this._stageModels.delete(stageId);
+    const pin = this._readPins()[stageId];
+    if (pin && !this._isPinFresh(pin)) this._persistPin(stageId, null);
+  }
+
+  /**
+   * Returns the models that served a stage in this process (primary and/or fallbacks).
+   */
+  getStageModels(stageId: string): string[] {
+    return [...(this._stageModels.get(stageId) || [])];
+  }
+
+  private _recordServedModel(stageId: string, model: string, isPrimary: boolean): void {
+    const models = this._stageModels.get(stageId) || new Set<string>();
+    if (!isPrimary && !models.has(model)) {
+      logger.warn(`Stage "${stageId}" is served by fallback model "${model}", not the primary model.`, { stageId, model });
+    }
+    models.add(model);
+    this._stageModels.set(stageId, models);
+  }
+
+  private _resolveStartIndex(stageId: string, candidates: Array<{ model: string }>): number {
+    const inMemory = this._activeCandidateIndex.get(stageId);
+    if (inMemory !== undefined) return inMemory;
+    const pin = this._readPins()[stageId];
+    if (!pin || !this._isPinFresh(pin)) return 0;
+    const index = candidates.findIndex((candidate) => candidate.model === pin.model);
+    if (index > 0) logger.info(`Starting from fallback model "${pin.model}" pinned by a recent run.`, { stageId });
+    return Math.max(index, 0);
+  }
+
+  private _pinTtlMs(): number {
+    const raw = process.env.LLM_FALLBACK_PIN_TTL_MS;
+    const ttl = raw ? Number(raw) : NaN;
+    return Number.isFinite(ttl) && ttl >= 0 ? ttl : DEFAULT_FALLBACK_PIN_TTL_MS;
+  }
+
+  private _isPinFresh(pin: FallbackPin): boolean {
+    return Date.now() - pin.pinnedAt <= this._pinTtlMs();
+  }
+
+  private _readPins(): Record<string, FallbackPin> {
+    try {
+      return JSON.parse(fs.readFileSync(this._pinsPath, 'utf-8'));
+    } catch {
+      return {};
+    }
+  }
+
+  private _persistPin(stageId: string, model: string | null): void {
+    const pins = this._readPins();
+    if (model) pins[stageId] = { model, pinnedAt: Date.now() };
+    else delete pins[stageId];
+    try {
+      fs.mkdirSync(path.dirname(this._pinsPath), { recursive: true });
+      fs.writeFileSync(this._pinsPath, JSON.stringify(pins, null, 2), 'utf-8');
+    } catch (err: any) {
+      logger.warn('Could not persist LLM fallback pin', { stageId, error: err.message });
+    }
   }
 
   /**

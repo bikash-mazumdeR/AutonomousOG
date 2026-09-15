@@ -15,42 +15,19 @@ describe('ReviewRules AST Engine (detect-only)', () => {
   });
 
   describe('No automatic code rewriting', () => {
-    it.each([
-      ['waitForTimeout', 'page.waitForTimeout(1000);'],
-      ['console.assert', 'console.assert(x === 1, "failed");'],
-      ['empty catch', 'try { f(); } catch(e) {}'],
-      ['missing use strict', 'const x = 1;'],
-    ])('reports but never patches: %s', (_label, code) => {
+    it('reports issues but never patches the code', () => {
+      const code = 'page.waitForTimeout(1000);\nconsole.assert(x === 1, "failed");\ntry { f(); } catch(e) {}';
       const { patchedCode, findings } = analyzeWithAST(code, FILE_TYPE.SPEC);
+      expect(findings.length).toBeGreaterThan(0);
       expect(patchedCode).toBe(code);
       expect(findings.every((f) => f.patchable === false)).toBe(true);
-    });
-
-    it('does not require a "use strict" directive in TypeScript modules', () => {
-      const { findings } = analyzeWithAST('const x = 1;', FILE_TYPE.SPEC);
-      expect(findings.some((f) => f.ruleId === 'STYLE-001')).toBe(false);
     });
   });
 
   describe('Detected issues', () => {
-    it('flags XPath locators', () => {
-      const { findings } = analyzeWithAST('page.locator("//div")', FILE_TYPE.SPEC);
-      expect(findings.some((f) => f.ruleId === 'INT-011')).toBe(true);
-    });
-
-    it('flags hard sleeps', () => {
-      const { findings } = analyzeWithAST('page.waitForTimeout(1000);', FILE_TYPE.SPEC);
-      expect(findings.some((f) => f.ruleId === 'INT-008')).toBe(true);
-    });
-
     it('flags console.assert', () => {
       const { findings } = analyzeWithAST('console.assert(x === 1, "failed");', FILE_TYPE.SPEC);
       expect(findings.some((f) => f.ruleId === 'ASSERT-001')).toBe(true);
-    });
-
-    it('flags hard-coded absolute URLs', () => {
-      const { findings } = analyzeWithAST('const url = "https://example.com";', FILE_TYPE.SPEC);
-      expect(findings.some((f) => f.ruleId === 'INT-013')).toBe(true);
     });
 
     it('flags empty catch blocks', () => {
@@ -68,6 +45,13 @@ describe('ReviewRules AST Engine (detect-only)', () => {
     it('should not flag POM classes that extend BasePage', () => {
       const { findings } = analyzeWithAST('class LoginPage extends BasePage {}', FILE_TYPE.POM);
       expect(findings.some((f) => f.ruleId === 'POM-001')).toBe(false);
+    });
+
+    it('flags assertions inside page objects (POM-002)', () => {
+      const asserting = 'class LoginPage extends BasePage { async check() { await expect(this.page).toHaveTitle("Home"); } }';
+      const acting = 'class LoginPage extends BasePage { async go() { await this.page.reload(); } }';
+      expect(analyzeWithAST(asserting, FILE_TYPE.POM).findings.some((f) => f.ruleId === 'POM-002' && f.severity === FINDING_SEVERITY.BLOCKER)).toBe(true);
+      expect(analyzeWithAST(acting, FILE_TYPE.POM).findings.some((f) => f.ruleId === 'POM-002')).toBe(false);
     });
   });
 

@@ -15,7 +15,9 @@ const GENERIC_LAYERS = [
   'core/aut',
   'core/state-manager/FixtureSync.ts',
   'core/state-manager/TestDataFreshness.ts',
-  'agents/04-test-data-generator/placeholderIntent.ts',
+  'agents/04-test-data-generator',
+  'skills/test-data-generation.md',
+  'ui/agent04DataRoutes.ts',
   'tests/pages/BasePage.ts',
   'tests/helpers/env.ts',
   'playwright.config.ts',
@@ -24,6 +26,12 @@ const GENERIC_LAYERS = [
   'skills/ui-scripting.md',
   'skills/api-scripting.md',
   'skills/k6-scripting.md',
+  'skills/code-review.md',
+  'agents/06-automation-reviewer',
+  'agents/03-test-case-reviewer/readiness',
+  'ui/agent03ReviewRoutes.ts',
+  'core/readiness',
+  'core/clarifications',
 ];
 
 const ABSOLUTE_HOST = /https?:\/\/(?!localhost|127\.0\.0\.1|playwright\.dev)[a-z0-9-]+(\.[a-z0-9-]+)+/i;

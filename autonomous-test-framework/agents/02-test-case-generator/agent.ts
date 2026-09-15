@@ -20,7 +20,7 @@ import { approvalGate } from '../../core/approval-gate/ApprovalGate';
 import { Logger } from '../../core/logger/Logger';
 import { FRAMEWORK_CONFIG } from '../../config/framework.config';
 import { llmClient } from '../../core/llm/LLMClient';
-import { TestCase, TestCasesArtifact } from '../../core/types';
+import { TestCase, TestCasesArtifact, GenerationMeta } from '../../core/types';
 
 import {
   STAGE_ID, STAGE_NAME, STAGE_NUMBER, NEXT_STAGE, SKILL_PATH, LEARNINGS_PATH, LLM_SETTINGS, SKIP_OPTIONS, TC_TYPE,
@@ -31,6 +31,7 @@ import {
   buildTestCases, buildCoverageWarnings, computeRequirementCoverage, RequirementCoverage,
 } from './builders/testCaseBuilder';
 import { syncFeatureFiles } from './utils';
+import { buildGenerationMeta, describeInputChanges, formatInputChanges } from './generation/generationMeta';
 
 /** Agent input. */
 export interface TestCaseGeneratorInput {
@@ -43,6 +44,9 @@ interface GenerationSummary {
   warnings: string[];
   clarifications: string[];
   coverage: RequirementCoverage;
+  meta: GenerationMeta;
+  /** Inputs changed since the previous generation; null when there is nothing to compare. */
+  inputChanges: string[] | null;
 }
 
 /**
@@ -54,7 +58,8 @@ export function resolveExcludedTypeTags(opts: Record<string, unknown> = {}): Rea
   return new Set(Object.entries(SKIP_OPTIONS).filter(([flag]) => Boolean(opts[flag])).map(([, tag]) => tag));
 }
 
-function buildApprovalSummary(testCases: TestCase[], coverage: RequirementCoverage, featureFilePaths: string[]) {
+function buildApprovalSummary(testCases: TestCase[], generation: GenerationSummary, featureFilePaths: string[]) {
+  const { coverage, meta } = generation;
   const count = (type: string) => testCases.filter((tc) => tc.type === type).length;
   return {
     'Total Test Cases': testCases.length,
@@ -66,6 +71,9 @@ function buildApprovalSummary(testCases: TestCase[], coverage: RequirementCovera
     'Acceptance Criteria Covered': `${coverage.acceptanceCriteria.covered}/${coverage.acceptanceCriteria.total}`,
     'Business Rules Covered': `${coverage.businessRules.covered}/${coverage.businessRules.total}`,
     'Feature Files Synced': featureFilePaths.length,
+    'Skipped Types': meta.excludedTypes.join(', ') || 'none',
+    'Models Used': meta.modelsUsed.join(', ') || 'unknown',
+    'Changed Since Last Run': formatInputChanges(generation.inputChanges),
     Format: 'Gherkin BDD Feature Files',
   };
 }
@@ -99,11 +107,16 @@ export class TestCaseGeneratorAgent {
     try {
       const memoryContext = await memoryEngine.getContextForStage(STAGE_ID);
       await stateManager.markStageRunning(STAGE_ID);
-      llmClient.resetStageFallback(STAGE_ID);
+      const previous = (await stateManager.getLatestArtifactForProject('testCases'))?.zephyrExport;
 
       const generation = await this._generate(input, memoryContext);
+      generation.inputChanges = describeInputChanges(previous?.generationMeta, generation.meta);
+      if (generation.inputChanges?.length === 0 && previous.totalTestCases !== generation.testCases.length) {
+        generation.warnings.push(`Inputs are identical to the previous generation but the test case count changed `
+          + `(${previous.totalTestCases} → ${generation.testCases.length}) — LLM output drift`);
+      }
       const output: TestCasesArtifact = {
-        zephyrExport: { totalTestCases: generation.testCases.length, testCases: generation.testCases },
+        zephyrExport: { totalTestCases: generation.testCases.length, testCases: generation.testCases, generationMeta: generation.meta },
       };
       const featureFilePaths = syncFeatureFiles(input.analyzedRequirements, generation.testCases, this._logger);
 
@@ -113,7 +126,9 @@ export class TestCaseGeneratorAgent {
       this._saveToDisk(output);
 
       const durationMs = Date.now() - startMs;
-      this._logger.stage('COMPLETE', STAGE_ID, { totalTCs: generation.testCases.length, durationMs });
+      this._logger.stage('COMPLETE', STAGE_ID, {
+        totalTCs: generation.testCases.length, durationMs, modelsUsed: generation.meta.modelsUsed, inputChanges: generation.inputChanges,
+      });
       return await this._awaitApproval(output, generation, featureFilePaths, usage, durationMs);
     } catch (error: any) {
       this._logger.error('Agent execution failed', { error: error.message });
@@ -136,8 +151,19 @@ export class TestCaseGeneratorAgent {
 
     const outcomes = await this._generateStories(normalized, excludedTypeTags, memoryContext);
     const testCases = buildTestCases(outcomes);
+    const meta = buildGenerationMeta({
+      analyzedRequirements: input.analyzedRequirements,
+      normalized,
+      excludedTypeTags,
+      systemPrompt: this._skill,
+      memoryContext,
+      outcomes,
+      modelsUsed: llmClient.getStageModels(STAGE_ID),
+    });
     return {
       testCases,
+      meta,
+      inputChanges: null,
       warnings: [
         ...normalized.warnings,
         ...outcomes.flatMap((outcome) => outcome.warnings),
@@ -179,6 +205,7 @@ export class TestCaseGeneratorAgent {
     const response = await llmClient.chat(STAGE_ID, {
       messages,
       temperature: LLM_SETTINGS.TEMPERATURE,
+      seed: LLM_SETTINGS.SEED,
       max_tokens: LLM_SETTINGS.MAX_TOKENS,
     });
     return response.text || '';
@@ -199,7 +226,7 @@ export class TestCaseGeneratorAgent {
       stageId: STAGE_ID,
       stageName: STAGE_NAME,
       nextStageName: NEXT_STAGE,
-      summary: buildApprovalSummary(testCases, generation.coverage, featureFilePaths),
+      summary: buildApprovalSummary(testCases, generation, featureFilePaths),
       fullOutput: output.zephyrExport,
       warnings: generation.warnings,
       clarifications: generation.clarifications,

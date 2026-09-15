@@ -4,6 +4,7 @@
 - The body runs inside `async ({ page, featurePage, data, browser }) => { … }`.
 - `featurePage` is the verified page object described by `pageContract`; use only its members.
 - Start each test by navigating with the page-object `open<State>()` method that matches the test case's first step.
+  Do this in every test, even if every test starts the same way.
 - Steps that explicitly require simultaneous sessions: create separate contexts with `browser.newContext()`,
   build page objects with `new <pageContract.pageObject>(await context.newPage())`, act with `Promise.all`,
   and close the contexts at the end.

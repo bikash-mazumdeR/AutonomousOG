@@ -4,6 +4,8 @@
 
 import {
   RUNTIME_SENTINEL,
+  VALUE_CLASS,
+  classifyPlaceholder,
   deriveGenericValue,
   isSensitivePlaceholder,
   resolveByIntent,
@@ -24,7 +26,7 @@ describe('Agent 04 placeholder intent', () => {
     expect(deriveGenericValue('validMandatoryInputs', generic)).toBeNull();
     expect(deriveGenericValue('invalidUsername', generic)).toBeNull();
     expect(deriveGenericValue('userId', generic)).toBe('aria_id_ab12cd34');
-    expect(deriveGenericValue('userRole', generic)).toBe('admin');
+    expect(deriveGenericValue('userRole', generic)).toBeNull();
     expect(deriveGenericValue('resetToken', generic)).toBe(RUNTIME_SENTINEL);
   });
 
@@ -49,5 +51,19 @@ describe('Agent 04 placeholder intent', () => {
     expect(isSensitivePlaceholder('invalidPassword')).toBe(false);
     expect(isSensitivePlaceholder('anyPassword')).toBe(false);
     expect(isSensitivePlaceholder('authorName')).toBe(false);
+    expect(isSensitivePlaceholder('expiredJwtToken')).toBe(false);
+  });
+
+  it('classifies whether a value must match the application, is a runtime secret, or may be generated', () => {
+    const cases: Array<[string, string]> = [
+      ['validPassword', VALUE_CLASS.RUNTIME], ['lockedOutUsername', VALUE_CLASS.RUNTIME], ['authToken', VALUE_CLASS.RUNTIME],
+      ['lockedOutUser', VALUE_CLASS.RUNTIME], ['adminAccount', VALUE_CLASS.RUNTIME], ['invalidUser', VALUE_CLASS.GENERATABLE],
+      ['errorUser', VALUE_CLASS.RUNTIME], ['userErrorMessage', VALUE_CLASS.GROUNDED],
+      ['invalidPassword', VALUE_CLASS.GENERATABLE], ['expiredJwtToken', VALUE_CLASS.GENERATABLE], ['firstName', VALUE_CLASS.GENERATABLE],
+      ['validEmail', VALUE_CLASS.GENERATABLE], ['longString', VALUE_CLASS.GENERATABLE],
+      ['existingEmail', VALUE_CLASS.GROUNDED], ['productName', VALUE_CLASS.GROUNDED], ['wrongPasswordErrorMessage', VALUE_CLASS.GROUNDED],
+      ['usernameMaxLength', VALUE_CLASS.GROUNDED], ['validBaseURL', VALUE_CLASS.GROUNDED], ['userRole', VALUE_CLASS.GROUNDED],
+    ];
+    expect(cases.map(([key]) => [key, classifyPlaceholder(key)])).toEqual(cases);
   });
 });

@@ -10,7 +10,7 @@
  * @module TestDataFreshness
  */
 
-import { isTestCaseSelected } from '../types';
+import { isAutomationApproved } from '../types';
 
 export const TEST_DATA_STAGE_ID = '04-test-data-generator';
 
@@ -35,14 +35,14 @@ export interface LoadedTestData {
 }
 
 /**
- * Keys of the test cases Agent 04 generates data for (not rejected, still selected).
+ * Keys of the test cases Agent 04 generates data for (selected and approved for automation; not held, manual or rejected).
  * @param {any} reviewedTestCases - Agent 03 artifact
  * @returns {string[]}
  */
 export function approvedTestCaseKeys(reviewedTestCases: any): string[] {
   const testCases: any[] = reviewedTestCases?.reviewedZephyrExport?.testCases || [];
   return testCases
-    .filter((tc) => tc.reviewStatus !== 'REJECTED' && isTestCaseSelected(tc))
+    .filter((tc) => isAutomationApproved(tc))
     .map((tc) => String(tc.key));
 }
 

@@ -12,7 +12,8 @@
   },
   "auth": {
     "strategy": "form",
-    "loginStateDescription": "Credentials are entered on the login form as part of each test case; there is no session token to reuse across tests."
+    "loginStateDescription": "Credentials are entered on the login form as part of each test case; there is no session token to reuse across tests.",
+    "credentialStorage": "fixture"
   },
   "secretsEnvVars": [],
   "couplingGuardTokens": [

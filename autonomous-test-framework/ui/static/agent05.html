@@ -647,6 +647,7 @@
     }
     .toast.show { opacity: 1; transform: translateY(0); }
   </style>
+  <script src="/pipeline-nav.js"></script>
 </head>
 <body>
 
@@ -1002,49 +1003,9 @@
     }
 
     // ── Pipeline Bar Definition (11 Agents) ───────────────────────────────────
-    const PIPELINE_STAGES = [
-      { num: '01', name: 'Requirement Analyzer' },
-      { num: '02', name: 'Test Case Generator' },
-      { num: '03', name: 'Test Case Reviewer' },
-      { num: '04', name: 'Test Data Generator' },
-      { num: '05', name: 'Script Generator' },
-      { num: '06', name: 'Script Reviewer' },
-      { num: '07', name: 'Test Runner' },
-      { num: '08', name: 'Bug Reporter' },
-      { num: '09', name: 'Report Generator' },
-      { num: '10', name: 'Auto Healer' },
-      { num: '11', name: 'Retest Agent' },
-    ];
-
     function renderPipelineBar() {
-      const container = document.getElementById('pipelineBar');
-      container.innerHTML = '';
-
-      PIPELINE_STAGES.forEach((st, idx) => {
-        const node = document.createElement('div');
-        node.className = 'step-node';
-        const numInt = parseInt(st.num, 10);
-
-        if (numInt < 5) {
-          node.classList.add('done');
-          node.innerHTML = '✓';
-          node.title = `Stage ${st.num}: ${st.name} (Completed)`;
-        } else if (numInt === 5) {
-          node.classList.add('active');
-          node.innerHTML = st.num;
-          node.title = `Stage ${st.num}: ${st.name} (Active)`;
-        } else {
-          node.innerHTML = st.num;
-          node.title = `Stage ${st.num}: ${st.name}`;
-        }
-        container.appendChild(node);
-
-        if (idx < PIPELINE_STAGES.length - 1) {
-          const connector = document.createElement('div');
-          connector.className = 'step-connector' + (numInt < 5 ? ' done' : '');
-          container.appendChild(connector);
-        }
-      });
+      // Shared bar: completed stages can be revisited
+      AriaPipelineNav.start(5);
     }
 
     // ── Toast Utility ─────────────────────────────────────────────────────────

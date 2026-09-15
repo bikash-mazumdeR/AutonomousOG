@@ -478,9 +478,8 @@ export class MemoryEngine {
       rejectionFeedback: (memory.globalLearnings.approvalFeedback as any[])
         .filter((f) => f.stageId === stageId && f.status === 'REJECTED')
         .slice(-20),
-      resolvedClarifications: (memory.globalLearnings.resolvedClarifications as any[])
-        .filter((c) => c.stageId === stageId)
-        .slice(-50),
+      // Answers are shared: a detail clarified for one stage is valid for every stage.
+      resolvedClarifications: (memory.globalLearnings.resolvedClarifications as any[]).slice(-50),
       healingStrategies: (memory.globalLearnings.healingStrategies as any[]).slice(0, 20),
       lastCycle: memory.cycles[0] || null,
       metrics: memory.metrics,

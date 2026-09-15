@@ -10,13 +10,15 @@
 
 import { DISCOVERY_SETTINGS } from '../constants';
 import { ChatFn } from '../types';
-import { AutomationTestCase, MissingItem } from '../contracts/automationTestCase';
+import { AutomationTestCase } from '../contracts/automationTestCase';
+import { MissingItem } from '../../../core/readiness/readinessTypes';
 import { ResolvedAutProfile } from '../../../core/aut/AutProfile';
 import { parseJsonObject } from '../sub-agents/shared/generation-utils';
 import { DiscoverySession } from './domDiscovery';
 import {
-  PageMap, PageState, emptyPageMap, loadPageMap, savePageMap, mergeState, locatorSignature,
+  PageMap, PageState, TestCaseTrace, TraceAction, emptyPageMap, loadPageMap, savePageMap, mergeState, locatorSignature,
 } from './pageMap';
+import { extractFlows } from './flowExtractor';
 import {
   NavigationPlan, PlannedAction, PAGE_OPERATIONS, buildPlannerRequest, validateNavigationPlan, resolveActionValue,
 } from './navigationPlanner';
@@ -80,25 +82,61 @@ async function requestPlan(
   return { error: errors.join('; ') };
 }
 
-async function executePlan(session: DiscoverySession, plan: NavigationPlan, current: PageState, tc: AutomationTestCase, params: DiscoverFeatureParams): Promise<MissingItem | null> {
+async function executePlan(
+  session: DiscoverySession,
+  plan: NavigationPlan,
+  current: PageState,
+  tc: AutomationTestCase,
+  params: DiscoverFeatureParams,
+): Promise<{ missing?: MissingItem; performed: TraceAction[] }> {
+  const performed: TraceAction[] = [];
   for (const action of plan.actions) {
     if (PAGE_OPERATIONS.includes(action.op)) {
       // eslint-disable-next-line no-await-in-loop -- actions must run in order against the live page
       await session.performPage(action.op);
+      performed.push({ stepIndex: action.stepIndex, state: current.name, op: action.op });
       continue;
     }
     const element = current.elements.find((e) => e.name === action.element);
-    if (!element) return { kind: 'LOCATOR', detail: `Element ${action.element} is not present in state ${current.name}.` };
+    if (!element) return { missing: { kind: 'LOCATOR', detail: `Element ${action.element} is not present in state ${current.name}.` }, performed };
     const resolved = resolveActionValue(action, tc, params.fixtureValues);
-    if (resolved.missing) return resolved.missing;
+    if (resolved.missing) return { missing: resolved.missing, performed };
     // eslint-disable-next-line no-await-in-loop -- actions must run in order against the live page
     await session.perform(element, action.op, resolved.value);
+    performed.push({
+      stepIndex: action.stepIndex, state: current.name, element: element.name, op: action.op, value: action.value,
+    });
   }
-  return null;
+  return { performed };
 }
 
-async function crawlTestCase(session: DiscoverySession, map: PageMap, tc: AutomationTestCase, params: DiscoverFeatureParams): Promise<MissingItem | null> {
+/** Records the actions a plan performed and the state reached after each step it covered. */
+function recordPlan(
+  trace: TestCaseTrace,
+  tc: AutomationTestCase,
+  step: { plan: NavigationPlan; fromStep: number; before: string; after: string; performed: TraceAction[] },
+): void {
+  const {
+    plan, fromStep, before, after, performed,
+  } = step;
+  if (performed.length > 0) trace.runs.push({ state: before, actions: performed, reachedState: after });
+  const lastStep = Math.max(...tc.steps.map((s) => s.index));
+  const lastCovered = plan.stopReason === 'COMPLETE' ? lastStep : (plan.nextStep ?? fromStep) - 1;
+  const lastActionStep = performed.length > 0 ? performed[performed.length - 1].stepIndex : undefined;
+  for (let index = fromStep; index <= lastCovered; index += 1) {
+    trace.stateAfterStep[index] = lastActionStep !== undefined && index < lastActionStep ? before : after;
+  }
+}
+
+async function crawlTestCase(
+  session: DiscoverySession,
+  map: PageMap,
+  tc: AutomationTestCase,
+  params: DiscoverFeatureParams,
+): Promise<{ missing: MissingItem | null; trace: TestCaseTrace }> {
   const { discovery } = params.profile;
+  const trace: TestCaseTrace = { tcKey: tc.tcKey, runs: [], stateAfterStep: {} };
+  const fail = (missing: MissingItem) => ({ missing, trace });
   try {
     await session.reset();
     const entryPath = discovery.entryPaths[0];
@@ -109,25 +147,29 @@ async function crawlTestCase(session: DiscoverySession, map: PageMap, tc: Automa
     for (let depth = 0; depth <= discovery.maxDepth; depth += 1) {
       // eslint-disable-next-line no-await-in-loop -- each state depends on the previous one
       const { plan, error } = await requestPlan(params, tc, map, current, fromStep, executed);
-      if (!plan) return { kind: 'STATE', detail: `No valid navigation plan from verified elements: ${error}` };
+      if (!plan) return fail({ kind: 'STATE', detail: `No valid navigation plan from verified elements: ${error}` });
       // eslint-disable-next-line no-await-in-loop
-      const failure = await executePlan(session, plan, current, tc, params);
-      if (failure) return failure;
+      const { missing, performed } = await executePlan(session, plan, current, tc, params);
+      if (missing) return fail(missing);
       executed.push(...plan.actions);
+      const before = current.name;
       // eslint-disable-next-line no-await-in-loop
       current = await captureAndMerge(session, map);
-      if (plan.stopReason === 'COMPLETE') return null;
+      recordPlan(trace, tc, {
+        plan, fromStep, before, after: current.name, performed,
+      });
+      if (plan.stopReason === 'COMPLETE') return { missing: null, trace };
       if (plan.stopReason === 'NOT_ACHIEVABLE') {
-        return { kind: 'STATE', detail: `Step ${plan.nextStep ?? fromStep}: ${plan.detail || 'not achievable with verified elements'}` };
+        return fail({ kind: 'STATE', detail: `Step ${plan.nextStep ?? fromStep}: ${plan.detail || 'not achievable with verified elements'}` });
       }
       if (plan.actions.length === 0 || (plan.nextStep as number) < fromStep) {
-        return { kind: 'STATE', detail: `Discovery made no progress at step ${fromStep}: ${plan.detail || 'required element not present'}` };
+        return fail({ kind: 'STATE', detail: `Discovery made no progress at step ${fromStep}: ${plan.detail || 'required element not present'}` });
       }
       fromStep = plan.nextStep as number;
     }
-    return { kind: 'STATE', detail: `Required state not reached within discovery.maxDepth=${discovery.maxDepth}.` };
+    return fail({ kind: 'STATE', detail: `Required state not reached within discovery.maxDepth=${discovery.maxDepth}.` });
   } catch (err: any) {
-    return { kind: 'STATE', detail: `Discovery could not execute the test steps: ${err.message}` };
+    return fail({ kind: 'STATE', detail: `Discovery could not execute the test steps: ${err.message}` });
   }
 }
 
@@ -141,6 +183,7 @@ export async function discoverFeature(params: DiscoverFeatureParams): Promise<Di
   const pageMap = loadPageMap(params.pageMapFile, profile.testIdAttribute) || emptyPageMap(params.featureId, profile.testIdAttribute);
   const issues = new Map<string, MissingItem[]>();
   const addIssue = (tcKey: string, item: MissingItem) => issues.set(tcKey, [...(issues.get(tcKey) || []), item]);
+  const traces: TestCaseTrace[] = [];
   if (!profile.baseURL) {
     params.testCases.forEach((tc) => addIssue(tc.tcKey, { kind: 'AUT_UNREACHABLE', detail: `Environment variable ${profile.baseUrlEnv} is not set.` }));
     return { pageMap, issues };
@@ -163,8 +206,9 @@ export async function discoverFeature(params: DiscoverFeatureParams): Promise<Di
     if (profile.discovery.executeTestSteps) {
       for (const tc of params.testCases) {
         // eslint-disable-next-line no-await-in-loop -- test cases share one browser, run sequentially
-        const issue = await crawlTestCase(session, pageMap, tc, params);
-        if (issue) addIssue(tc.tcKey, issue);
+        const { missing, trace } = await crawlTestCase(session, pageMap, tc, params);
+        if (missing) addIssue(tc.tcKey, missing);
+        else traces.push(trace);
       }
     }
   } catch (err: any) {
@@ -176,6 +220,8 @@ export async function discoverFeature(params: DiscoverFeatureParams): Promise<Di
     await session?.close();
   }
 
+  pageMap.traces = traces;
+  pageMap.flows = extractFlows(pageMap);
   savePageMap(params.pageMapFile, pageMap);
   return { pageMap, issues };
 }

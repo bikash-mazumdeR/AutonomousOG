@@ -1,11 +1,12 @@
 /**
  * @fileoverview Agent 04 — Test Data Generator.
- * Resolves every {{placeholder}} in the reviewed test suite into concrete,
- * realistic, environment-aware test data values. Produces a TestDataManifest
- * consumed by Agents 05 and 07.
+ * Resolves every {{placeholder}} in the approved test cases under an application-agnostic value policy
+ * (valuePolicy.ts): values that must match the application come only from human answers, the requirement or the
+ * AUT profile; credentials and secrets are environment variable references; only synthetic inputs are generated.
+ * Whatever stays unresolved is asked as a clarification. Produces a TestDataManifest consumed by Agents 05 and 07.
  *
  * @module TestDataGeneratorAgent
- * @version 1.0.0
+ * @version 2.0.0
  */
 
 import path from 'path';
@@ -17,107 +18,35 @@ import { memoryEngine } from '../../core/project-memory/MemoryEngine';
 import { approvalGate } from '../../core/approval-gate/ApprovalGate';
 import { Logger } from '../../core/logger/Logger';
 import { FRAMEWORK_CONFIG } from '../../config/framework.config';
-import { llmClient } from '../../core/llm/LLMClient';
-import { isTestCaseSelected } from '../../core/types';
+import { isAutomationApproved, reviewExclusionReason } from '../../core/types';
 import { buildFlatTestData } from '../../core/state-manager/FixtureSync';
+import { ClarificationStore } from '../../core/clarifications/ClarificationStore';
+import { CREDENTIAL_STORAGE, loadAutProfile } from '../../core/aut/AutProfile';
+import { STAGE_ID, VALUE_SOURCE } from './constants';
+import { VALUE_CLASS } from './placeholderIntent';
+import { ProfileValues, resolvePlaceholder } from './valuePolicy';
 import {
-  RUNTIME_SENTINEL, deriveGenericValue, isSensitivePlaceholder, resolveByIntent,
-} from './placeholderIntent';
+  collectEndpoints, collectRequirementValues, indexAnswers, indexOverrides, literalRequirementValues,
+} from './valueSources';
+import {
+  EnvironmentIssue, UnresolvedPlaceholder, describeDataClarifications, syncDataClarifications,
+} from './dataClarifications';
+import { injectResolvedData, isBoundToEnvironment, summarizeInputs } from './testDataEdits';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const STAGE_ID = '04-test-data-generator';
 const STAGE_NAME = 'Test Data Generator';
 const NEXT_STAGE = '05-playwright-script-generator';
 
 const SKILL_PATH = path.resolve(__dirname, '../../skills/test-data-generation.md');
+const MEMORY_RULE_ID = 'RULE-04-DATA-PATTERNS';
+const PLACEHOLDER_TOKEN = /\{\{[a-zA-Z][a-zA-Z0-9]*\}\}/g;
+const QUOTED_PLACEHOLDER = /"\{\{([a-zA-Z][a-zA-Z0-9]*)\}\}"/g;
+const MALFORMED_PAYLOAD = '{ broken json }';
+const UNRESOLVED_SUGGESTION = 'Answer the Agent 04 clarification, or set the value (for a credential: the environment variable name) in the Agent 04 UI.';
+const VAULT_NOTE = 'Credentials, secrets and other runtime values are environment variable references; their values are never stored.';
 
-/**
- * Placeholder resolution map.
- * Key   = placeholder name (without braces).
- * Value = resolver function or static descriptor.
- * @type {Object.<string, Function|string>}
- */
-const PLACEHOLDER_RESOLVERS = Object.freeze({
-  // ── URLs ──────────────────────────────────────────────────────────────
-  validBaseURL: (ctx) => ctx.requirementData?.baseURL || ctx.baseURL || 'https://www.saucedemo.com/',
-  apiBaseURL: (ctx) => ctx.requirementData?.baseURL || ctx.baseURL || 'https://www.saucedemo.com/',
-  apiEndpoint: (ctx) => ctx.firstEndpoint || '{{apiEndpoint — UNRESOLVED: set integration endpoint}}',
-
-  // ── Credentials (Rule 0: Requirement document takes priority) ────────
-  validUsername: (ctx) => ctx.requirementData?.standardUsername || 'standard_user',
-  validPassword: (ctx) => ctx.requirementData?.password || 'secret_sauce',
-  invalidPassword: () => 'wrong_pass_001',
-  adminUsername: (ctx) => ctx.requirementData?.standardUsername || 'standard_user',
-  adminPassword: (ctx) => ctx.requirementData?.password || 'secret_sauce',
-  lowPrivUsername: (ctx) => ctx.requirementData?.visualUsername || 'visual_user',
-  lowPrivPassword: (ctx) => ctx.requirementData?.password || 'secret_sauce',
-  lowPrivilegeUserCredentials: (ctx) => `${ctx.requirementData?.visualUsername || 'visual_user'} / ${ctx.requirementData?.password || 'secret_sauce'}`,
-  script: () => 'console.log("ARIA Test Script Executing");',
-
-  // ── Emails ────────────────────────────────────────────────────────────
-  validEmail: (ctx) => `aria_test_${ctx.seed}@testdomain.io`,
-  invalidEmail: () => 'notanemail.nodomain',
-  existingEmail: (ctx) => `aria_existing_${ctx.seed}@testdomain.io`,
-  adminEmail: (ctx) => `aria_admin_${ctx.seed}@testdomain.io`,
-
-  // ── Names ─────────────────────────────────────────────────────────────
-  validName: (ctx) => `${FIRST_NAMES[ctx.seedInt % FIRST_NAMES.length]} ${
-    LAST_NAMES[ctx.seedInt % LAST_NAMES.length]}`,
-  firstName: (ctx) => FIRST_NAMES[ctx.seedInt % FIRST_NAMES.length],
-  lastName: (ctx) => LAST_NAMES[ctx.seedInt % LAST_NAMES.length],
-
-  // ── Phone ─────────────────────────────────────────────────────────────
-  validPhone: (ctx) => `+91-${9000000000 + (ctx.seedInt % 999999999)}`,
-  invalidPhone: () => 'INVALID-PHONE-ABC',
-
-  // ── Dates ─────────────────────────────────────────────────────────────
-  validDate: () => new Date().toISOString().slice(0, 10),
-  validFutureDate: () => new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
-  validPastDate: () => new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10),
-  validExpiredDate: () => new Date(Date.now() - 86400000).toISOString().slice(0, 10),
-
-  // ── Amounts / Numbers ─────────────────────────────────────────────────
-  validAmount: () => '99.99',
-  invalidAmount: () => '-1',
-  maxAmount: () => '999999.99',
-  minAmount: () => '0.01',
-  exactMinimumValue: () => '1',
-  exactMaximumValue: () => '255',
-
-  // ── URLs ──────────────────────────────────────────────────────────────
-  validURL: (ctx) => `https://aria-test-${ctx.seed}.example.com`,
-
-  // ── Tokens — runtime resolved ─────────────────────────────────────────
-  authToken: () => RUNTIME_SENTINEL,
-  expiredJwtToken: () => _buildExpiredJWT(),
-  lowPrivToken: () => RUNTIME_SENTINEL,
-  csrfToken: () => RUNTIME_SENTINEL,
-
-  // ── Generic data ──────────────────────────────────────────────────────
-  testData: (ctx) => `aria_data_${ctx.seed}`,
-  validTestData: (ctx) => `aria_valid_${ctx.seed}`,
-  invalidTestData: () => 'ARIA_INVALID_DATA_##!!',
-  validPayload: (ctx) => JSON.stringify({ testKey: `aria_${ctx.seed}`, timestamp: Date.now() }),
-  validRequestPayload: (ctx) => JSON.stringify({ data: `aria_request_${ctx.seed}` }),
-  invalidPayload: () => '{ broken json }',
-});
-
-/** Synthetic first names pool */
-const FIRST_NAMES = Object.freeze([
-  'Priya', 'Amit', 'Sneha', 'Rahul', 'Anjali', 'Vikram', 'Kavya', 'Arjun',
-  'Meena', 'Suresh', 'Deepa', 'Nikhil', 'Pooja', 'Rajesh', 'Sunita', 'Aakash',
-  'Divya', 'Kiran', 'Lakshmi', 'Manoj',
-]);
-
-/** Synthetic last names pool */
-const LAST_NAMES = Object.freeze([
-  'Sharma', 'Patel', 'Verma', 'Singh', 'Kumar', 'Gupta', 'Iyer', 'Nair',
-  'Reddy', 'Joshi', 'Mehta', 'Shah', 'Kapoor', 'Chopra', 'Bose', 'Das',
-  'Pillai', 'Rao', 'Sinha', 'Tiwari',
-]);
-
-/** Edge case boundary data sets */
+/** Generic edge-case boundary data sets (application-agnostic). */
 const BOUNDARY_LIBRARY = Object.freeze({
   strings: {
     min: 1,
@@ -150,9 +79,13 @@ const BOUNDARY_LIBRARY = Object.freeze({
 
 /**
  * @class TestDataGeneratorAgent
- * @description Resolves all test data placeholders into concrete, deterministic values.
+ * @description Resolves test data placeholders under the value policy and asks for what it cannot resolve.
  */
 class TestDataGeneratorAgent {
+  private readonly _logger: Logger;
+
+  private readonly _skill: string;
+
   constructor() {
     this._logger = new Logger(STAGE_ID);
     this._skill = this._loadSkill();
@@ -164,9 +97,10 @@ class TestDataGeneratorAgent {
    * @param {Object} input
    * @param {Object} input.reviewedTestCases    - Output of Agent 03
    * @param {Object} input.analyzedRequirements - Output of Agent 01
+   * @param {Object} [input.previousTestData]   - Earlier Agent 04 artifact (UI overrides of unchanged test cases are kept)
    * @returns {Promise<AgentResult>}
    */
-  async run(input) {
+  async run(input: any): Promise<any> {
     const startMs = Date.now();
     this._logger.stage('START', STAGE_ID);
 
@@ -178,349 +112,199 @@ class TestDataGeneratorAgent {
       const memoryContext = await memoryEngine.getContextForStage(STAGE_ID);
       await stateManager.markStageRunning(STAGE_ID);
 
-      const { reviewedZephyrExport } = input.reviewedTestCases;
-      const analysis = input.analyzedRequirements || {};
-      const allTestCases = reviewedZephyrExport?.testCases || [];
-      const { projectId } = FRAMEWORK_CONFIG;
+      const store = await this._clarificationStore();
+      const output = this._generate(input, memoryContext, store);
+      const patternCount = await this._persistPatternsToMemory(output.manifest.perTCData);
 
-      // ── Approved Scope Enforcement ──────────────────────────────────────────
-      // Test data is strictly generated ONLY for approved test cases
-      const isApproved = (tc: any) =>
-        tc.reviewStatus !== 'REJECTED' && isTestCaseSelected(tc);
-
-      const approvedTestCases = allTestCases.filter(isApproved);
-      const excludedTestCases = allTestCases.filter((tc: any) => !isApproved(tc));
-
-      this._logger.info('Generating test data for approved test cases', {
-        totalReviewed: allTestCases.length,
-        approvedForDataGen: approvedTestCases.length,
-        excludedSkipped: excludedTestCases.length,
-        env: FRAMEWORK_CONFIG.environment,
-      });
-
-      // ── 1. Extract explicit test data from requirements (Rule 0) ────────
-      const requirementData = this._extractRequirementData(analysis);
-
-      // ── 2. Build global context with requirement values ─────────────────
-      const globalCtx = this._buildGlobalContext(analysis, projectId, requirementData);
-
-      // ── 3. Restore known patterns from memory (requirement values still win, Rule 0)
-      const knownPatterns = this._loadMemoryPatterns(memoryContext);
-
-      // ── 4. Resolve per-TC data (only for approved test cases) ───────────
-      const perTCData = {};
-      const unresolved = [];
-      const sensitiveRefs = new Set();
-
-      for (const tc of approvedTestCases) {
-        const tcCtx = this._buildTCContext(tc, globalCtx, projectId);
-        const result = this._resolveTC(tc, tcCtx, knownPatterns);
-
-        perTCData[tc.key] = result.data;
-        unresolved.push(...result.unresolved);
-        result.sensitiveRefs.forEach((r) => sensitiveRefs.add(r));
-      }
-
-      // ── 5. Build API payload library ───────────────────────────────────
-      const apiPayloadLibrary = this._buildAPIPayloadLibrary(approvedTestCases, globalCtx);
-
-      // ── 6. Build environment overrides ────────────────────────────────
-      const environmentOverrides = this._buildEnvironmentOverrides(globalCtx);
-
-      // ── 7. Build manifest ──────────────────────────────────────────────
-      const manifest = this._buildManifest({
-        projectId,
-        sourceReviewId: input.reviewedTestCases.reviewId || null,
-        requirementValues: requirementData,
-        globalCtx,
-        perTCData,
-        apiPayloadLibrary,
-        environmentOverrides,
-        unresolved,
-        sensitiveRefs: [...sensitiveRefs],
-        totalTCs: approvedTestCases.length,
-        totalReviewed: allTestCases.length,
-        approvedCount: approvedTestCases.length,
-        excludedCount: excludedTestCases.length,
-        excludedTestCases: excludedTestCases.map((tc: any) => ({
-          key: tc.key,
-          name: tc.name,
-          type: tc.type,
-          reason: tc.reviewStatus === 'REJECTED' ? 'Rejected in Agent 03 review' : 'Excluded by user selection'
-        }))
-      });
-
-      // ── 8. Persist patterns to memory ─────────────────────────────────
-      await this._persistPatternsToMemory(perTCData);
-
-      // ── 9. Inject resolved data into approved test cases ───────────────
-      const enrichedApprovedTestCases = this._injectDataIntoTestCases(approvedTestCases, perTCData);
-
-      const output = {
-        manifest,
-        enrichedZephyrExport: {
-          ...reviewedZephyrExport,
-          testCases: enrichedApprovedTestCases,
-        },
-        summary: this._buildSummary(manifest),
-      };
-
-      // ── 9. Persist to state & disk ────────────────────────────────────
       await stateManager.setPipelineArtifact('testData', output);
       await stateManager.markStageCompleted(STAGE_ID, output);
-      this._saveToDisk(manifest, enrichedApprovedTestCases);
+      this._saveToDisk(output.manifest, output.enrichedZephyrExport.testCases);
 
+      const { manifest } = output;
       const durationMs = Date.now() - startMs;
       this._logger.stage('COMPLETE', STAGE_ID, {
         resolved: manifest.resolvedCount,
         unresolved: manifest.unresolvedCount,
+        pendingClarifications: manifest.pendingClarifications.length,
+        environmentIssues: manifest.environmentIssues.length,
         durationMs,
       });
 
-      const warnings = unresolved.map(
-        (u) => `[UNRESOLVED] ${u.tcKey} step ${u.stepIndex}: ${u.placeholder} — ${u.reason}`,
+      const warnings = manifest.unresolvedPlaceholders.map(
+        (u: any) => `[UNRESOLVED] ${u.tcKey} step ${u.stepIndex}: ${u.placeholder} — ${u.reason}`,
       );
-
-      const agentResult = this._buildAgentResult(output, warnings, durationMs);
-
-      // ── 10. Approval gate ──────────────────────────────────────────────
-      const gateResult = await approvalGate.waitForApproval({
-        stageId: STAGE_ID,
-        stageName: STAGE_NAME,
-        nextStageName: NEXT_STAGE,
-        summary: this._buildApprovalSummary(manifest),
-        fullOutput: manifest,
-        warnings,
-      });
-
-      agentResult.approvalStatus = gateResult.status;
-      agentResult.approvalComment = gateResult.comment;
-
-      await memoryEngine.recordApprovalFeedback(
-        STAGE_ID,
-        gateResult.status,
-        gateResult.comment,
-        `Resolved: ${manifest.resolvedCount}, Unresolved: ${manifest.unresolvedCount}`,
-      );
-
-      return agentResult;
-    } catch (error) {
+      const clarifications = describeDataClarifications({ pending: manifest.pendingClarifications, environment: manifest.environmentIssues });
+      const agentResult = this._buildAgentResult(output, warnings, clarifications, durationMs, patternCount);
+      return await this._awaitApproval(agentResult, manifest, warnings, clarifications);
+    } catch (error: any) {
       this._logger.error('Agent execution failed', { error: error.message });
       await stateManager.markStageFailed(STAGE_ID, error);
       throw error;
     }
   }
 
-  // ── Global Context Builder ────────────────────────────────────────────────
-
   /**
-   * Builds the shared resolution context for all TCs.
+   * Waits for the approval gate and records the decision.
    * @private
    */
-  _buildGlobalContext(analysis, projectId, requirementData: any = {}) {
-    const masterSeed = this._makeSeed(projectId);
-    const masterSeedInt = parseInt(masterSeed.slice(0, 8), 16);
-    const firstEndpoint = analysis.integrationPoints?.[0]?.endpoint || null;
+  async _awaitApproval(agentResult: any, manifest: any, warnings: string[], clarifications: string[]): Promise<any> {
+    const gateResult = await approvalGate.waitForApproval({
+      stageId: STAGE_ID,
+      stageName: STAGE_NAME,
+      nextStageName: NEXT_STAGE,
+      summary: this._buildApprovalSummary(manifest),
+      fullOutput: manifest,
+      warnings,
+      clarifications,
+    });
 
-    const baseURL = requirementData.baseURL || FRAMEWORK_CONFIG.playwright.baseURL || 'https://www.saucedemo.com/';
-    const password = requirementData.password || 'secret_sauce';
-    const standardUsername = requirementData.standardUsername || 'standard_user';
+    agentResult.approvalStatus = gateResult.status;
+    agentResult.approvalComment = gateResult.comment;
+
+    await memoryEngine.recordApprovalFeedback(
+      STAGE_ID,
+      gateResult.status,
+      gateResult.comment,
+      `Resolved: ${manifest.resolvedCount}, Unresolved: ${manifest.unresolvedCount}, Pending clarifications: ${manifest.pendingClarifications.length}`,
+    );
+    return agentResult;
+  }
+
+  // ── Generation ────────────────────────────────────────────────────────────
+
+  /**
+   * Resolves data for the approved test cases, raises clarifications and builds the artifact.
+   * @private
+   */
+  _generate(input: any, memoryContext: any, store: ClarificationStore): any {
+    const { reviewedZephyrExport } = input.reviewedTestCases;
+    const allTestCases = reviewedZephyrExport?.testCases || [];
+    const approved = allTestCases.filter((tc: any) => isAutomationApproved(tc));
+    const excluded = allTestCases.filter((tc: any) => !isAutomationApproved(tc));
+
+    this._logger.info('Generating test data for approved test cases', {
+      totalReviewed: allTestCases.length,
+      approvedForDataGen: approved.length,
+      excludedSkipped: excluded.length,
+      env: FRAMEWORK_CONFIG.environment,
+    });
+
+    const sources = this._buildSources(input, memoryContext, store, approved);
+    const resolution = this._resolveAll(approved, sources);
+    const clarifications = syncDataClarifications(store, resolution.unresolved, resolution.envIssues, approved.map((tc: any) => tc.key));
+    const manifest = this._buildManifest({
+      input, sources, resolution, clarifications, approved, excluded, allTestCases,
+    });
 
     return {
-      baseURL,
-      apiBaseURL: baseURL,
-      environment: FRAMEWORK_CONFIG.environment,
-      projectId,
-      seed: masterSeed,
-      seedInt: masterSeedInt,
-      firstEndpoint,
-      requirementData,
-      globalFixtures: {
-        baseURL,
-        adminCredentials: {
-          username: standardUsername,
-          password,
-        },
-        userCredentials: {
-          username: standardUsername,
-          password,
-        },
-        guestCredentials: {
-          username: requirementData.visualUsername || 'visual_user',
-          password,
-        },
-        apiBaseURL: baseURL,
-        defaultHeaders: { 'Content-Type': 'application/json' },
+      manifest,
+      enrichedZephyrExport: {
+        ...reviewedZephyrExport,
+        testCases: approved.map((tc: any) => injectResolvedData(tc, resolution.perTCData[tc.key])),
       },
+      summary: this._buildSummary(manifest),
     };
   }
 
   /**
-   * Builds a per-TC resolution context (deterministic seed per TC).
+   * Everything placeholders may be resolved from, shared by all test cases.
    * @private
    */
-  _buildTCContext(tc, globalCtx, projectId) {
-    const seed = this._makeSeed(`${projectId}-${tc.key}`);
-    const seedInt = parseInt(seed.slice(0, 8), 16);
+  _buildSources(input: any, memoryContext: any, store: ClarificationStore, approved: any[]): any {
+    const analysis = input.analyzedRequirements || {};
     return {
-      ...globalCtx,
-      seed,
-      seedInt,
-      tcKey: tc.key,
-      tcType: tc.type,
+      seedBase: FRAMEWORK_CONFIG.projectId,
+      answers: indexAnswers(store.listResolvedFor(STAGE_ID)),
+      overrides: indexOverrides(input.previousTestData, approved),
+      requirementValues: collectRequirementValues(analysis),
+      endpoints: collectEndpoints(analysis),
+      profile: this._loadProfile(),
+      memory: this._loadMemoryPatterns(memoryContext),
+      env: process.env,
     };
   }
 
-  // ── Placeholder Resolution ────────────────────────────────────────────────
+  /** @private */
+  _resolveAll(testCases: any[], sources: any): { perTCData: Record<string, any>; unresolved: UnresolvedPlaceholder[]; envIssues: EnvironmentIssue[] } {
+    const perTCData: Record<string, any> = {};
+    const unresolved: UnresolvedPlaceholder[] = [];
+    const envIssues: EnvironmentIssue[] = [];
+    for (const tc of testCases) {
+      const result = this._resolveTC(tc, sources);
+      perTCData[tc.key] = result.data;
+      unresolved.push(...result.unresolved);
+      envIssues.push(...result.envIssues);
+    }
+    return { perTCData, unresolved, envIssues };
+  }
 
   /**
-   * Resolves all placeholders in a single test case's steps.
+   * Resolves all placeholders of a single test case.
    * @private
    */
-  _resolveTC(tc, ctx, knownPatterns) {
-    const inputs = {};
-    const unresolved = [];
-    const sensitiveRefs = [];
+  _resolveTC(tc: any, sources: any): { data: any; unresolved: UnresolvedPlaceholder[]; envIssues: EnvironmentIssue[] } {
+    const ctx = { ...sources, tc, seed: this._makeSeed(`${sources.seedBase}-${tc.key}`) };
+    const inputs: Record<string, any> = {};
+    const unresolved: UnresolvedPlaceholder[] = [];
+    const envIssues: EnvironmentIssue[] = [];
 
-    for (const ph of this._extractPlaceholders(tc)) {
-      const key = ph.replace(/^\{\{|\}\}$/g, '');
-      const entry = this._resolveInput(key, tc, ctx, knownPatterns);
-
-      if (entry) {
-        inputs[ph] = entry;
-        if (entry.sensitive) sensitiveRefs.push(ph);
+    for (const token of this._extractPlaceholders(tc)) {
+      const name = token.slice(2, -2);
+      const result = resolvePlaceholder(name, ctx);
+      const reason = result.reason ?? '';
+      if (result.envIssue) envIssues.push({ ...result.envIssue, tcKey: tc.key });
+      if (result.entry) {
+        inputs[token] = result.entry;
         continue;
       }
-
       unresolved.push({
-        placeholder: ph,
-        tcKey: tc.key,
-        stepIndex: this._findPlaceholderStep(tc, ph),
-        reason: `Cannot infer data type for "${key}" from context`,
-        suggestion: `Provide "${key}" in the requirement, add it to PLACEHOLDER_RESOLVERS in agent.ts, or set it in the Agent 04 UI`,
+        placeholder: token, name, tcKey: tc.key, stepIndex: this._findPlaceholderStep(tc, token), reason, valueClass: result.valueClass, suggestion: UNRESOLVED_SUGGESTION,
       });
-      inputs[ph] = {
-        value: `{{UNRESOLVED:${key}}}`, type: 'unknown', sensitive: false, source: 'unresolved', note: 'REQUIRES MANUAL RESOLUTION',
+      inputs[token] = {
+        value: `{{UNRESOLVED:${name}}}`, type: 'unknown', sensitive: false, source: VALUE_SOURCE.UNRESOLVED, note: reason, valueClass: result.valueClass,
       };
     }
 
-    const apiPayload = tc.type === 'API' && tc.apiDetails?.requestBody ? this._resolveAPIPayload(tc.apiDetails, ctx) : null;
+    const apiPayload = tc.type === 'API' && tc.apiDetails?.requestBody ? this._resolveAPIPayload(tc.apiDetails.requestBody, inputs) : null;
     const boundaryData = tc.type === 'Edge' ? this._buildBoundaryData(tc) : null;
 
     return {
       data: {
-        tcKey: tc.key, type: tc.type, inputs, apiPayload, boundaryData, unresolved: unresolved.map((u) => u.placeholder),
+        tcKey: tc.key, tcHash: tc.hash || null, type: tc.type, inputs, apiPayload, boundaryData, unresolved: unresolved.map((u) => u.placeholder),
       },
       unresolved,
-      sensitiveRefs,
+      envIssues,
     };
-  }
-
-  /**
-   * Resolves one placeholder. Priority: requirement (Rule 0) → memory → resolver catalogue →
-   * intent (wrong / arbitrary / case-variant credential) → boundary → generic field name.
-   * @returns {Object|null} Manifest input entry, or null when the placeholder cannot be resolved
-   * @private
-   */
-  _resolveInput(key, tc, ctx, knownPatterns) {
-    const sensitive = isSensitivePlaceholder(key);
-    const requirementValue = ctx.requirementData?.[key];
-    if (requirementValue !== undefined) return this._entry(key, requirementValue, 'requirement', sensitive, 'Copied from the requirement');
-    if (knownPatterns[key] !== undefined) return this._entry(key, knownPatterns[key], 'memory', sensitive, 'Reused from previous run');
-
-    const resolver = PLACEHOLDER_RESOLVERS[key];
-    if (resolver) return this._generatedEntry(key, typeof resolver === 'function' ? resolver(ctx) : resolver, sensitive, '');
-
-    const intent = resolveByIntent(key, {
-      seed: ctx.seed, username: ctx.requirementData?.standardUsername, password: ctx.requirementData?.password,
-    });
-    if (intent) return this._entry(key, intent.value, 'generated', sensitive, intent.note);
-
-    const boundaryValue = this._resolveBoundary(key, tc);
-    if (boundaryValue !== null) {
-      return { value: boundaryValue, type: 'boundary', sensitive: false, source: 'generated', note: `Boundary value for edge test: ${key}` };
-    }
-
-    const contextValue = deriveGenericValue(key, { seed: ctx.seed, tcKey: ctx.tcKey, tcText: `${tc.name} ${tc.objective}` });
-    return contextValue === null ? null : this._generatedEntry(key, contextValue, sensitive, 'Context-derived fallback');
-  }
-
-  /** Entry for a generated value; the runtime sentinel is marked as runtime-resolved. @private */
-  _generatedEntry(key, value, sensitive, note) {
-    return value === RUNTIME_SENTINEL
-      ? this._entry(key, value, 'runtime', sensitive, 'Loaded from CI/env secrets at runtime')
-      : this._entry(key, value, 'generated', sensitive, note);
-  }
-
-  /** @private */
-  _entry(key, value, source, sensitive, note) {
-    return { value, type: this._inferDataType(key, value), sensitive, source, note };
   }
 
   /**
    * Extracts all unique {{placeholder}} tokens from a TC's steps.
    * @private
    */
-  _extractPlaceholders(tc) {
-    const found = new Set();
-    const re = /\{\{[a-zA-Z][a-zA-Z0-9]*\}\}/g;
-
+  _extractPlaceholders(tc: any): string[] {
     const texts = [
       tc.precondition,
       tc.objective,
-      ...(tc.testSteps || []).flatMap((s) => [s.description, s.testData, s.expectedResult]),
+      ...(tc.testSteps || []).flatMap((s: any) => [s.description, s.testData, s.expectedResult]),
       tc.apiDetails ? JSON.stringify(tc.apiDetails) : '',
     ].filter(Boolean);
-
-    for (const text of texts) {
-      const matches = text.match(re) || [];
-      matches.forEach((m) => found.add(m));
-    }
-
-    return [...found];
+    return [...new Set(texts.flatMap((text) => String(text).match(PLACEHOLDER_TOKEN) || []))];
   }
 
   /**
-   * Attempts to resolve boundary-specific placeholder names.
+   * Substitutes resolved literal values into an API request body; runtime and unresolved placeholders stay as tokens.
    * @private
    */
-  _resolveBoundary(key, tc) {
-    const lower = key.toLowerCase();
-
-    if (tc.type !== 'Edge') return null;
-
-    const boundaryMap = {
-      exactminimumvalue: BOUNDARY_LIBRARY.strings.minValue,
-      exactmaximumvalue: BOUNDARY_LIBRARY.strings.maxValue,
-      longstring: BOUNDARY_LIBRARY.strings.longString,
-      specialchars: BOUNDARY_LIBRARY.strings.specialChars,
-      unicode: BOUNDARY_LIBRARY.strings.unicode,
-      whitespaceonly: BOUNDARY_LIBRARY.strings.whitespace,
-      sqlinjection: BOUNDARY_LIBRARY.strings.sqlInject,
-      xsspayload: BOUNDARY_LIBRARY.strings.xssPayload,
-    };
-
-    return boundaryMap[lower] || null;
-  }
-
-  /**
-   * Resolves an API request body, substituting placeholders.
-   * @private
-   */
-  _resolveAPIPayload(apiDetails, ctx) {
+  _resolveAPIPayload(requestBody: any, inputs: Record<string, any>): any {
     try {
-      const raw = JSON.stringify(apiDetails.requestBody);
-      const filled = raw.replace(/"\{\{([a-zA-Z][a-zA-Z0-9]*)\}\}"/g, (match, key) => {
-        const resolver = PLACEHOLDER_RESOLVERS[key];
-        if (resolver) {
-          const val = typeof resolver === 'function' ? resolver(ctx) : resolver;
-          return JSON.stringify(val);
-        }
-        return match;
+      const filled = JSON.stringify(requestBody).replace(QUOTED_PLACEHOLDER, (match: string, name: string) => {
+        const entry = inputs[`{{${name}}}`];
+        const literal = entry && entry.source !== VALUE_SOURCE.UNRESOLVED && !isBoundToEnvironment(entry);
+        return literal ? JSON.stringify(entry.value) : match;
       });
       return JSON.parse(filled);
     } catch {
-      return apiDetails.requestBody;
+      return requestBody;
     }
   }
 
@@ -528,8 +312,8 @@ class TestDataGeneratorAgent {
    * Builds boundary data object for edge TCs.
    * @private
    */
-  _buildBoundaryData(tc) {
-    const name = tc.name.toLowerCase();
+  _buildBoundaryData(tc: any): any {
+    const name = String(tc.name || '').toLowerCase();
 
     if (name.includes('min')) return { type: 'MIN_BOUNDARY', value: BOUNDARY_LIBRARY.strings.minValue, numeric: BOUNDARY_LIBRARY.numbers.min };
     if (name.includes('max')) return { type: 'MAX_BOUNDARY', value: BOUNDARY_LIBRARY.strings.maxValue, numeric: BOUNDARY_LIBRARY.numbers.max };
@@ -545,89 +329,24 @@ class TestDataGeneratorAgent {
     return { type: 'GENERIC_EDGE', value: BOUNDARY_LIBRARY.strings.specialChars };
   }
 
-  // ── API Payload Library ───────────────────────────────────────────────────
-
   /**
-   * Builds a reusable API payload library from all API TCs.
+   * Builds a reusable API payload library from the resolved API test cases.
    * @private
    */
-  _buildAPIPayloadLibrary(testCases, ctx) {
-    const library = {};
-
+  _buildAPIPayloadLibrary(testCases: any[], perTCData: Record<string, any>): Record<string, any> {
+    const library: Record<string, any> = {};
     testCases
       .filter((tc) => tc.type === 'API' && tc.apiDetails)
       .forEach((tc) => {
         const key = `${tc.apiDetails.method} ${tc.apiDetails.endpoint}`;
-        if (!library[key]) {
-          library[key] = {
-            valid: this._resolveAPIPayload(tc.apiDetails, ctx),
-            invalid: { field: null, missing: true },
-            malformed: '{ broken json }',
-          };
-        }
+        if (library[key]) return;
+        library[key] = {
+          valid: perTCData[tc.key]?.apiPayload ?? tc.apiDetails.requestBody ?? null,
+          invalid: { field: null, missing: true },
+          malformed: MALFORMED_PAYLOAD,
+        };
       });
-
     return library;
-  }
-
-  // ── Environment Overrides ─────────────────────────────────────────────────
-
-  /**
-   * @private
-   */
-  _buildEnvironmentOverrides(globalCtx) {
-    return {
-      staging: {
-        baseURL: process.env.AUT_BASE_URL || globalCtx.baseURL,
-        logLevel: 'debug',
-        slowMo: 100,
-      },
-      uat: {
-        baseURL: (process.env.AUT_BASE_URL || '').replace('staging', 'uat'),
-        logLevel: 'info',
-        slowMo: 0,
-      },
-      production: {
-        baseURL: (process.env.AUT_BASE_URL || '').replace('staging', 'production'),
-        logLevel: 'warn',
-        slowMo: 0,
-        note: 'Production tests must use read-only or dedicated test accounts',
-      },
-    };
-  }
-
-  // ── Data Injection into Test Cases ────────────────────────────────────────
-
-  /**
-   * Injects resolved data values back into test case steps.
-   * @private
-   */
-  _injectDataIntoTestCases(testCases, perTCData) {
-    return testCases.map((tc) => {
-      const tcData = perTCData[tc.key];
-      if (!tcData) return tc;
-
-      const steps = (tc.testSteps || []).map((step) => {
-        let testData = step.testData || '';
-
-        // Replace all placeholders in the testData field with resolved values
-        testData = testData.replace(/\{\{([a-zA-Z][a-zA-Z0-9]*)\}\}/g, (match) => {
-          const entry = tcData.inputs[match];
-          if (!entry) return match;
-          if (entry.sensitive || entry.source === 'runtime') return match; // Keep runtime refs as-is
-          return String(entry.value);
-        });
-
-        return { ...step, testData };
-      });
-
-      return {
-        ...tc,
-        testSteps: steps,
-        resolvedData: tcData,
-        dataManifestId: `tdm_ref_${tc.key}`,
-      };
-    });
   }
 
   // ── Manifest Builder ──────────────────────────────────────────────────────
@@ -636,90 +355,106 @@ class TestDataGeneratorAgent {
    * @private
    */
   _buildManifest({
-    projectId, globalCtx, perTCData, apiPayloadLibrary,
-    environmentOverrides, unresolved, sensitiveRefs, totalTCs,
-    totalReviewed, approvedCount, excludedCount, excludedTestCases,
-    sourceReviewId, requirementValues,
+    input, sources, resolution, clarifications, approved, excluded, allTestCases,
   }: any) {
-    const resolvedCount = Object.values(perTCData)
-      .reduce((sum: number, tc: any) => sum + Object.values(tc.inputs)
-        .filter((i: any) => i.source !== 'unresolved').length, 0);
-
-    const unresolvedCount = unresolved.length;
-
+    const totals = summarizeInputs(resolution.perTCData);
     return {
       manifestId: `tdm_${Date.now()}`,
-      projectId,
+      projectId: FRAMEWORK_CONFIG.projectId,
       /** Agent 03 review this data was generated from — used to detect stale manifests */
-      sourceReviewId: sourceReviewId || null,
+      sourceReviewId: input.reviewedTestCases.reviewId || null,
       generatedAt: new Date().toISOString(),
-      seed: globalCtx.seed,
+      seed: this._makeSeed(sources.seedBase),
       environment: FRAMEWORK_CONFIG.environment,
-      totalTCs: approvedCount ?? totalTCs,
-      totalReviewed: totalReviewed ?? totalTCs,
-      approvedCount: approvedCount ?? totalTCs,
-      excludedCount: excludedCount ?? 0,
-      excludedTestCases: excludedTestCases || [],
-      resolvedCount,
-      unresolvedCount,
+      totalTCs: approved.length,
+      totalReviewed: allTestCases.length,
+      approvedCount: approved.length,
+      excludedCount: excluded.length,
+      excludedTestCases: excluded.map((tc: any) => ({
+        key: tc.key, name: tc.name, type: tc.type, reason: reviewExclusionReason(tc),
+      })),
+      resolvedCount: totals.resolvedCount,
+      unresolvedCount: totals.unresolvedCount,
 
-      /** Values taken from the requirement; written to the flat fixture by FixtureSync */
-      requirementValues: requirementValues || {},
-      globalFixtures: globalCtx.globalFixtures,
-      perTCData,
+      /** Non-credential values the requirement states; written to the flat fixture by FixtureSync */
+      requirementValues: literalRequirementValues(sources.requirementValues, Boolean(sources.profile?.credentialsInFixture)),
+      runtimeBindings: totals.runtimeBindings,
+      environmentConfig: { name: FRAMEWORK_CONFIG.environment, baseUrlEnv: sources.profile?.baseUrlEnv || null },
+      perTCData: resolution.perTCData,
       boundaryLibrary: BOUNDARY_LIBRARY,
-      apiPayloadLibrary,
-      environmentOverrides,
+      apiPayloadLibrary: this._buildAPIPayloadLibrary(approved, resolution.perTCData),
+      sensitiveDataVault: { note: VAULT_NOTE, refs: totals.sensitiveRefs },
 
-      sensitiveDataVault: {
-        note: 'Sensitive values are stored as references. Actual values loaded from CI secrets at runtime.',
-        refs: sensitiveRefs,
-      },
-
-      unresolvedPlaceholders: unresolved,
+      unresolvedPlaceholders: resolution.unresolved,
+      pendingClarifications: clarifications.pending,
+      environmentIssues: clarifications.environment,
     };
   }
 
-  // ── Memory Operations ─────────────────────────────────────────────────────
+  // ── Sources ───────────────────────────────────────────────────────────────
 
   /**
-   * Loads previously resolved placeholder patterns from memory.
+   * Clarification store of the current project and run.
    * @private
    */
-  _loadMemoryPatterns(memoryContext) {
-    return memoryContext.testDataPatterns || {};
+  async _clarificationStore(): Promise<ClarificationStore> {
+    const { runId } = await stateManager.getFullState();
+    return new ClarificationStore(stateManager.getProjectId(), runId);
   }
 
   /**
-   * Stores generated placeholder resolutions to memory for future reuse.
+   * AUT profile settings the value policy uses; null when the project has no usable profile.
    * @private
    */
-  async _persistPatternsToMemory(perTCData) {
-    const patterns = {};
+  _loadProfile(): ProfileValues | null {
+    try {
+      const profile = loadAutProfile(stateManager.getProjectId());
+      return {
+        baseUrlEnv: profile.baseUrlEnv,
+        credentialEnvVars: profile.auth.credentialEnvVars || {},
+        secretsEnvVars: profile.secretsEnvVars || [],
+        credentialsInFixture: profile.auth.credentialStorage === CREDENTIAL_STORAGE.FIXTURE,
+      };
+    } catch (error: any) {
+      this._logger.warn('No usable AUT profile; base URL and credential variables will be asked as clarifications', { error: error.message });
+      return null;
+    }
+  }
 
-    for (const tcData of Object.values(perTCData)) {
-      for (const [ph, entry] of Object.entries(tcData.inputs)) {
-        if (entry.source === 'generated' && !entry.sensitive) {
-          const key = ph.replace(/^\{\{|\}\}$/g, '');
-          patterns[key] = entry.value;
+  /**
+   * Synthetic values generated in earlier runs (reused for GENERATABLE placeholders only).
+   * @private
+   */
+  _loadMemoryPatterns(memoryContext: any): Record<string, unknown> {
+    const rule = (memoryContext?.improvementRules || []).find((r: any) => r.id === MEMORY_RULE_ID);
+    return rule?.data || {};
+  }
+
+  /**
+   * Stores generated synthetic values for reuse; application values and credentials are never stored.
+   * @returns {Promise<number>} Number of patterns stored
+   * @private
+   */
+  async _persistPatternsToMemory(perTCData: Record<string, any>): Promise<number> {
+    const patterns: Record<string, unknown> = {};
+    for (const tcData of Object.values(perTCData) as any[]) {
+      for (const [token, entry] of Object.entries(tcData.inputs) as Array<[string, any]>) {
+        if (entry.source === VALUE_SOURCE.GENERATED && entry.valueClass === VALUE_CLASS.GENERATABLE) {
+          patterns[token.slice(2, -2)] = entry.value;
         }
       }
     }
 
-    // Store patterns in memory via a cycle record supplement
-    this._logger.info('Persisting test data patterns to memory', {
-      patternCount: Object.keys(patterns).length,
-    });
-
-    // Patterns stored as improvement context for next run
+    this._logger.info('Persisting synthetic test data patterns to memory', { patternCount: Object.keys(patterns).length });
     await memoryEngine.addImprovementRule({
-      id: 'RULE-04-DATA-PATTERNS',
-      description: 'Test data patterns from this run for reuse',
+      id: MEMORY_RULE_ID,
+      description: 'Synthetic test data values from this run for reuse',
       appliesTo: STAGE_ID,
       action: 'REUSE_DATA_PATTERNS',
       data: patterns,
       addedAt: new Date().toISOString(),
     });
+    return Object.keys(patterns).length;
   }
 
   // ── Utility Helpers ───────────────────────────────────────────────────────
@@ -728,28 +463,14 @@ class TestDataGeneratorAgent {
    * Creates a deterministic 8-char hex seed from a string.
    * @private
    */
-  _makeSeed(input) {
+  _makeSeed(input: string): string {
     return crypto.createHash('md5').update(input).digest('hex').slice(0, 8);
   }
 
   /** @private */
-  _inferDataType(key, value) {
-    if (typeof value === 'boolean') return 'boolean';
-    if (typeof value === 'number') return 'number';
-    if (value === RUNTIME_SENTINEL) return 'runtime-ref';
-    if (/email/i.test(key)) return 'email';
-    if (/url|baseurl/i.test(key)) return 'url';
-    if (/phone/i.test(key)) return 'phone';
-    if (/date/i.test(key)) return 'date';
-    if (/amount|price|cost/i.test(key)) return 'currency';
-    if (typeof value === 'string' && value.startsWith('{')) return 'json';
-    return 'string';
-  }
-
-  /** @private */
-  _findPlaceholderStep(tc, ph) {
+  _findPlaceholderStep(tc: any, ph: string): number {
     return (tc.testSteps || []).findIndex(
-      (s) => [s.description, s.testData, s.expectedResult].some((f) => f?.includes(ph)),
+      (s: any) => [s.description, s.testData, s.expectedResult].some((f: string | undefined) => f?.includes(ph)),
     ) + 1;
   }
 
@@ -757,13 +478,15 @@ class TestDataGeneratorAgent {
   _buildSummary(manifest: any) {
     return {
       totalTCs: manifest.totalTCs,
-      totalReviewed: manifest.totalReviewed || manifest.totalTCs,
-      approvedTCs: manifest.approvedCount || manifest.totalTCs,
-      excludedTCs: manifest.excludedCount || 0,
+      totalReviewed: manifest.totalReviewed,
+      approvedTCs: manifest.approvedCount,
+      excludedTCs: manifest.excludedCount,
       resolvedCount: manifest.resolvedCount,
       unresolvedCount: manifest.unresolvedCount,
       sensitiveRefs: manifest.sensitiveDataVault.refs.length,
       apiPayloads: Object.keys(manifest.apiPayloadLibrary).length,
+      pendingClarifications: manifest.pendingClarifications.length,
+      environmentIssues: manifest.environmentIssues.length,
       environment: manifest.environment,
     };
   }
@@ -771,29 +494,30 @@ class TestDataGeneratorAgent {
   /** @private */
   _buildApprovalSummary(manifest: any) {
     return {
-      'Approved TCs': manifest.approvedCount || manifest.totalTCs,
-      'Excluded TCs': manifest.excludedCount || 0,
+      'Approved TCs': manifest.approvedCount,
+      'Excluded TCs': manifest.excludedCount,
       'Resolved Placeholders': manifest.resolvedCount,
       Unresolved: manifest.unresolvedCount,
-      'Runtime-Only Refs': manifest.sensitiveDataVault.refs.length,
+      'Pending Clarifications': manifest.pendingClarifications.length,
+      'Environment Issues': manifest.environmentIssues.length,
+      'Runtime Bindings (env vars)': manifest.runtimeBindings.length,
       'API Payload Library': `${Object.keys(manifest.apiPayloadLibrary).length} endpoints`,
       Environment: manifest.environment,
-      'Boundary Library': 'Included (strings + numbers)',
     };
   }
 
   /** @private */
-  _buildAgentResult(output, warnings, durationMs) {
+  _buildAgentResult(output: any, warnings: string[], clarifications: string[], durationMs: number, patternCount: number): any {
     return {
       agentId: STAGE_ID,
       stageNumber: '04',
       stageName: STAGE_NAME,
       status: STAGE_STATUS.COMPLETED,
       output,
-      clarifications: [],
+      clarifications,
       warnings,
       memoryUpdate: {
-        testDataPatterns: output.manifest.resolvedCount,
+        testDataPatterns: patternCount,
       },
       timestamp: new Date().toISOString(),
       durationMs,
@@ -803,7 +527,7 @@ class TestDataGeneratorAgent {
   }
 
   /** @private */
-  _saveToDisk(manifest, enrichedTestCases) {
+  _saveToDisk(manifest: any, enrichedTestCases: any[]): void {
     const outDir = path.resolve(__dirname, '../../reports/json');
     if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
 
@@ -833,100 +557,10 @@ class TestDataGeneratorAgent {
     this._logger.info('Test data saved to disk (flat fixtures synced)', { outDir, fixturesDir, keysCount: Object.keys(flatTestData).length });
   }
 
-  /**
-   * Extracts explicit test data from requirement specifications.
-   * Priority Rule 0: requirement data takes absolute priority over synthetic generation.
-   * @private
-   */
-  _extractRequirementData(analysis: any): Record<string, string> {
-    const data: Record<string, string> = {
-      baseURL: FRAMEWORK_CONFIG.playwright.baseURL || 'https://www.saucedemo.com/',
-      password: 'secret_sauce',
-      standardUsername: 'standard_user',
-      lockedOutUsername: 'locked_out_user',
-      problemUsername: 'problem_user',
-      performanceGlitchUsername: 'performance_glitch_user',
-      errorUsername: 'error_user',
-      visualUsername: 'visual_user',
-      errorInvalidCredentials: 'Epic sadface: Username and password do not match any user in this service',
-      errorLockedOut: 'Epic sadface: Sorry, this user has been locked out.',
-      errorUsernameRequired: 'Epic sadface: Username is required',
-      errorPasswordRequired: 'Epic sadface: Password is required',
-      usernameMaxLength: '255',
-      passwordMaxLength: '512',
-    };
-
-    // Extract from analysis if available
-    if (analysis && Array.isArray(analysis.features)) {
-      for (const f of analysis.features) {
-        for (const s of (f.userStories || [])) {
-          if (Array.isArray(s.testUserAccounts)) {
-            for (const acc of s.testUserAccounts) {
-              if (acc.username === 'standard_user') data.standardUsername = acc.username;
-              if (acc.username === 'locked_out_user') data.lockedOutUsername = acc.username;
-              if (acc.password) data.password = acc.password;
-            }
-          }
-        }
-      }
-    }
-
-    // Also scan requirement file across all possible locations
-    const reqCandidates = [
-      path.resolve(process.cwd(), 'requirement.md'),
-      path.resolve(process.cwd(), 'requirements/requirement.md'),
-      path.resolve(process.cwd(), '../requirement.md'),
-      path.resolve(__dirname, '../../requirement.md'),
-      path.resolve(__dirname, '../../requirements/requirement.md'),
-    ];
-
-    for (const reqPath of reqCandidates) {
-      if (fs.existsSync(reqPath) && fs.statSync(reqPath).isFile()) {
-        try {
-          const content = fs.readFileSync(reqPath, 'utf-8');
-          if (content.includes('standard_user')) data.standardUsername = 'standard_user';
-          if (content.includes('locked_out_user')) data.lockedOutUsername = 'locked_out_user';
-          if (content.includes('problem_user')) data.problemUsername = 'problem_user';
-          if (content.includes('performance_glitch_user')) data.performanceGlitchUsername = 'performance_glitch_user';
-          if (content.includes('error_user')) data.errorUsername = 'error_user';
-          if (content.includes('visual_user')) data.visualUsername = 'visual_user';
-          if (content.includes('secret_sauce')) data.password = 'secret_sauce';
-
-          const urlMatch = content.match(/https?:\/\/[^\s\)\"\'`]+/i);
-          if (urlMatch) data.baseURL = urlMatch[0];
-
-          this._logger.info('Requirement data extracted from file in data generator', { path: reqPath });
-          break;
-        } catch {
-          // ignore read error
-        }
-      }
-    }
-
-    return data;
-  }
-
   /** @private */
-  _loadSkill() {
+  _loadSkill(): string {
     try { return fs.readFileSync(SKILL_PATH, 'utf-8'); } catch { return ''; }
   }
-}
-
-// ─── JWT Utility (expired token stub) ────────────────────────────────────────
-
-/**
- * Builds a structurally valid but expired JWT (for negative auth tests).
- * @returns {string} Expired JWT string
- */
-function _buildExpiredJWT() {
-  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
-  const payload = Buffer.from(JSON.stringify({
-    sub: 'aria_test_user',
-    iat: Math.floor(Date.now() / 1000) - 7200, // issued 2h ago
-    exp: Math.floor(Date.now() / 1000) - 3600, // expired 1h ago
-  })).toString('base64url');
-  const sig = 'ARIA_TEST_INVALID_SIGNATURE';
-  return `${header}.${payload}.${sig}`;
 }
 
 // ─── Export & CLI ─────────────────────────────────────────────────────────────
@@ -971,14 +605,16 @@ if (require.main === module) {
     const agent = new TestDataGeneratorAgent();
     const reviewedTestCases = await stateManager.getPipelineArtifact('reviewedTestCases');
     const analyzedRequirements = await stateManager.getPipelineArtifact('analyzedRequirements');
+    const previousTestData = await stateManager.getPipelineArtifact('testData');
 
     if (!reviewedTestCases) {
       console.error(`❌ No reviewed test cases found for project "${activeProjectId}". Run Agent 03 first.`);
       process.exit(1);
     }
 
-    const result = await agent.run({ reviewedTestCases, analyzedRequirements });
-    console.log(`\n✅ Agent 04 complete — Resolved: ${result.output.manifest.resolvedCount}, Unresolved: ${result.output.manifest.unresolvedCount}`);
+    const result = await agent.run({ reviewedTestCases, analyzedRequirements, previousTestData });
+    const { manifest } = result.output;
+    console.log(`\n✅ Agent 04 complete — Resolved: ${manifest.resolvedCount}, Unresolved: ${manifest.unresolvedCount}, Pending clarifications: ${manifest.pendingClarifications.length}`);
     process.exit(result.approvalStatus === 'APPROVED' ? 0 : 1);
   })();
 }

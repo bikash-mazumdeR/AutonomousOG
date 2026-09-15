@@ -23,17 +23,21 @@ async function validate() {
   }
 
   const hasLlmKey = Boolean(
-    process.env.GEMINI_API_KEY
+    process.env.AWS_BEARER_TOKEN_BEDROCK
+    || process.env.GEMINI_API_KEY
     || (process.env.OPENAI_API_KEY && !process.env.OPENAI_API_KEY.includes('xxxxxxxx'))
     || (process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_API_KEY.includes('xxxxxxxx')),
   );
 
   if (!hasLlmKey) {
-    console.log(chalk.red('  [✖] No valid LLM API key configured (GEMINI_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY)'));
+    console.log(chalk.red('  [✖] No valid LLM API key configured (AWS_BEARER_TOKEN_BEDROCK, GEMINI_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY)'));
     errors++;
   } else {
-    const activeProvider = process.env.GEMINI_API_KEY ? 'GEMINI_API_KEY' : (process.env.OPENAI_API_KEY ? 'OPENAI_API_KEY' : 'ANTHROPIC_API_KEY');
+    const activeProvider = ['AWS_BEARER_TOKEN_BEDROCK', 'GEMINI_API_KEY', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY'].find((name) => process.env[name]);
     console.log(chalk.green(`  [✔] LLM API key is present (${activeProvider})`));
+    if (process.env.AWS_BEARER_TOKEN_BEDROCK && (!process.env.AWS_REGION || !process.env.LLM_MODEL_DEFAULT)) {
+      console.log(chalk.yellow('  [!] Bedrock key is set but AWS_REGION or LLM_MODEL_DEFAULT is missing (region defaults to us-east-1; agents without a model use the Gemini fallback)'));
+    }
   }
 
   console.log(chalk.white('\n2. Checking Directory Structure:'));

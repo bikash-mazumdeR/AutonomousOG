@@ -121,16 +121,26 @@ export function buildStoryPrompt(input: StoryPromptInput): string {
 }
 
 /**
- * Builds the self-correction prompt listing validator errors.
+ * Builds the self-correction prompt. Accepted scenarios are kept by the framework, so the model returns
+ * only fixes and coverage gaps — a retry can never shrink the already-valid scenario set.
  * @param {string[]} errors
+ * @param {string[]} [acceptedTitles] - Titles of scenarios already accepted
  * @returns {string}
  */
-export function buildRetryPrompt(errors: string[]): string {
-  return [
-    'Your previous output failed deterministic validation. Fix EVERY issue below and return the COMPLETE corrected',
-    'set of Scenario blocks for this story (not only the changed ones), in the same strict grammar.',
-    'Do not add behaviour that is not grounded in the listed acceptance criteria and business rules.',
+export function buildRetryPrompt(errors: string[], acceptedTitles: string[] = []): string {
+  const kept = acceptedTitles.length === 0 ? [] : [
     '',
+    'ALREADY ACCEPTED — the framework keeps these; do NOT return them again unless an issue below requires changing one',
+    '(then return it with the EXACT same title):',
+    ...acceptedTitles.map((title) => `- ${title}`),
+  ];
+  return [
+    'Your previous output failed deterministic validation. Return ONLY, in the same strict grammar:',
+    '(a) a corrected version of each failing scenario, and (b) new scenarios for any uncovered acceptance criteria.',
+    'Do not add behaviour that is not grounded in the listed acceptance criteria and business rules.',
+    ...kept,
+    '',
+    'ISSUES TO FIX:',
     ...errors.map((error, idx) => `${idx + 1}. ${error}`),
   ].join('\n');
 }

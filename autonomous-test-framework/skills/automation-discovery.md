@@ -25,6 +25,8 @@ describe elements that the input does not list. This skill is application-agnost
 7. `currentState` is where the browser is right now, after `executedActions` were performed. Never repeat an
    executed action. When `executedActions` already perform everything the remaining steps describe, return
    `stopReason: "COMPLETE"` with an empty `actions` array.
+8. Plan one action per element interaction, in the order the step describes it. Never merge, reorder or add
+   interactions — steps that describe the same interactions must produce the same actions.
 
 ## Output — a single JSON object, no prose
 {

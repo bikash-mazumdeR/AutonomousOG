@@ -76,6 +76,20 @@ describe('FixtureSync Centralized Test Data Engine', () => {
     });
   });
 
+  it('writes values answered in clarifications or set in the UI', () => {
+    const flat = buildFlatTestData({
+      perTCData: {
+        'TC-003': {
+          inputs: {
+            '{{productName}}': { value: 'Blue Mug', source: 'clarification' },
+            '{{couponCode}}': { value: 'SPRING', source: 'user_override' },
+          },
+        },
+      },
+    });
+    expect(flat).toMatchObject({ TC003_productName: 'Blue Mug', TC003_couponCode: 'SPRING' });
+  });
+
   describe('syncFixturesFileFromTestData', () => {
     it('writes valid JSON fixture file to disk', () => {
       const result = syncFixturesFileFromTestData({

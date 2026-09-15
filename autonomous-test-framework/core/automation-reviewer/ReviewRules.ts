@@ -9,7 +9,9 @@
 
 import * as recast from 'recast';
 import { FILE_TYPE, FINDING_SEVERITY, Finding, ReviewResult } from './reviewTypes';
-import { collectIntegrityFindings, isLiteral, propName } from './IntegrityRules';
+import {
+  collectIntegrityFindings, isExpectCall, isLiteral, propName,
+} from './IntegrityRules';
 
 const tsParser = require('recast/parsers/typescript');
 
@@ -34,6 +36,12 @@ function quality(ruleId: string, dimension: string, severity: FINDING_SEVERITY, 
   };
 }
 
+function pomAssertionFindings(node: any, fileType: FILE_TYPE): Finding[] {
+  if (fileType !== FILE_TYPE.POM || !isExpectCall(node)) return [];
+  return [quality('POM-002', 'POM_COMPLIANCE', FINDING_SEVERITY.BLOCKER, 'Page object contains an assertion.',
+    'Page objects expose locators and perform actions; assert expected results in the test body.', node.loc?.start.line)];
+}
+
 function collectQualityFindings(ast: any, fileType: FILE_TYPE): Finding[] {
   const findings: Finding[] = [];
   recast.visit(ast, {
@@ -55,6 +63,7 @@ function collectQualityFindings(ast: any, fileType: FILE_TYPE): Finding[] {
         findings.push(quality('ASSERT-002', 'ASSERTION_QUALITY', FINDING_SEVERITY.BLOCKER,
           `toContain(${node.arguments[0].value}) on a boolean throws "not iterable".`, 'Use a web-first assertion on the locator.', line));
       }
+      findings.push(...pomAssertionFindings(node, fileType));
       const codeStr = recast.print(node).code;
       if (codeStr.includes('${testInfo.title}') && /screenshots|attachments|path:/.test(codeStr)) {
         findings.push(quality('HOOK-001', 'CODE_STYLE', FINDING_SEVERITY.BLOCKER,

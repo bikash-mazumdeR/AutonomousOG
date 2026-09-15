@@ -9,6 +9,9 @@ import {
 } from '../../agents/02-test-case-generator/builders/testCaseBuilder';
 import { generateStoryScenarios, ChatMessage } from '../../agents/02-test-case-generator/generation/storyGenerator';
 import { buildGherkinScenarioText } from '../../agents/02-test-case-generator/utils';
+import {
+  buildGenerationMeta, describeInputChanges, formatInputChanges,
+} from '../../agents/02-test-case-generator/generation/generationMeta';
 import { isTestCaseSelected, setTestCaseSelected } from '../../core/types';
 
 const rawAnalysis = (overrides: Record<string, any> = {}) => ({
@@ -275,5 +278,86 @@ describe('Agent 02 — self-correction loop', () => {
     expect(outcome.attempts).toBe(2);
     expect(outcome.scenarios).toHaveLength(1);
     expect(outcome.warnings.join('\n')).toMatch(/Unresolved after 2 attempt\(s\): AC-2/);
+  });
+
+  const POSITIVE = VALID_GHERKIN.split('@negative')[0];
+  const NEGATIVE = `@negative${VALID_GHERKIN.split('@negative')[1]}`;
+  const POSITIVE_TITLE = 'Login with valid credentials redirects to inventory';
+
+  const runWith = async (responses: string[], maxRetries = 2) => {
+    const calls: ChatMessage[][] = [];
+    const outcome = await generateStoryScenarios(request(maxRetries), async (messages) => {
+      calls.push([...messages]);
+      return responses[Math.min(calls.length, responses.length) - 1];
+    });
+    return { outcome, calls };
+  };
+
+  it('keeps accepted scenarios when a retry returns only the missing scenario', async () => {
+    const { outcome, calls } = await runWith([POSITIVE, NEGATIVE]);
+    expect(outcome.attempts).toBe(2);
+    expect(outcome.scenarios.map((s) => s.type)).toEqual(['Positive', 'Negative']);
+    expect(outcome.warnings.join('\n')).not.toMatch(/Unresolved/);
+    expect(calls[1][3].content).toMatch(/Return ONLY/);
+    expect(calls[1][3].content).toContain(`- ${POSITIVE_TITLE}`);
+    expect(calls[1][3].content).not.toMatch(/COMPLETE corrected/);
+  });
+
+  it('does not double-count an accepted scenario resent under a new title', async () => {
+    const renamed = POSITIVE.replace(POSITIVE_TITLE, 'Valid login lands on the inventory page');
+    const { outcome } = await runWith([POSITIVE, `${renamed}\n${NEGATIVE}`]);
+    expect(outcome.scenarios).toHaveLength(2);
+    expect(outcome.warnings.join('\n')).toMatch(/repeats the steps of a scenario accepted in an earlier attempt/);
+  });
+
+  it('replaces an accepted scenario resent with the same title without changing the count', async () => {
+    const { outcome } = await runWith([VALID_GHERKIN.replace(' @smoke', ''), POSITIVE]);
+    expect(outcome.attempts).toBe(2);
+    expect(outcome.scenarios).toHaveLength(2);
+    expect(outcome.scenarios[0].labels).toContain('Smoke');
+    expect(outcome.warnings.join('\n')).not.toMatch(/Unresolved/);
+  });
+});
+
+describe('Agent 02 — criterion category formats', () => {
+  it('parses a trailing "(@tag)" category the same as a "[@tag]" prefix', () => {
+    const { features } = normalizeAnalysis(rawAnalysis({
+      acceptanceCriteria: ['Valid credentials redirect to /inventory.html (@functional)', '[@ui] The login button stays enabled'],
+    }));
+    expect(features[0].userStories[0].acceptanceCriteria).toEqual([
+      { id: 'AC-1', category: 'functional', text: 'Valid credentials redirect to /inventory.html' },
+      { id: 'AC-2', category: 'ui', text: 'The login button stays enabled' },
+    ]);
+  });
+});
+
+describe('Agent 02 — generation metadata', () => {
+  const ctx = contextFor();
+  const meta = (overrides: Record<string, unknown> = {}) => ({
+    ...buildGenerationMeta({
+      analyzedRequirements: { inputFingerprint: 'req-fp' },
+      normalized: normalizeAnalysis(rawAnalysis()),
+      excludedTypeTags: new Set(['performance', 'api']),
+      systemPrompt: 'skill',
+      memoryContext: {},
+      outcomes: [{ feature: ctx.feature, story: ctx.story, scenarios: [], attempts: 2, warnings: [] }],
+      modelsUsed: ['model-a'],
+    }),
+    ...overrides,
+  });
+
+  it('records sorted skip options, models and attempts per story', () => {
+    expect(meta()).toMatchObject({
+      requirementsFingerprint: 'req-fp', excludedTypes: ['api', 'performance'], storyCount: 1, modelsUsed: ['model-a'], attemptsByStory: { 'F-01/US-01': 2 },
+    });
+    expect(meta().analysisFingerprint).toBe(meta().analysisFingerprint);
+  });
+
+  it('names changed inputs, reports identical inputs and handles missing history', () => {
+    expect(formatInputChanges(describeInputChanges(meta(), meta()))).toBe('none — inputs identical');
+    const previous = meta({ requirementsFingerprint: 'old-fp', excludedTypes: ['api'], modelsUsed: ['model-b'] });
+    expect(describeInputChanges(previous, meta())).toEqual(['requirements', 'skip options', 'LLM model']);
+    expect(describeInputChanges(undefined, meta())).toBeNull();
+    expect(formatInputChanges(null)).toMatch(/no previous generation/);
   });
 });

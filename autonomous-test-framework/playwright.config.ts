@@ -2,6 +2,8 @@ import { defineConfig, devices } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { readActiveProjectSlug } from './core/aut/projectPaths';
+import { loadFrameworkEnv, resolveAutBaseUrl } from './core/aut/autBaseUrl';
+import { otherBrowsersPattern } from './core/readiness/browserTargets';
 
 /**
  * @fileoverview Playwright Global Configuration — ARIA Framework
@@ -10,7 +12,8 @@ import { readActiveProjectSlug } from './core/aut/projectPaths';
  * @see https://playwright.dev/docs/test-configuration
  */
 
-require('dotenv').config();
+// Load autonomous-test-framework/.env even when Playwright is started from another folder (IDE, workspace root)
+loadFrameworkEnv();
 
 const projectSlug = readActiveProjectSlug();
 const profileFile = projectSlug ? path.join(__dirname, 'projects', projectSlug, 'aut-profile.json') : null;
@@ -46,7 +49,8 @@ module.exports = defineConfig({
 
   // ── Global Use Settings ──────────────────────────────────────────────────
   use: {
-    baseURL: (profile?.baseUrlEnv && process.env[profile.baseUrlEnv]) || process.env.AUT_BASE_URL || 'http://localhost:3000',
+    // Fails fast when unset — a default URL would silently run every test against the wrong application
+    baseURL: resolveAutBaseUrl(profile?.baseUrlEnv),
     headless: process.env.PLAYWRIGHT_HEADLESS !== 'false',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -62,5 +66,6 @@ module.exports = defineConfig({
   outputDir: 'reports/attachments',
 
   // ── Browser Projects (from the AUT profile) ──────────────────────────────
-  projects: browsers.filter((name) => BROWSER_PROJECTS[name]).map((name) => BROWSER_PROJECTS[name]),
+  // A test tagged @browser-<engine> (a browser-specific test case) runs only in that browser's project
+  projects: browsers.filter((name) => BROWSER_PROJECTS[name]).map((name) => ({ ...BROWSER_PROJECTS[name], grepInvert: otherBrowsersPattern(name) })),
 });

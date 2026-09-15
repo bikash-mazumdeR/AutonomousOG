@@ -52,12 +52,6 @@ export const TC_OUTCOME = Object.freeze({
 
 export type TcOutcomeStatus = typeof TC_OUTCOME[keyof typeof TC_OUTCOME];
 
-export const MISSING_KINDS = Object.freeze([
-  'LOCATOR', 'STATE', 'DATA', 'ENDPOINT', 'AUTH', 'EXPECTED_RESULT', 'SLA', 'AUT_UNREACHABLE',
-] as const);
-
-export type MissingKind = typeof MISSING_KINDS[number];
-
 /** Header marker identifying files owned (and regenerated) by Agent 05. */
 export const GENERATED_MARKER = '@aria-generated';
 
@@ -76,12 +70,8 @@ export const UI_PAGE_API: ReadonlySet<string> = new Set(['reload', 'goBack', 'go
 
 export const API_TYPES: ReadonlySet<string> = new Set(['api', 'integration', 'contract']);
 export const PERF_TYPES: ReadonlySet<string> = new Set(['performance', 'load', 'stress', 'spike', 'soak']);
-export const K6_SCENARIOS: readonly string[] = Object.freeze(['load', 'stress', 'spike', 'soak']);
 
 export const PLACEHOLDER_PATTERN = /\{\{([a-zA-Z][a-zA-Z0-9]*)\}\}/g;
-export const REVIEWER_CLARIFICATION_MARKER = /\[REQUIRES CLARIFICATION/i;
-export const REVIEWER_REWRITE_MARKER = /\[REWRITTEN-BY-AGENT-03\]/i;
-export const SLA_PATTERN = /(\d+(?:\.\d+)?)\s*(ms|milliseconds?|s|secs?|seconds?)\b/i;
 
 /** Generic heuristics for auto-generated ids / attribute values that must not become locators. */
 export const DYNAMIC_ID_HEURISTICS: readonly RegExp[] = Object.freeze([
@@ -97,3 +87,16 @@ export const DISCOVERY_SETTINGS = Object.freeze({
   MAX_TEXT_LENGTH: 80,
   PLANNER_ATTEMPTS: 2,
 });
+
+/** Verified flows: a run of at least MIN_ACTIONS actions that at least MIN_USERS test cases performed identically. */
+export const FLOW_SETTINGS = Object.freeze({
+  MIN_USERS: 2,
+  MIN_ACTIONS: 2,
+  NAME_SUFFIX: 'Flow',
+});
+
+/** Minimum number of tests in a spec before leading statements they all share are moved into beforeEach. */
+export const HOOK_MIN_TESTS = 2;
+
+/** Minimum length of a state-name word that must appear in an expected result before its URL path may be asserted. */
+export const MIN_STATE_WORD_LENGTH = 3;

@@ -1,9 +1,10 @@
 # SKILL: ARIA Agent 05 — Automation Implementer (shared contract)
-## Version: 4.0.0
+## Version: 4.1.0
 
 You implement APPROVED test cases as test bodies. You do not design, extend, simplify or reinterpret
 tests. A test must pass only because the application genuinely satisfies the approved expected
-results — never because the code was shaped to pass.
+results — never because the code was shaped to pass. Calling a verified flow listed for the test case in
+`applicableFlows`, with exactly the arguments given there, is implementation — not simplification.
 
 This contract is application-agnostic. Every application-specific fact (elements, states, data,
 endpoints, authentication) reaches you ONLY through the input JSON. Never assume which application is
@@ -24,8 +25,9 @@ under test and never reuse facts about any application you may know.
 - Assert EVERY expected result of EVERY step, unconditionally, with web-first assertions
   (`await expect(locator).toBeVisible() / toHaveText() / toContainText() / toHaveValue() / toHaveAttribute() /
   toHaveCSS() / toBeEnabled() / toHaveCount()`, `await expect(page).toHaveURL() / toHaveTitle()`).
-- Expected values come ONLY from the step's expected-result text or its data bindings. Never use a value
-  because you believe the application shows it.
+- Expected values come ONLY from the step's expected-result text, its data bindings, or — for `toHaveURL` only —
+  the `verifiedStates[stepIndex].urlPath` given for the test case. Never use a value because you believe the
+  application shows it.
 - Forbidden: `test.skip / fixme / fail / only / slow`, `expect.soft`, an `expect` inside `if` / ternary /
   `&&` / `||` / `catch`, `try/catch` or `.catch()`, "accept any of" lists, tautologies (`expect(true)`),
   weak matchers (`toBeTruthy`, `toBeFalsy`, `toBeDefined`, `not.toBeNull`), `waitForTimeout`, `setTimeout`,
@@ -40,6 +42,10 @@ under test and never reuse facts about any application you may know.
   - `kind: "locator"` members are Playwright `Locator` getters — use the Locator API
     (`fill`, `click`, `check`, `uncheck`, `selectOption`, `press`, `hover`, `focus`) and web-first assertions on them.
   - `kind: "method"` members are async page-object methods (e.g. `open<State>()` to navigate).
+  - `kind: "flow"` members perform a verified action sequence and assert nothing. When `applicableFlows` lists a
+    flow for the test case you MUST call it — `await featurePage.<member>({ <param>: <expression> })` with exactly
+    the listed arguments, once per listed call, in step order — instead of performing its actions one by one.
+    Never call a flow that is not listed for that tcKey. Assert the covered steps' expected results after the call.
 - Never invent a member name. A required element or state missing from the contract →
   NEEDS_CONTEXT `{ "kind": "LOCATOR" | "STATE" }`.
 - `page` may be used only for `expect(page).toHaveURL/toHaveTitle`, `page.reload()`, `page.goBack()`,
@@ -49,13 +55,16 @@ under test and never reuse facts about any application you may know.
 - Fixture values: `data.<fixtureKey>` using keys from the step's data bindings.
 - Secrets / runtime values: `env('<ENV_VAR>')` using names from the step's data bindings.
 - Literal values may be used only when they appear verbatim in the test case text.
-- Navigation uses page-object `open<State>()` methods only; never embed hosts, ports or paths.
+- Navigation uses page-object `open<State>()` methods; states reached by actions are reached by performing the
+  steps (or the applicable flow). Never embed hosts, ports or paths.
 - Unbound or unresolved data → NEEDS_CONTEXT `{ "kind": "DATA" }`.
 
 ## E. Synchronization & isolation
 - Rely on Playwright auto-waiting and web-first assertions; no manual waits.
 - Each test is independent: no shared mutable state, no reliance on test order.
 - Follow the step order exactly; assert initial states before acting when the steps require it.
+- Write every body completely, even when tests start identically. Never write hooks (`beforeEach`) or helper
+  functions — code moves the statements all tests share into `beforeEach`.
 
 ## F. Output — a single JSON object, no prose, no code fences
 {

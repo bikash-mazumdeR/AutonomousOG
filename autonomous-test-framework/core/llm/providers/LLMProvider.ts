@@ -13,6 +13,8 @@ export interface LLMChatOptions {
   model: string;
   messages: LLMMessage[];
   temperature?: number;
+  /** Sampling seed for providers that support reproducible sampling (Gemini, OpenAI-compatible). */
+  seed?: number;
   max_tokens?: number;
   json?: boolean;
 }

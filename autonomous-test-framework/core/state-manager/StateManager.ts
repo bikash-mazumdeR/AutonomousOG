@@ -345,6 +345,36 @@ export class StateManager {
   }
 
   /**
+   * Current project id.
+   * @returns {string}
+   */
+  getProjectId(): string {
+    return this._projectId;
+  }
+
+  /**
+   * Returns the newest non-null artifact for the current project, looking at the current run first and
+   * then at earlier runs of the same project. Used to compare against or reuse a previous run's output.
+   * @param {string} artifactKey - Key in pipeline object
+   * @returns {Promise<*>} The artifact or null
+   */
+  async getLatestArtifactForProject(artifactKey: keyof PipelineArtifacts): Promise<any> {
+    const current = await this.get(`pipeline.${artifactKey}`);
+    if (current !== undefined && current !== null) return current;
+    try {
+      const row = stateDb.prepare(`
+        SELECT a.value FROM artifacts a
+        JOIN runs r ON a.run_id = r.run_id
+        WHERE a.key = ? AND r.project_id = ? AND a.value IS NOT NULL AND a.value <> 'null'
+        ORDER BY r.started_at DESC LIMIT 1
+      `).get(artifactKey, this._projectId) as any;
+      return row?.value ? JSON.parse(row.value) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Adds a clarification question from an agent.
    * @param {string} stageId - The asking agent's stage
    * @param {string} question - The clarification text

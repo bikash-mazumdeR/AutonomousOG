@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
 import { spawn, ChildProcess } from 'child_process';
 import { stateManager } from '../core/state-manager/StateManager';
+import { registerPipelineRoutes } from './pipelineRoutes';
 import { llmClient } from '../core/llm/LLMClient';
 import { memoryEngine } from '../core/project-memory/MemoryEngine';
 import { Logger } from '../core/logger/Logger';
@@ -19,6 +20,7 @@ const HELPERS_DIR = path.join(FRAMEWORK_DIR, 'tests', 'helpers');
 const ALLOWED_FILE_ROOTS = ['specs', 'pages', 'k6', 'helpers', 'projects'].map((dir) => path.join(FRAMEWORK_DIR, 'tests', dir));
 
 app.use(express.json());
+registerPipelineRoutes(app);
 app.use(express.static(path.join(__dirname, 'static')));
 
 // Redirect root to agent05.html

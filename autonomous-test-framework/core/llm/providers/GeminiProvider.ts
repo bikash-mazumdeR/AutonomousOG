@@ -31,6 +31,7 @@ export class GeminiProvider implements LLMProvider {
       generationConfig: {
         temperature: options.temperature ?? 0.7,
         maxOutputTokens: options.max_tokens ?? 16384,
+        ...(options.seed !== undefined ? { seed: options.seed } : {}),
       }
     };
 

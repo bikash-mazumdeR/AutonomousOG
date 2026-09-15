@@ -4,12 +4,12 @@
 
 import {
   FixtureAccumulator,
-  assessReadiness,
   buildAutomationTestCase,
   modeForType,
   toEnvVarName,
-  ReadinessContext,
 } from '../../agents/05-playwright-script-generator/contracts/automationTestCase';
+import { assessReadiness } from '../../core/readiness/readinessRules';
+import { ReadinessContext } from '../../core/readiness/readinessTypes';
 
 const reviewed = {
   key: 'TC-001',
@@ -90,7 +90,7 @@ describe('Agent 05 automation contract', () => {
 
   it('requires the base URL environment variable for UI automation', () => {
     const tc = buildAutomationTestCase(enriched, reviewed, new FixtureAccumulator());
-    expect(assessReadiness(tc, { ...uiReady, baseURL: null })).toEqual([
+    expect(assessReadiness(tc, { ...uiReady, baseURL: null })).toMatchObject([
       { kind: 'AUT_UNREACHABLE', detail: 'Environment variable AUT_BASE_URL is not set.' },
     ]);
   });

@@ -6,7 +6,7 @@
  */
 
 import { parseGherkinScenarios } from '../parsers/GherkinToZephyrParser';
-import { validateStoryScenarios, StoryValidationResult, ScenarioContext } from '../validators/scenarioValidator';
+import { validateStoryScenarios, ScenarioContext, ValidatedScenario } from '../validators/scenarioValidator';
 import { buildStoryPrompt, buildRetryPrompt, PromptMemoryContext } from '../prompts/storyPrompt';
 import { evaluateApiGate, evaluatePerformanceGate } from '../analysis/requirementGates';
 import { NormalizedFeature, NormalizedStory, OpenAmbiguity } from '../analysis/normalizeAnalysis';
@@ -40,15 +40,10 @@ export interface StoryGenerationOutcome extends StoryScenarios {
   warnings: string[];
 }
 
-function isBetter(candidate: StoryValidationResult, best: StoryValidationResult | null): boolean {
-  if (!best) return true;
-  if (candidate.errors.length !== best.errors.length) return candidate.errors.length < best.errors.length;
-  return candidate.scenarios.length > best.scenarios.length;
-}
-
 /**
  * Generates validated scenarios for one story, retrying with validator feedback.
- * After retries are exhausted, only valid scenarios are kept and remaining errors become warnings.
+ * Scenarios accepted in any attempt are kept; retries only fix failing scenarios and fill coverage gaps,
+ * so self-correction never lowers the count. Errors left after the last attempt become warnings.
  * @param {StoryGenerationRequest} request
  * @param {ChatFn} chat
  * @returns {Promise<StoryGenerationOutcome>}
@@ -67,21 +62,25 @@ export async function generateStoryScenarios(request: StoryGenerationRequest, ch
   });
   const messages: ChatMessage[] = [{ role: 'system', content: request.systemPrompt }, { role: 'user', content: userPrompt }];
 
-  let best: StoryValidationResult | null = null;
+  let accepted: ValidatedScenario[] = [];
+  let errors: string[] = [];
+  let warnings: string[] = [];
   let attempts = 0;
   for (let attempt = 0; attempt <= request.maxRetries; attempt += 1) {
     attempts += 1;
     // eslint-disable-next-line no-await-in-loop -- each retry depends on the previous validation result
     const text = await chat(messages);
-    const result = validateStoryScenarios(parseGherkinScenarios(text), ctx);
-    if (isBetter(result, best)) best = result;
-    if (result.errors.length === 0) break;
-    messages.push({ role: 'assistant', content: text }, { role: 'user', content: buildRetryPrompt(result.errors) });
+    const result = validateStoryScenarios(parseGherkinScenarios(text), ctx, accepted);
+    accepted = result.scenarios;
+    errors = result.errors;
+    warnings = result.warnings;
+    if (errors.length === 0) break;
+    const retryPrompt = buildRetryPrompt(errors, accepted.map((scenario) => scenario.title));
+    messages.push({ role: 'assistant', content: text }, { role: 'user', content: retryPrompt });
   }
 
-  const final = best as StoryValidationResult;
-  const unresolved = final.errors.map((error) => `[${feature.id}/${story.id}] Unresolved after ${attempts} attempt(s): ${error}`);
+  const unresolved = errors.map((error) => `[${feature.id}/${story.id}] Unresolved after ${attempts} attempt(s): ${error}`);
   return {
-    feature, story, scenarios: final.scenarios, attempts, warnings: [...final.warnings, ...unresolved],
+    feature, story, scenarios: accepted, attempts, warnings: [...warnings, ...unresolved],
   };
 }

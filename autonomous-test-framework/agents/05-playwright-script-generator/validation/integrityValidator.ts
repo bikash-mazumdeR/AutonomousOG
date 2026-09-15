@@ -17,10 +17,12 @@ import {
 import {
   getAssertion, isLiteral, isTestDeclaration, propName,
 } from '../../../core/automation-reviewer/IntegrityRules';
-import { AutomationTestCase, MissingItem } from '../contracts/automationTestCase';
-import { PageContract } from '../rendering/pomRenderer';
+import { AutomationTestCase } from '../contracts/automationTestCase';
+import { MISSING_KINDS, MissingItem } from '../../../core/readiness/readinessTypes';
+import { FlowArg, FlowUsage } from '../discovery/flowExtractor';
+import { MEMBER_KIND, PageContract } from '../rendering/pomRenderer';
 import {
-  DATA_FIXTURE, ENV_FUNCTION, GenerationMode, K6_ENV_FUNCTION, MISSING_KINDS, PAGE_FIXTURE, UI_PAGE_API,
+  DATA_FIXTURE, ENV_FUNCTION, GenerationMode, K6_ENV_FUNCTION, MIN_STATE_WORD_LENGTH, PAGE_FIXTURE, UI_PAGE_API,
 } from '../constants';
 
 /** Assertions the LLM claims verify a step. */
@@ -45,6 +47,10 @@ export interface ValidationContext {
   contract?: PageContract;
   /** The test rendered into its real file skeleton (used for the review/integrity rules). */
   harness: string;
+  /** UI: verified flows this test case must call, with the exact arguments of each call. */
+  flows?: FlowUsage[];
+  /** UI: states discovery verified after each step (step index → state name and URL path). */
+  verifiedStates?: Record<number, { state: string; urlPath: string }>;
 }
 
 interface AssertionStatement {
@@ -54,7 +60,9 @@ interface AssertionStatement {
 }
 
 const VALUE_AT_SECOND_ARG: ReadonlySet<string> = new Set(['toHaveCSS', 'toHaveAttribute', 'toHaveJSProperty']);
-const ALLOWED_OPTION_KEYS: ReadonlySet<string> = new Set(['exact', 'ignoreCase', 'useInnerText']);
+const ALLOWED_OPTION_KEYS: ReadonlySet<string> = new Set(['exact', 'ignoreCase', 'useInnerText', 'timeout']);
+const TIMEOUT_OPTION = 'timeout';
+const URL_MATCHER = 'toHaveURL';
 const API_CONTEXT_METHODS: ReadonlySet<string> = new Set(['get', 'post', 'put', 'patch', 'delete', 'head', 'fetch']);
 const SNIPPET_LENGTH = 90;
 
@@ -235,6 +243,14 @@ function regexChunks(pattern: string): string[] {
   return pattern.replace(/\\(.)/g, '$1').split(/[\^$.*+?()[\]{}|]/).map((chunk) => chunk.trim()).filter((chunk) => chunk.length >= 3);
 }
 
+function timeoutErrors(options: any, allowed: string, label: string): string[] {
+  const timeout = options.properties.find((p: any) => (p.key?.name ?? p.key?.value) === TIMEOUT_OPTION);
+  if (!timeout) return [];
+  const { value } = timeout;
+  const isNumber = value?.type === 'NumericLiteral' || (value?.type === 'Literal' && typeof value.value === 'number');
+  return isNumber && allowed.includes(String(value.value)) ? [] : [`${label}: timeout must be a number stated in the step's expected result.`];
+}
+
 function valueErrors(arg: any, allowed: string, label: string, colourAware: boolean): string[] {
   if (!arg) return [];
   const isString = arg.type === 'StringLiteral' || (arg.type === 'Literal' && typeof arg.value === 'string');
@@ -261,19 +277,20 @@ function valueErrors(arg: any, allowed: string, label: string, colourAware: bool
   if (arg.type === 'ObjectExpression') {
     const keys = arg.properties.map((p: any) => p.key?.name ?? p.key?.value);
     const invalid = keys.filter((key: string) => !ALLOWED_OPTION_KEYS.has(key));
-    return invalid.length > 0 ? [`${label}: assertion option(s) ${invalid.join(', ')} are not allowed.`] : [];
+    return invalid.length > 0 ? [`${label}: assertion option(s) ${invalid.join(', ')} are not allowed.`] : timeoutErrors(arg, allowed, label);
   }
   return [`${label}: expected value must be a literal from the test case, data.<key> or env(); got ${snippet(recast.print(arg).code)}`];
 }
 
-function assertionProvenanceErrors(statement: AssertionStatement, allowed: string, stepIndex: number): string[] {
+function assertionProvenanceErrors(statement: AssertionStatement, allowed: string, stepIndex: number, verifiedUrl?: string): string[] {
   const errors: string[] = [];
   recast.visit(statement.node, {
     visitCallExpression(path: any) {
       const assertion = getAssertion(path.node);
       if (assertion) {
         const args = VALUE_AT_SECOND_ARG.has(assertion.matcher) ? path.node.arguments.slice(1) : path.node.arguments;
-        args.forEach((arg: any) => errors.push(...valueErrors(arg, allowed, `Step ${stepIndex} ${assertion.matcher}()`, assertion.matcher === 'toHaveCSS')));
+        const scope = assertion.matcher === URL_MATCHER && verifiedUrl ? `${allowed}\n${verifiedUrl}` : allowed;
+        args.forEach((arg: any) => errors.push(...valueErrors(arg, scope, `Step ${stepIndex} ${assertion.matcher}()`, assertion.matcher === 'toHaveCSS')));
       }
       this.traverse(path);
     },
@@ -309,6 +326,144 @@ function nonAssertionLiteralErrors(ast: any, statements: AssertionStatement[], t
   return errors;
 }
 
+function stateWords(stateName: string): string[] {
+  return stateName.replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase().split(/[^a-z0-9]+/)
+    .filter((word) => word.length >= MIN_STATE_WORD_LENGTH);
+}
+
+/**
+ * URL path of the state discovery verified after a step. It may be used as a `toHaveURL` value only when the step's
+ * expected result names that state (one of the state name's words appears in it).
+ * @param {ValidationContext} ctx
+ * @param {number} stepIndex
+ * @returns {string|undefined}
+ */
+export function verifiedUrlFor(ctx: ValidationContext, stepIndex: number): string | undefined {
+  const verified = ctx.verifiedStates?.[stepIndex];
+  if (!verified) return undefined;
+  const expected = (ctx.tc.steps.find((s) => s.index === stepIndex)?.expected.join(' ') || '').toLowerCase();
+  return stateWords(verified.state).some((word) => expected.includes(word)) ? verified.urlPath : undefined;
+}
+
+/** An assertion whose value came from a discovery-verified state rather than the test case text. */
+export interface DiscoveryProvenance {
+  stepIndex: number;
+  assertion: string;
+  state: string;
+  urlPath: string;
+}
+
+function parseStatement(code: string): any | null {
+  try {
+    return parseTypeScript(`async function __ariaAssertion() {\n${code}\n}`).program.body[0].body.body[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Assertions that are valid only because of a discovery-verified URL path (recorded for traceability).
+ * @param {GeneratedTest} gen
+ * @param {ValidationContext} ctx
+ * @returns {DiscoveryProvenance[]}
+ */
+export function discoveryProvenance(gen: GeneratedTest, ctx: ValidationContext): DiscoveryProvenance[] {
+  if (ctx.mode !== 'UI') return [];
+  return (gen.stepAssertions || []).flatMap((entry) => {
+    const url = verifiedUrlFor(ctx, entry.stepIndex);
+    const verified = ctx.verifiedStates?.[entry.stepIndex];
+    if (!url || !verified) return [];
+    const expected = ctx.tc.steps.find((s) => s.index === entry.stepIndex)?.expected.join('\n') || '';
+    return (entry.assertions || []).filter((assertion) => {
+      const node = parseStatement(assertion);
+      const statement = { norm: normalizeStatement(assertion), code: assertion, node };
+      return !!node && assertionProvenanceErrors(statement, expected, entry.stepIndex).length > 0
+        && assertionProvenanceErrors(statement, expected, entry.stepIndex, url).length === 0;
+    }).map((assertion) => ({
+      stepIndex: entry.stepIndex, assertion, state: verified.state, urlPath: url,
+    }));
+  });
+}
+
+function argMatches(node: any, arg: FlowArg): boolean {
+  if (arg.kind === 'literal') return isLiteral(node) && String(node.value) === arg.value;
+  if (arg.kind === 'data') {
+    return node?.type === 'MemberExpression' && !node.computed && node.object.type === 'Identifier'
+      && node.object.name === DATA_FIXTURE && propName(node) === arg.key;
+  }
+  return node?.type === 'CallExpression' && node.callee.type === 'Identifier' && node.callee.name === ENV_FUNCTION
+    && isLiteral(node.arguments[0]) && node.arguments[0].value === arg.name;
+}
+
+function argsMatch(nodes: any[], args: Record<string, FlowArg>): boolean {
+  const params = Object.keys(args);
+  if (params.length === 0) return nodes.length === 0;
+  if (nodes.length !== 1 || nodes[0].type !== 'ObjectExpression') return false;
+  const props = new Map<string, any>(nodes[0].properties.map((p: any) => [p.key?.name ?? p.key?.value, p.value]));
+  return props.size === params.length && params.every((param) => props.has(param) && argMatches(props.get(param), args[param]));
+}
+
+function describeArgs(args: Record<string, FlowArg>): string {
+  const entries = Object.entries(args);
+  return entries.length === 0 ? '()' : `({ ${entries.map(([param, arg]) => `${param}: ${arg.expression}`).join(', ')} })`;
+}
+
+function checkFlowCall(
+  path: any,
+  member: string,
+  ctx: ValidationContext,
+  remaining: Map<string, Array<Record<string, FlowArg>>>,
+  topLevel: Set<any>,
+): string[] {
+  const calls = remaining.get(member);
+  if (!calls) return [`featurePage.${member}() is not a verified flow for ${ctx.tc.tcKey}; perform the test case's own steps instead.`];
+  if (path.parent?.node?.type !== 'AwaitExpression' || !topLevel.has(path.parent.parent?.node)) {
+    return [`featurePage.${member}() must be awaited as its own top-level statement.`];
+  }
+  if (calls.length === 0) return [`featurePage.${member}() is called more often than ${ctx.tc.tcKey} performs it.`];
+  const index = calls.findIndex((args) => argsMatch(path.node.arguments, args));
+  if (index === -1) return [`featurePage.${member}() arguments must be exactly ${calls.map(describeArgs).join(' or ')}.`];
+  calls.splice(index, 1);
+  return [];
+}
+
+function flowCallErrors(ast: any, ctx: ValidationContext): string[] {
+  const flowMembers = new Set((ctx.contract?.members || []).filter((m) => m.kind === MEMBER_KIND.FLOW).map((m) => m.name));
+  if (ctx.mode !== 'UI' || flowMembers.size === 0) return [];
+  const topLevel = new Set<any>(ast.program.body[0].body.body);
+  const remaining = new Map((ctx.flows || []).map((usage) => [usage.member, [...usage.calls]]));
+  const errors: string[] = [];
+  recast.visit(ast, {
+    visitCallExpression(path: any) {
+      const { callee } = path.node;
+      const member = callee.type === 'MemberExpression' && callee.object.type === 'Identifier' ? propName(callee) : null;
+      if (member && flowMembers.has(member)) errors.push(...checkFlowCall(path, member, ctx, remaining, topLevel));
+      this.traverse(path);
+    },
+  });
+  return errors;
+}
+
+function actionToken(statement: any): string | null {
+  const expression = statement.type === 'ExpressionStatement' ? statement.expression : null;
+  const call = expression?.type === 'AwaitExpression' ? expression.argument : expression;
+  if (call?.type !== 'CallExpression' || call.callee.type !== 'MemberExpression') return null;
+  const target = call.callee.object;
+  if (target.type === 'Identifier' && target.name === 'page') return `page:${propName(call.callee)}`;
+  return target.type === 'MemberExpression' ? `${propName(target)}:${propName(call.callee)}` : null;
+}
+
+function inlineFlowErrors(ast: any, ctx: ValidationContext): string[] {
+  if (ctx.mode !== 'UI' || !ctx.flows || ctx.flows.length === 0) return [];
+  const tokens = (ast.program.body[0].body.body as any[]).map(actionToken);
+  return ctx.flows
+    .filter((usage) => {
+      const sequence = usage.actions.map((action) => `${action.member ?? 'page'}:${action.op}`);
+      return tokens.some((_, start) => sequence.every((token, offset) => tokens[start + offset] === token));
+    })
+    .map((usage) => `The body performs the actions of verified flow ${usage.member} one by one; call featurePage.${usage.member}(...) instead.`);
+}
+
 function checkProvenance(gen: GeneratedTest, ast: any, statements: AssertionStatement[], ctx: ValidationContext): string[] {
   if (ctx.mode === 'K6') return [];
   const stepByNorm = new Map<string, number>();
@@ -319,7 +474,7 @@ function checkProvenance(gen: GeneratedTest, ast: any, statements: AssertionStat
     if (stepIndex === undefined) continue;
     const expected = ctx.tc.steps.find((s) => s.index === stepIndex)?.expected.join('\n') || '';
     const allowed = ctx.mode === 'API' ? `${expected}\n${ctx.tc.api?.expectedStatusCode ?? ''}` : expected;
-    errors.push(...assertionProvenanceErrors(statement, allowed, stepIndex));
+    errors.push(...assertionProvenanceErrors(statement, allowed, stepIndex, ctx.mode === 'UI' ? verifiedUrlFor(ctx, stepIndex) : undefined));
   }
   if (ctx.mode === 'UI') errors.push(...nonAssertionLiteralErrors(ast, statements, ctx.tc));
   return errors;
@@ -346,6 +501,8 @@ export function validateGeneratedTest(gen: GeneratedTest, ctx: ValidationContext
   const errors = [
     ...harnessErrors(ctx),
     ...facts.errors,
+    ...flowCallErrors(ast, ctx),
+    ...inlineFlowErrors(ast, ctx),
     ...checkStepMapping(gen, facts.statements, ctx.tc),
     ...checkProvenance(gen, ast, facts.statements, ctx),
   ];

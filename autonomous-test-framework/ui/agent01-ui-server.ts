@@ -16,8 +16,10 @@ import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as http from 'http';
+import { ClarificationStore } from '../core/clarifications/ClarificationStore';
 
 import { stateManager } from '../core/state-manager/StateManager';
+import { registerPipelineRoutes } from './pipelineRoutes';
 import { memoryEngine } from '../core/project-memory/MemoryEngine';
 import { llmClient } from '../core/llm/LLMClient';
 import { Logger } from '../core/logger/Logger';
@@ -26,6 +28,8 @@ import { isTestCaseSelected, setTestCaseSelected } from '../core/types';
 import { syncFixturesFileFromTestData } from '../core/state-manager/FixtureSync';
 import { loadCurrentTestData } from '../core/state-manager/TestDataFreshness';
 import { projectPaths, readActiveProjectSlug } from '../core/aut/projectPaths';
+import { registerAgent03ReviewRoutes } from './agent03ReviewRoutes';
+import { registerAgent04DataRoutes } from './agent04DataRoutes';
 
 require('dotenv').config();
 
@@ -37,6 +41,7 @@ const FRAMEWORK_DIR = path.resolve(__dirname, '..');
 
 // ── Middleware ────────────────────────────────────────────────────────────────
 app.use(express.json());
+registerPipelineRoutes(app);
 app.use(express.static(path.join(__dirname, 'static')));
 
 // ── File upload config ────────────────────────────────────────────────────────
@@ -111,6 +116,7 @@ app.post('/api/agent01/run', upload.single('file'), async (req: Request, res: Re
 
   const projectName = ((req.body?.projectName as string) || 'ARIA Project').trim();
   const jiraId      = ((req.body?.jiraId      as string) || '').trim();
+  const reanalyze   = String(req.body?.reanalyze || '') === 'true';
   const uploadedFile = (req as any).file as Express.Multer.File | undefined;
 
   let requirementsArg: string;
@@ -150,7 +156,8 @@ app.post('/api/agent01/run', upload.single('file'), async (req: Request, res: Re
     ['-r', 'ts-node/register', agentScript,
       `--requirements=${requirementsArg}`,
       `--project=${projectName}`,
-      `--format=${formatArg}`],
+      `--format=${formatArg}`,
+      ...(reanalyze ? ['--reanalyze'] : [])],
     {
       cwd:   FRAMEWORK_DIR,
       env:   { ...process.env },
@@ -219,9 +226,9 @@ app.get('/api/agent01/logs', (req: Request, res: Response) => {
 
 // ── POST /api/agent01/clarify ─────────────────────────────────────────────────
 /**
- * Persists user answers to ambiguity questions into the MemoryEngine's
- * resolvedClarifications store. The next agent run reads them automatically
- * via _autoResolveClarifications().
+ * Records user answers to ambiguity questions (MemoryEngine and the clarification store) and marks those
+ * ambiguities resolved in the stored analysis, so the user can proceed without another LLM run. The updated
+ * report is returned; a later re-analysis uses the answers automatically.
  */
 app.post('/api/agent01/clarify', async (req: Request, res: Response) => {
   const { answers } = req.body as {
@@ -233,13 +240,23 @@ app.post('/api/agent01/clarify', async (req: Request, res: Response) => {
   }
 
   try {
-    for (const { question, answer } of answers) {
-      if (question && answer) {
-        await memoryEngine.recordClarification(question.trim(), answer.trim(), '01-requirement-analyzer');
-      }
+    const report = await stateManager.getPipelineArtifact('analyzedRequirements');
+    const store = new ClarificationStore(stateManager.getProjectId());
+    const ambiguitiesById = new Map<string, any>((report?.ambiguities || []).map((amb: any) => [amb.id, amb]));
+    for (const { id, question, answer } of answers) {
+      if (!question || !answer?.trim()) continue;
+      await memoryEngine.recordClarification(question.trim(), answer.trim(), '01-requirement-analyzer');
+      const ambiguity = ambiguitiesById.get(id);
+      if (!ambiguity) continue;
+      if (ambiguity.clarificationId) store.answer(ambiguity.clarificationId, answer.trim(), 'agent01-ui');
+      Object.assign(ambiguity, { resolved: true, resolution: answer.trim() });
     }
-    logger.info('Clarification answers saved', { count: answers.length });
-    res.json({ ok: true, saved: answers.length });
+    if (report) {
+      report.ambiguitiesPending = (report.ambiguities || []).filter((amb: any) => !amb.resolved).length;
+      await stateManager.setPipelineArtifact('analyzedRequirements', report);
+    }
+    logger.info('Clarification answers saved', { count: answers.length, pending: report?.ambiguitiesPending });
+    res.json({ ok: true, saved: answers.length, report });
   } catch (err: any) {
     logger.error('Failed to save clarifications', { error: err.message });
     res.status(500).json({ error: err.message });
@@ -930,65 +947,8 @@ app.post('/api/agent03/chat', async (req: Request, res: Response) => {
   }
 });
 
-// ── PUT / POST /api/agent03/testcase (Human Override) ───────────────────────
-const updateReviewedTestCaseHandler = async (req: Request, res: Response) => {
-  const { key, reviewStatus, name, objective, precondition, testSteps, reviewNotes } = req.body || {};
-  if (!key) {
-    return res.status(400).json({ error: 'Test case key is required.' });
-  }
-
-  try {
-    if (!(stateManager as any)._initialized) {
-      try { await stateManager.initialize(); } catch (_) {}
-    }
-
-    const reviewedOutput = await stateManager.getPipelineArtifact('reviewedTestCases');
-    if (!reviewedOutput?.reviewedZephyrExport?.testCases) {
-      return res.status(404).json({ error: 'No reviewed test cases artifact found in state.' });
-    }
-
-    const allReviewedTCs = reviewedOutput.reviewedZephyrExport.testCases;
-    const targetTC = allReviewedTCs.find((tc: any) => tc.key === key);
-    if (!targetTC) {
-      return res.status(404).json({ error: `Reviewed test case ${key} not found.` });
-    }
-
-    if (typeof reviewStatus === 'string' && reviewStatus.trim()) {
-      targetTC.reviewStatus = reviewStatus.trim().toUpperCase();
-    }
-    if (typeof name === 'string' && name.trim()) targetTC.name = name.trim();
-    if (typeof objective === 'string') targetTC.objective = objective.trim();
-    if (typeof precondition === 'string') targetTC.precondition = precondition.trim();
-    if (Array.isArray(reviewNotes)) targetTC.reviewNotes = reviewNotes;
-    if (Array.isArray(testSteps)) {
-      targetTC.testSteps = testSteps.map((step: any) => ({
-        keyword: step.keyword || undefined,
-        description: (step.description || '').trim(),
-        testData: (step.testData || '').trim(),
-        expectedResult: (step.expectedResult || '').trim()
-      }));
-    }
-
-    // Recompute approved / rejected / rewritten counts
-    reviewedOutput.approvedCount = allReviewedTCs.filter((tc: any) => tc.reviewStatus !== 'REJECTED').length;
-    reviewedOutput.rejectedCount = allReviewedTCs.filter((tc: any) => tc.reviewStatus === 'REJECTED').length;
-    reviewedOutput.rewrittenCount = allReviewedTCs.filter((tc: any) => (tc.rewrittenSteps || 0) > 0).length;
-
-    await stateManager.setPipelineArtifact('reviewedTestCases', reviewedOutput);
-    try {
-      const requirements = await stateManager.getPipelineArtifact('analyzedRequirements');
-      syncFeatureFiles(requirements, allReviewedTCs, logger);
-    } catch (_) {}
-    logger.info(`Reviewed test case ${key} updated via Agent 03 UI override`, { reviewStatus: targetTC.reviewStatus });
-    return res.json({ ok: true, testCase: targetTC });
-  } catch (err: any) {
-    logger.error('Error overriding reviewed test case', { error: err.message });
-    return res.status(500).json({ error: err.message });
-  }
-};
-
-app.put('/api/agent03/testcase', updateReviewedTestCaseHandler);
-app.post('/api/agent03/testcase', updateReviewedTestCaseHandler);
+// ── /api/agent03/testcase (Human Override) and /api/agent03/clarify ─────────
+registerAgent03ReviewRoutes(app, logger);
 
 // ── Agent 04 (Test Data Generator) Routes ───────────────────────────────────
 
@@ -1166,7 +1126,7 @@ app.post('/api/agent04/chat', async (req: Request, res: Response) => {
         resolvedCount: testDataOutput.manifest?.resolvedCount,
         unresolvedCount: testDataOutput.manifest?.unresolvedCount,
         sensitiveRefsCount: testDataOutput.manifest?.sensitiveDataVault?.refs?.length,
-        globalFixtures: testDataOutput.manifest?.globalFixtures,
+        runtimeBindings: testDataOutput.manifest?.runtimeBindings,
         apiPayloadEndpoints: Object.keys(testDataOutput.manifest?.apiPayloadLibrary || {})
       }, null, 2) : '(No test data available yet)',
       '',
@@ -1194,93 +1154,7 @@ app.post('/api/agent04/chat', async (req: Request, res: Response) => {
 });
 
 // ── PUT / POST /api/agent04/data (Human Test Data Override) ─────────────────
-const updateTestDataHandler04 = async (req: Request, res: Response) => {
-  const { type, tcKey, inputs, globalFixtures, flatTestData } = req.body || {};
-
-  try {
-    if (!(stateManager as any)._initialized) {
-      try { await stateManager.initialize(); } catch (_) {}
-    }
-
-    const { testData: testDataOutput, stored, freshness } = await loadCurrentTestData(stateManager);
-    if (!testDataOutput?.manifest) {
-      const error = stored?.manifest ? `Test data is stale: ${freshness.reason} Run Agent 04 first.` : 'No testData artifact found in state.';
-      return res.status(stored?.manifest ? 409 : 404).json({ error });
-    }
-
-    const manifest = testDataOutput.manifest;
-
-    let diskFlat: Record<string, any> = {};
-    if (fs.existsSync(FIXTURES_PATH)) {
-      try {
-        diskFlat = JSON.parse(fs.readFileSync(FIXTURES_PATH, 'utf-8'));
-      } catch (_) {}
-    }
-
-    if (type === 'full_flat' && flatTestData && typeof flatTestData === 'object') {
-      diskFlat = { ...flatTestData };
-      if (flatTestData.baseURL) {
-        if (!manifest.globalCtx) manifest.globalCtx = {};
-        manifest.globalCtx.baseURL = flatTestData.baseURL;
-      }
-      if (flatTestData.standardUsername && manifest.globalFixtures?.adminCredentials) {
-        manifest.globalFixtures.adminCredentials.username = flatTestData.standardUsername;
-      }
-      if (flatTestData.password && manifest.globalFixtures?.adminCredentials) {
-        manifest.globalFixtures.adminCredentials.password = flatTestData.password;
-      }
-    } else if (type === 'global' && globalFixtures && typeof globalFixtures === 'object') {
-      manifest.globalFixtures = { ...manifest.globalFixtures, ...globalFixtures };
-      if (globalFixtures.baseURL) diskFlat.baseURL = globalFixtures.baseURL;
-      if (globalFixtures.adminCredentials?.username) diskFlat.standardUsername = globalFixtures.adminCredentials.username;
-      if (globalFixtures.adminCredentials?.password) diskFlat.password = globalFixtures.adminCredentials.password;
-    } else if (tcKey && inputs && typeof inputs === 'object') {
-      if (!manifest.perTCData) manifest.perTCData = {};
-      if (!manifest.perTCData[tcKey]) manifest.perTCData[tcKey] = { inputs: {} };
-      
-      const tcEntry = manifest.perTCData[tcKey];
-      for (const [key, item] of Object.entries(inputs)) {
-        const val = typeof item === 'object' && item !== null && 'value' in item ? (item as any).value : item;
-        const cleanKey = key.replace(/^\{\{|\}\}$/g, '');
-        const phKey = key.startsWith('{{') ? key : `{{${key}}}`;
-        
-        tcEntry.inputs[phKey] = {
-          placeholder: phKey,
-          value: val,
-          type: typeof item === 'object' && (item as any).type ? (item as any).type : (typeof val),
-          source: 'user_override',
-          sensitive: false,
-        };
-
-        const flatKey = `${tcKey.replace(/[^a-zA-Z0-9]/g, '')}_${cleanKey}`;
-        diskFlat[flatKey] = val;
-      }
-    } else {
-      return res.status(400).json({ error: 'Invalid update payload. Must provide type (full_flat, global, or per-TC inputs).' });
-    }
-
-    await stateManager.setPipelineArtifact('testData', testDataOutput);
-
-    const fixturesDir = path.dirname(FIXTURES_PATH);
-    if (!fs.existsSync(fixturesDir)) fs.mkdirSync(fixturesDir, { recursive: true });
-    fs.writeFileSync(FIXTURES_PATH, JSON.stringify(diskFlat, null, 2), 'utf-8');
-
-    logger.info('Test data updated and synced to disk via Agent 04 UI', {
-      type: type || 'single_tc',
-      tcKey,
-      fixturesPath: FIXTURES_PATH,
-      keysCount: Object.keys(diskFlat).length
-    });
-
-    return res.json({ ok: true, manifest, flatTestData: diskFlat });
-  } catch (err: any) {
-    logger.error('Error updating test data', { error: err.message });
-    return res.status(500).json({ error: err.message });
-  }
-};
-
-app.put('/api/agent04/data', updateTestDataHandler04);
-app.post('/api/agent04/data', updateTestDataHandler04);
+registerAgent04DataRoutes(app, logger, FIXTURES_PATH);
 
 // ── Agent 05 (Playwright Script Generator) Routes ───────────────────────────
 

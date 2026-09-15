@@ -71,6 +71,7 @@ export interface NormalizedAnalysis {
 }
 
 const AC_CATEGORY_PREFIX = /^\s*\[@?([a-z0-9_-]+)\]\s*/i;
+const AC_CATEGORY_SUFFIX = /\s*\(@([a-z0-9_-]+)\)\s*$/i;
 
 /**
  * Upper-cases a free-form enum value ("High" → "HIGH", "rest api" → "REST_API").
@@ -90,15 +91,20 @@ function toStringList(value: unknown): string[] {
   return Array.isArray(value) ? value.map(textOf).filter(Boolean) : [];
 }
 
+/** Splits a "[@tag] text" or "text (@tag)" criterion into category and text. */
+function splitCategory(raw: string): Pick<RequirementItem, 'category' | 'text'> {
+  const prefix = raw.match(AC_CATEGORY_PREFIX);
+  if (prefix) return { category: prefix[1].toLowerCase(), text: raw.slice(prefix[0].length).trim() };
+  const suffix = raw.match(AC_CATEGORY_SUFFIX);
+  if (suffix) return { category: suffix[1].toLowerCase(), text: raw.slice(0, suffix.index).trim() };
+  return { category: '', text: raw };
+}
+
 function toRequirementItems(value: unknown, prefix: string, parseCategory: boolean): RequirementItem[] {
-  return toStringList(value).map((raw, idx) => {
-    const match = parseCategory ? raw.match(AC_CATEGORY_PREFIX) : null;
-    return {
-      id: `${prefix}-${idx + 1}`,
-      category: match ? match[1].toLowerCase() : '',
-      text: match ? raw.slice(match[0].length).trim() : raw,
-    };
-  });
+  return toStringList(value).map((raw, idx) => ({
+    id: `${prefix}-${idx + 1}`,
+    ...(parseCategory ? splitCategory(raw) : { category: '', text: raw }),
+  }));
 }
 
 function normalizeIntegration(raw: any): IntegrationPoint {

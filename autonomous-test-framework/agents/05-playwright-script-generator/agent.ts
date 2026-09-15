@@ -24,7 +24,10 @@ import { approvalGate } from '../../core/approval-gate/ApprovalGate';
 import { llmClient } from '../../core/llm/LLMClient';
 import { Logger } from '../../core/logger/Logger';
 import { FRAMEWORK_CONFIG } from '../../config/framework.config';
-import { isTestCaseSelected, PlaywrightScriptsArtifact, AutomationTestCaseResult } from '../../core/types';
+import {
+  isAutomationApproved, reviewExclusionReason, PlaywrightScriptsArtifact, AutomationTestCaseResult,
+} from '../../core/types';
+import { ClarificationStore } from '../../core/clarifications/ClarificationStore';
 import { loadAutProfile, ResolvedAutProfile } from '../../core/aut/AutProfile';
 import {
   FRAMEWORK_ROOT, ProjectPaths, projectPaths, writeActiveProject,
@@ -44,6 +47,7 @@ import { UIScriptGenerator } from './sub-agents/ui-script-generator';
 import { APIScriptGenerator } from './sub-agents/api-script-generator';
 import { K6ScriptGenerator } from './sub-agents/k6-script-generator';
 import { FeatureGenerationContext, FeatureGenerationResult } from './sub-agents/shared/featureContext';
+import { writeBackClarifications } from './clarifications/writeBack';
 
 interface ApprovedScope {
   approved: any[];
@@ -60,7 +64,7 @@ interface SharedGeneration {
   priorReviewFindings: Array<{ ruleId: string; message: string }>;
 }
 
-const isApproved = (tc: any) => tc.reviewStatus !== 'REJECTED' && isTestCaseSelected(tc);
+const isApproved = (tc: any) => isAutomationApproved(tc);
 const byKey = (a: any, b: any) => String(a.key).localeCompare(String(b.key));
 
 /**
@@ -110,6 +114,7 @@ class PlaywrightScriptGeneratorAgent {
       });
       const results = await this._generateFeatures(testCases, shared);
       const output = this._persistOutputs(results, testCases, scope, shared);
+      await this._writeBackClarifications(output, testCases);
       writeActiveProject(projectId);
 
       const usage = llmClient.getStageUsage(STAGE_ID);
@@ -213,6 +218,8 @@ class PlaywrightScriptGeneratorAgent {
       result.file = file ? toRelative(FRAMEWORK_ROOT, file) : undefined;
       result.testTitle = renderTestTitle(tc);
       result.stepAssertions = outcome.stepAssertions;
+      if (outcome.sharedSetup) result.sharedSetup = outcome.sharedSetup;
+      if (outcome.provenance) result.provenance = outcome.provenance;
     }
     if (outcome.status === TC_OUTCOME.NEEDS_CONTEXT) result.missing = outcome.missing;
     if (outcome.status === TC_OUTCOME.BLOCKED) result.reason = (outcome.errors || []).slice(0, 5).join(' | ');
@@ -232,7 +239,7 @@ class PlaywrightScriptGeneratorAgent {
     const testCaseResults: AutomationTestCaseResult[] = [
       ...testCases.map((tc) => this._toResult(tc, outcomes.get(tc.tcKey), fileByTcKey.get(tc.tcKey))),
       ...scope.excluded.map((tc) => ({
-        tcKey: String(tc.key), status: TC_OUTCOME.EXCLUDED, reason: tc.reviewStatus === 'REJECTED' ? 'Rejected in Agent 03 review' : 'Excluded by user selection',
+        tcKey: String(tc.key), status: TC_OUTCOME.EXCLUDED, reason: reviewExclusionReason(tc),
       })),
     ].sort((a, b) => a.tcKey.localeCompare(b.tcKey));
 
@@ -261,6 +268,21 @@ class PlaywrightScriptGeneratorAgent {
     };
   }
 
+  /**
+   * Routes NEEDS_CONTEXT gaps back as clarifications to the owning stage and logs why each test case was not generated.
+   * @param {PlaywrightScriptsArtifact} output - Annotated in place
+   * @param {AutomationTestCase[]} testCases
+   */
+  private async _writeBackClarifications(output: PlaywrightScriptsArtifact, testCases: AutomationTestCase[]): Promise<void> {
+    const { runId } = await stateManager.getFullState();
+    output.clarifications = writeBackClarifications(new ClarificationStore(stateManager.getProjectId(), runId), output.testCases, testCases);
+    output.testCases
+      .filter((result) => result.status === TC_OUTCOME.NEEDS_CONTEXT || result.status === TC_OUTCOME.BLOCKED)
+      .forEach((result) => this._logger.warn(`${result.tcKey} ${result.status}: ${result.reason
+        || (result.missing || []).map((gap) => `${gap.kind}: ${gap.detail}`).join('; ')}`));
+    this._logger.info('Clarifications written back', output.clarifications);
+  }
+
   // ── Approval ─────────────────────────────────────────────────────────────
 
   private _counts(output: PlaywrightScriptsArtifact): Record<string, number> {
@@ -277,7 +299,8 @@ class PlaywrightScriptGeneratorAgent {
     const counts = this._counts(output);
     const clarifications = output.testCases
       .filter((r) => r.status === TC_OUTCOME.NEEDS_CONTEXT)
-      .map((r) => `${r.tcKey} — ${(r.missing || []).map((m) => `${m.kind}: ${m.detail}`).join('; ')}`);
+      .map((r) => `${r.tcKey} — ${(r.missing || [])
+        .map((m) => `${m.kind}: ${m.detail}${m.owningStage ? ` → asked of ${m.owningStage} (${m.clarificationId})` : ''}`).join('; ')}`);
     const agentResult: any = {
       agentId: STAGE_ID,
       stageNumber: STAGE_NUMBER,
@@ -301,6 +324,8 @@ class PlaywrightScriptGeneratorAgent {
         'Needs Context': counts.needsContext,
         Blocked: counts.blocked,
         Excluded: counts.excluded,
+        'Clarifications Raised': output.clarifications?.raised ?? 0,
+        'Environment Issues': output.clarifications?.environment ?? 0,
         'Spec Files': output.specFiles.length,
         'Page Objects': output.pomFiles.length,
         'K6 Scripts': output.k6Files.length,

@@ -45,6 +45,10 @@ export class LiteLLMProvider implements LLMProvider {
       requestParams.response_format = { type: 'json_object' };
     }
 
+    if (options.seed !== undefined) {
+      requestParams.seed = options.seed;
+    }
+
     const response = await this._client.chat.completions.create(requestParams);
 
     return {

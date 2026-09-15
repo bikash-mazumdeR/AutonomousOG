@@ -53,6 +53,8 @@ Flag any requirement that is:
 - Contradicting another requirement
 - Missing error/exception flows
 - Incomplete RBAC specification
+- Missing automation prerequisites: exact element or message text, how a stored state is visible to the user, the
+  landing URL path, concrete test values and boundaries, preconditions, environment or authentication
 
 **RULE: NEVER generate tests for ambiguous requirements without human clarification.**
 
@@ -99,7 +101,8 @@ Flag any requirement that is:
           "role": "string",
           "goal": "string",
           "benefit": "string",
-          "acceptanceCriteria": ["string"],
+          "acceptanceCriteria": ["[@functional|@ui|@performance|@security|@accessibility|@error-handling] criterion text"],
+          "testDataValues": [{ "name": "camelCaseName", "value": "string (omitted when sensitive)", "sourceRef": "AC-n | BR-n", "sensitive": "boolean" }],
           "businessRules": ["string"],
           "stateTransitions": ["string"],
           "integrationPoints": ["string"],
@@ -146,9 +149,12 @@ Flag any requirement that is:
     {
       "id": "AMB001",
       "featureId": "F001",
+      "userStoryId": "US001",
+      "acceptanceCriterion": "string",
+      "category": "REQUIREMENT|ELEMENT_IDENTIFICATION|STORAGE_OR_STATE|PAGE_URL|TEST_VALUE|PRECONDITION|ENVIRONMENT_AUTH",
       "description": "string",
       "question": "string",
-      "blockingTestGeneration": "boolean"
+      "blockingTestGeneration": "boolean (true only when the whole feature is untestable)"
     }
   ],
 

@@ -22,12 +22,16 @@ import { llmClient } from '../../core/llm/LLMClient';
 import { contextSqueezer } from '../../core/llm/ContextSqueezer';
 import { AgentResult } from '../../core/types';
 import { jiraClient } from '../../mcp/jira/jira-mcp-client';
+import { computeInputFingerprint, findReusableAnalysis, ANALYSIS_SOURCE } from './inputFingerprint';
+import { clarificationRequestFor, normalizeAmbiguities, normalizeQuestion } from './ambiguities';
+import { ClarificationStore } from '../../core/clarifications/ClarificationStore';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const STAGE_ID   = '01-requirement-analyzer';
 const STAGE_NAME = 'Requirement Deep Analyzer';
 const NEXT_STAGE = '02-test-case-generator';
+const ANALYSIS_SEED = 42;
 
 export class RequirementAnalyzerAgent {
   private _logger: Logger;
@@ -50,13 +54,20 @@ export class RequirementAnalyzerAgent {
       await stateManager.markStageRunning(STAGE_ID);
 
       let rawRequirements = await this._parseInput(input);
+      // Fingerprint before squeezing: squeeze is itself an LLM call and not reproducible.
+      const inputFingerprint = computeInputFingerprint({
+        rawRequirements,
+        skill: this._skill,
+        // Only answers to Agent 01's own questions change the analysis; answers owned by later stages must not force a re-analysis.
+        resolvedClarifications: (memoryContext.resolvedClarifications || []).filter((c: any) => c.stageId === STAGE_ID),
+        improvementRules: memoryContext.improvementRules || [],
+      });
       rawRequirements = await contextSqueezer.squeeze(rawRequirements, input.projectName || 'Requirements');
       
       // Save raw requirements for the chatbot and downstream agents
       await stateManager.setPipelineArtifact('requirements', rawRequirements);
       
-      this._logger.info('Executing LLM-driven requirements decomposition...');
-      const analysisReport = await this._performLLMAnalysis(rawRequirements, input.projectName, memoryContext);
+      const analysisReport = await this._resolveAnalysis(rawRequirements, inputFingerprint, input, memoryContext);
       analysisReport.featureFilePaths = [];
 
       const resolvedAmbiguities = await this._autoResolveClarifications(
@@ -67,9 +78,7 @@ export class RequirementAnalyzerAgent {
       analysisReport.ambiguitiesPending = resolvedAmbiguities.filter((a: any) => !a.resolved).length;
 
       const pendingAmbiguities = resolvedAmbiguities.filter((a: any) => !a.resolved);
-      if (pendingAmbiguities.length > 0) {
-        await this._requestClarifications(pendingAmbiguities);
-      }
+      await this._requestClarifications(pendingAmbiguities, inputFingerprint);
 
       const usage = llmClient.getStageUsage(STAGE_ID);
       await stateManager.setPipelineArtifact('analyzedRequirements', analysisReport);
@@ -142,6 +151,22 @@ export class RequirementAnalyzerAgent {
     }
   }
 
+  /**
+   * Reuses the previous analysis when the requirement inputs are unchanged (unless --reanalyze),
+   * otherwise runs the LLM analysis and stamps it with the input fingerprint.
+   */
+  private async _resolveAnalysis(rawRequirements: string, inputFingerprint: string, input: any, memoryContext: any) {
+    const previous = input.reanalyze ? null : await stateManager.getLatestArtifactForProject('analyzedRequirements');
+    const reusable = findReusableAnalysis(previous, inputFingerprint);
+    if (reusable) {
+      this._logger.info(`Reused analysis — requirement inputs unchanged (fingerprint ${inputFingerprint.slice(0, 12)})`);
+      return { ...reusable, analysisSource: ANALYSIS_SOURCE.REUSED };
+    }
+    this._logger.info('Executing LLM-driven requirements decomposition...', { reanalyze: Boolean(input.reanalyze) });
+    const report = await this._performLLMAnalysis(rawRequirements, input.projectName, memoryContext);
+    return { ...report, inputFingerprint, analysisSource: ANALYSIS_SOURCE.REGENERATED };
+  }
+
   private async _performLLMAnalysis(rawRequirements: string, projectName: string, memoryContext: any) {
     const prompt = `
 You are a senior QA architect performing an exhaustive requirements decomposition for: ${projectName}
@@ -150,9 +175,13 @@ MEMORY / IMPROVEMENT RULES FROM PAST RUNS:
 ${JSON.stringify(memoryContext.improvementRules)}
 
 RESOLVED CLARIFICATIONS / ANSWERS FROM HUMAN:
-${JSON.stringify(memoryContext.resolvedClarifications)}
+${JSON.stringify((memoryContext.resolvedClarifications || [])
+    .filter((c: any) => c.stageId === STAGE_ID)
+    .map((c: any) => ({ question: c.question, answer: c.answer })))}
 
-CRITICAL INSTRUCTION: Do NOT ask questions in the "ambiguities" array if they have already been answered in the RESOLVED CLARIFICATIONS above. Integrate the human's answer directly into your analysis and acceptance criteria instead!
+CRITICAL INSTRUCTION: A topic answered in RESOLVED CLARIFICATIONS is settled, even though the requirement text itself does
+not state it. Integrate the answer into your analysis and acceptance criteria, and never raise an ambiguity about the same
+topic again, however it is worded.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 FULL REQUIREMENTS INPUT:
@@ -169,6 +198,31 @@ Cover the following aspects using Scenario tags instead of separate features:
 - Security & Authentication Requirements (@security)
 - Accessibility Requirements (@accessibility)
 - Error Handling & Edge Cases (@error-handling)
+
+ACCEPTANCE CRITERIA FORMAT (strict): every acceptance criterion string MUST start with exactly one category
+prefix in square brackets — [@functional], [@ui], [@performance], [@security], [@accessibility] or [@error-handling] —
+followed by the criterion text. Never put the category at the end or in parentheses.
+Example: "[@error-handling] The system displays 'Username is required' when the username field is empty"
+
+AUTOMATION PREREQUISITES — raise an ambiguity for each one that neither the requirement nor the RESOLVED CLARIFICATIONS
+settle; never invent the answer. Ask only what a person who knows the requirement can answer. Never ask for details that
+test automation discovers from the running application (locators, element ids or attributes, image sources, CSS values
+the requirement does not state) or for tooling choices (browsers, browser versions, frameworks).
+For every acceptance criterion, check that the requirement states:
+- ELEMENT_IDENTIFICATION: the exact visible text, label or name of every element or message the criterion refers to,
+  including the exact wording of errors and dialogs and whether a "dialog" is part of the page or a browser pop-up.
+- STORAGE_OR_STATE: how a stored or internal state becomes visible to the user. Storage keys, cookies and database
+  contents cannot be observed through the user interface, so ask what the user can see instead.
+- PAGE_URL: the URL path or page the user lands on after an action.
+- TEST_VALUE: concrete input values, lengths and boundaries, and whether a boundary value is accepted or rejected.
+- PRECONDITION: the state and navigation needed before the criterion can be exercised.
+- ENVIRONMENT_AUTH: the environment, accounts or authentication the test needs.
+Set "blockingTestGeneration": true ONLY for a contradiction or missing requirement that makes the whole feature
+untestable. Automation prerequisites are never blocking — they are asked while the rest is generated.
+
+TEST DATA VALUES: list every concrete test input value the requirement states in the user story's "testDataValues" as
+{ "name": "<camelCase name>", "value": "<value exactly as written>", "sourceRef": "AC-n or BR-n", "sensitive": false }.
+For passwords, tokens and other secrets set "sensitive": true and omit "value".
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 REQUIRED JSON OUTPUT FORMAT:
@@ -190,7 +244,8 @@ Return ONLY a single valid JSON object (no prose, no markdown outside the JSON b
           "id": "US-01",
           "title": "Add to cart",
           "goal": "Allow users to add items to their cart",
-          "acceptanceCriteria": ["AC 1"],
+          "acceptanceCriteria": ["[@functional] Clicking Add to cart adds the item to the cart"],
+          "testDataValues": [{ "name": "productName", "value": "<value quoted in the requirement>", "sourceRef": "AC-1", "sensitive": false }],
           "testTypes": ["Functional", "UI"]
         }
       ]
@@ -210,8 +265,13 @@ Return ONLY a single valid JSON object (no prose, no markdown outside the JSON b
   "ambiguities": [
     {
       "id": "AMB-01",
-      "description": "desc",
-      "question": "question?"
+      "featureId": "F-01",
+      "userStoryId": "US-01",
+      "acceptanceCriterion": "<exact acceptance criterion text the question is about>",
+      "category": "REQUIREMENT | ELEMENT_IDENTIFICATION | STORAGE_OR_STATE | PAGE_URL | TEST_VALUE | PRECONDITION | ENVIRONMENT_AUTH",
+      "description": "what the requirement leaves open",
+      "question": "the specific question to ask",
+      "blockingTestGeneration": false
     }
   ]
 }
@@ -227,7 +287,8 @@ CRITICAL:
         { role: 'system', content: this._skill },
         { role: 'user', content: prompt }
       ],
-      temperature: 0.2,
+      temperature: 0,
+      seed: ANALYSIS_SEED,
       max_tokens: 16384,
       json: true,
     });
@@ -238,7 +299,7 @@ CRITICAL:
       report.businessRules = report.businessRules || [];
       report.stateTransitions = report.stateTransitions || [];
       report.integrationPoints = report.integrationPoints || [];
-      report.ambiguities = report.ambiguities || [];
+      report.ambiguities = normalizeAmbiguities(report.ambiguities || [], report.features);
       report.totalFeatures = report.totalFeatures ?? report.features.length;
       report.totalUserStories = report.totalUserStories ?? report.features.reduce((acc: number, f: any) => acc + (f.userStories?.length || 0), 0);
       return report;
@@ -650,16 +711,38 @@ CRITICAL:
       .trim();
   }
 
+  private async _clarificationStore(): Promise<ClarificationStore> {
+    const { runId } = await stateManager.getFullState();
+    return new ClarificationStore(stateManager.getProjectId(), runId);
+  }
+
+  /**
+   * Marks ambiguities answered in memory or in the clarification store (exact question match after normalisation — never fuzzy).
+   */
   private async _autoResolveClarifications(ambiguities: any[], resolved: any[]) {
-    return ambiguities.map(amb => {
-      const match = resolved.find(r => r.question.toLowerCase().trim() === amb.question.toLowerCase().trim());
-      return match ? { ...amb, resolved: true, resolution: match.answer } : { ...amb, resolved: false };
+    const answers = new Map<string, string>();
+    (resolved || []).forEach((r: any) => answers.set(normalizeQuestion(r.question), r.answer));
+    (await this._clarificationStore()).listResolvedFor(STAGE_ID)
+      .filter((c) => c.owningStage === STAGE_ID && c.answer)
+      .forEach((c) => answers.set(normalizeQuestion(c.question), c.answer as string));
+    return ambiguities.map((amb) => {
+      const answer = answers.get(normalizeQuestion(amb.question));
+      return answer ? { ...amb, resolved: true, resolution: answer } : { ...amb, resolved: false };
     });
   }
 
-  private async _requestClarifications(pending: any[]) {
-    this._logger.warn(`${pending.length} ambiguities require human input.`);
-    // Interactive CLI logic remains similar to original
+  /**
+   * Raises open ambiguities as clarifications owned by Agent 01 and marks questions asked about other inputs stale.
+   */
+  private async _requestClarifications(pending: any[], inputFingerprint: string) {
+    const store = await this._clarificationStore();
+    pending.forEach((amb) => {
+      amb.clarificationId = store.raise(clarificationRequestFor(amb, inputFingerprint)).id;
+    });
+    const stale = store.markStale({ owningStage: STAGE_ID, subjectHash: inputFingerprint });
+    if (pending.length > 0 || stale > 0) {
+      this._logger.warn(`${pending.length} ambiguities require human input.`, { staleQuestions: stale });
+    }
   }
 
   private _saveReportToDisk(report: any) {
@@ -671,6 +754,8 @@ CRITICAL:
   private _buildApprovalSummary(report: any) {
     return {
       'Project': report.projectName || 'ARIA',
+      'Analysis': report.analysisSource === ANALYSIS_SOURCE.REUSED ? 'Reused (requirements unchanged)' : 'Regenerated',
+      'Input Fingerprint': String(report.inputFingerprint || '').slice(0, 12),
       'Features': report.totalFeatures,
       'User Stories': report.totalUserStories,
       'Integration Points': (report.integrationPoints || []).length,
@@ -721,7 +806,8 @@ if (require.main === module) {
     const result = await agent.run({
       requirements: opts.requirements || opts.req,
       projectName: opts.project || 'ARIA Test Project',
-      format: opts.format || 'text'
+      format: opts.format || 'text',
+      reanalyze: Boolean(opts.reanalyze),
     });
 
     console.log(`\n✅ Agent 01 complete — Status: ${result.status} | Approval: ${result.approvalStatus}`);

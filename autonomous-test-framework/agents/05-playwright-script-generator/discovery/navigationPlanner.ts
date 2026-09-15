@@ -5,7 +5,8 @@
  * A plan may reference only elements verified in the current state and values bound in the test case.
  */
 
-import { AutomationTestCase, MissingItem } from '../contracts/automationTestCase';
+import { AutomationTestCase } from '../contracts/automationTestCase';
+import { MissingItem } from '../../../core/readiness/readinessTypes';
 import { PageState } from './pageMap';
 
 /** Operations on the page itself; they take no element. */

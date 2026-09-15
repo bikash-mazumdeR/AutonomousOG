@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
 import { spawn, ChildProcess } from 'child_process';
 import { stateManager } from '../core/state-manager/StateManager';
+import { registerPipelineRoutes } from './pipelineRoutes';
 import { llmClient } from '../core/llm/LLMClient';
 import { memoryEngine } from '../core/project-memory/MemoryEngine';
 import { syncFeatureFiles } from '../agents/02-test-case-generator/utils';
@@ -17,6 +18,7 @@ const logger = new Logger('Agent02UI');
 const FRAMEWORK_DIR = path.resolve(__dirname, '..');
 
 app.use(express.json());
+registerPipelineRoutes(app);
 app.use(express.static(path.join(__dirname, 'static')));
 
 // ── Agent process management ──────────────────────────────────────────────────

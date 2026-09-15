@@ -1,11 +1,13 @@
 import express, { Request, Response } from 'express';
 import { spawn, ChildProcess } from 'child_process';
 import { stateManager } from '../core/state-manager/StateManager';
+import { registerPipelineRoutes } from './pipelineRoutes';
 import { ensureFixturesFileSynced, syncFixturesFileFromTestData } from '../core/state-manager/FixtureSync';
 import { loadCurrentTestData } from '../core/state-manager/TestDataFreshness';
 import { llmClient } from '../core/llm/LLMClient';
 import { memoryEngine } from '../core/project-memory/MemoryEngine';
 import { Logger } from '../core/logger/Logger';
+import { registerAgent04DataRoutes } from './agent04DataRoutes';
 import path from 'path';
 import fs from 'fs';
 import * as http from 'http';
@@ -19,6 +21,7 @@ const FRAMEWORK_DIR = path.resolve(__dirname, '..');
 const FIXTURES_PATH = path.join(FRAMEWORK_DIR, 'tests', 'fixtures', 'test-data.json');
 
 app.use(express.json());
+registerPipelineRoutes(app);
 app.use(express.static(path.join(__dirname, 'static')));
 
 // Redirect root to agent04.html
@@ -288,7 +291,7 @@ app.post('/api/agent04/chat', async (req: Request, res: Response) => {
         resolvedCount: testDataOutput.manifest?.resolvedCount,
         unresolvedCount: testDataOutput.manifest?.unresolvedCount,
         sensitiveRefsCount: testDataOutput.manifest?.sensitiveDataVault?.refs?.length,
-        globalFixtures: testDataOutput.manifest?.globalFixtures,
+        runtimeBindings: testDataOutput.manifest?.runtimeBindings,
         apiPayloadEndpoints: Object.keys(testDataOutput.manifest?.apiPayloadLibrary || {})
       }, null, 2) : '(No test data available yet)',
       '',
@@ -316,102 +319,7 @@ app.post('/api/agent04/chat', async (req: Request, res: Response) => {
 });
 
 // ── PUT / POST /api/agent04/data (Human Test Data Override) ───────────────────
-const updateTestDataHandler = async (req: Request, res: Response) => {
-  const { type, tcKey, inputs, globalFixtures, flatTestData } = req.body || {};
-
-  try {
-    if (!(stateManager as any)._initialized) {
-      try { await stateManager.initialize(); } catch (_) {}
-    }
-
-    const { testData: testDataOutput, stored, freshness } = await loadCurrentTestData(stateManager);
-    if (!testDataOutput?.manifest) {
-      const error = stored?.manifest ? `Test data is stale: ${freshness.reason} Run Agent 04 first.` : 'No testData artifact found in state.';
-      return res.status(stored?.manifest ? 409 : 404).json({ error });
-    }
-
-    const manifest = testDataOutput.manifest;
-
-    // Load existing flat fixtures from disk if available
-    let diskFlat: Record<string, any> = {};
-    if (fs.existsSync(FIXTURES_PATH)) {
-      try {
-        diskFlat = JSON.parse(fs.readFileSync(FIXTURES_PATH, 'utf-8'));
-      } catch (_) {}
-    }
-
-    if (type === 'full_flat' && flatTestData && typeof flatTestData === 'object') {
-      // Overwrite flat test data directly
-      diskFlat = { ...flatTestData };
-
-      // Also sync back to globalFixtures where applicable
-      if (flatTestData.baseURL) {
-        if (!manifest.globalCtx) manifest.globalCtx = {};
-        manifest.globalCtx.baseURL = flatTestData.baseURL;
-      }
-      if (flatTestData.standardUsername && manifest.globalFixtures?.adminCredentials) {
-        manifest.globalFixtures.adminCredentials.username = flatTestData.standardUsername;
-      }
-      if (flatTestData.password && manifest.globalFixtures?.adminCredentials) {
-        manifest.globalFixtures.adminCredentials.password = flatTestData.password;
-      }
-    } else if (type === 'global' && globalFixtures && typeof globalFixtures === 'object') {
-      manifest.globalFixtures = { ...manifest.globalFixtures, ...globalFixtures };
-      // Sync into flat test data
-      if (globalFixtures.baseURL) diskFlat.baseURL = globalFixtures.baseURL;
-      if (globalFixtures.adminCredentials?.username) diskFlat.standardUsername = globalFixtures.adminCredentials.username;
-      if (globalFixtures.adminCredentials?.password) diskFlat.password = globalFixtures.adminCredentials.password;
-    } else if (tcKey && inputs && typeof inputs === 'object') {
-      // Update per-TC inputs
-      if (!manifest.perTCData) manifest.perTCData = {};
-      if (!manifest.perTCData[tcKey]) manifest.perTCData[tcKey] = { inputs: {} };
-      
-      const tcEntry = manifest.perTCData[tcKey];
-      for (const [key, item] of Object.entries(inputs)) {
-        const val = typeof item === 'object' && item !== null && 'value' in item ? (item as any).value : item;
-        const cleanKey = key.replace(/^\{\{|\}\}$/g, '');
-        const phKey = key.startsWith('{{') ? key : `{{${key}}}`;
-        
-        tcEntry.inputs[phKey] = {
-          placeholder: phKey,
-          value: val,
-          type: typeof item === 'object' && (item as any).type ? (item as any).type : (typeof val),
-          source: 'user_override',
-          sensitive: false,
-        };
-
-        // Also update flat disk fixture for Playwright
-        const flatKey = `${tcKey.replace(/[^a-zA-Z0-9]/g, '')}_${cleanKey}`;
-        diskFlat[flatKey] = val;
-      }
-    } else {
-      return res.status(400).json({ error: 'Invalid update payload. Must provide type (full_flat, global, or per-TC inputs).' });
-    }
-
-    // Save updated artifact to state
-    await stateManager.setPipelineArtifact('testData', testDataOutput);
-
-    // Save updated flat fixtures to disk
-    const fixturesDir = path.dirname(FIXTURES_PATH);
-    if (!fs.existsSync(fixturesDir)) fs.mkdirSync(fixturesDir, { recursive: true });
-    fs.writeFileSync(FIXTURES_PATH, JSON.stringify(diskFlat, null, 2), 'utf-8');
-
-    logger.info('Test data updated and synced to disk via Agent 04 UI', {
-      type: type || 'single_tc',
-      tcKey,
-      fixturesPath: FIXTURES_PATH,
-      keysCount: Object.keys(diskFlat).length
-    });
-
-    return res.json({ ok: true, manifest, flatTestData: diskFlat });
-  } catch (err: any) {
-    logger.error('Error updating test data', { error: err.message });
-    return res.status(500).json({ error: err.message });
-  }
-};
-
-app.put('/api/agent04/data', updateTestDataHandler);
-app.post('/api/agent04/data', updateTestDataHandler);
+registerAgent04DataRoutes(app, logger, FIXTURES_PATH);
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {

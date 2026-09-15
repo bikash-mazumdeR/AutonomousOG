@@ -11,9 +11,13 @@ import * as recast from 'recast';
 import { parseTypeScript } from '../../../core/automation-reviewer/ReviewRules';
 import { GenerationMode, MAX_TCS_PER_CALL } from '../constants';
 import { ChatFn, ChatMessage } from '../types';
-import { AutomationTestCase, MissingItem } from '../contracts/automationTestCase';
+import { AutomationTestCase } from '../contracts/automationTestCase';
+import { MissingItem } from '../../../core/readiness/readinessTypes';
 import { PageContract } from '../rendering/pomRenderer';
-import { GeneratedTest, StepAssertionMap, validateGeneratedTest } from '../validation/integrityValidator';
+import {
+  DiscoveryProvenance, GeneratedTest, StepAssertionMap, ValidationContext, discoveryProvenance, validateGeneratedTest,
+} from '../validation/integrityValidator';
+import { FlowUsage } from '../discovery/flowExtractor';
 import { chunkArray, parseJsonObject } from '../sub-agents/shared/generation-utils';
 
 /** Inputs for body generation. */
@@ -29,6 +33,10 @@ export interface BodyGenerationRequest {
   concurrency: number;
   /** Renders one test into its real file skeleton for rule-based validation. */
   renderHarness: (tc: AutomationTestCase, body: string) => string;
+  /** UI: verified flows each test case must call (by tcKey). */
+  flowsByTcKey?: Map<string, FlowUsage[]>;
+  /** UI: states discovery verified after each step (by tcKey). */
+  verifiedStatesByTcKey?: Map<string, Record<number, { state: string; urlPath: string }>>;
 }
 
 /** Final outcome for one test case. */
@@ -40,6 +48,24 @@ export interface TestOutcome {
   missing?: MissingItem[];
   errors?: string[];
   attempts: number;
+  /** Assertions whose value came from a discovery-verified state. */
+  provenance?: DiscoveryProvenance[];
+  /** Statements the final spec runs in beforeEach before this test's body. */
+  sharedSetup?: string[];
+}
+
+function flowPayload(usages: FlowUsage[] | undefined): Array<Record<string, unknown>> | undefined {
+  if (!usages || usages.length === 0) return undefined;
+  return usages.map((usage) => ({
+    member: usage.member,
+    coversSteps: usage.stepIndexes,
+    calls: usage.calls.map((args) => Object.fromEntries(Object.entries(args).map(([param, arg]) => [param, arg.expression]))),
+  }));
+}
+
+function statesPayload(req: BodyGenerationRequest, tcKey: string): Record<number, { state: string; urlPath: string }> | undefined {
+  const states = req.verifiedStatesByTcKey?.get(tcKey);
+  return states && Object.keys(states).length > 0 ? states : undefined;
 }
 
 /**
@@ -68,6 +94,8 @@ export function buildGenerationPayload(
         testData: step.testData,
         data: step.data.map(({ token, fixtureKey, envVar }) => ({ token, fixtureKey, envVar })),
       })),
+      applicableFlows: flowPayload(req.flowsByTcKey?.get(tc.tcKey)),
+      verifiedStates: statesPayload(req, tc.tcKey),
     })),
     priorReviewFindings: req.priorReviewFindings.length > 0 ? req.priorReviewFindings : undefined,
     validationErrors: validationErrors.length > 0 ? validationErrors : undefined,
@@ -129,14 +157,15 @@ function parseResponse(text: string): { entries: Map<string, GeneratedTest>; err
   }
 }
 
-function toOutcome(entry: GeneratedTest, attempts: number): TestOutcome {
-  return entry.status === 'GENERATED'
-    ? {
-      tcKey: entry.tcKey, status: 'GENERATED', body: entry.body, stepAssertions: entry.stepAssertions, attempts,
-    }
-    : {
+function toOutcome(entry: GeneratedTest, attempts: number, provenance: DiscoveryProvenance[]): TestOutcome {
+  if (entry.status !== 'GENERATED') {
+    return {
       tcKey: entry.tcKey, status: 'NEEDS_CONTEXT', missing: entry.missing, attempts,
     };
+  }
+  return {
+    tcKey: entry.tcKey, status: 'GENERATED', body: entry.body, stepAssertions: entry.stepAssertions, attempts, ...(provenance.length > 0 ? { provenance } : {}),
+  };
 }
 
 async function generateChunk(req: BodyGenerationRequest, chunk: AutomationTestCase[], chat: ChatFn): Promise<TestOutcome[]> {
@@ -151,13 +180,12 @@ async function generateChunk(req: BodyGenerationRequest, chunk: AutomationTestCa
     for (const tc of pending) {
       const entry = entries.get(tc.tcKey);
       const harness = entry?.status === 'GENERATED' && entry.body ? req.renderHarness(tc, entry.body) : '';
-      const errors = entry
-        ? validateGeneratedTest(entry, {
-          mode: req.mode, tc, contract: req.contract, harness,
-        })
-        : [error || `No entry was returned for ${tc.tcKey}.`];
+      const ctx: ValidationContext = {
+        mode: req.mode, tc, contract: req.contract, harness, flows: req.flowsByTcKey?.get(tc.tcKey), verifiedStates: req.verifiedStatesByTcKey?.get(tc.tcKey),
+      };
+      const errors = entry ? validateGeneratedTest(entry, ctx) : [error || `No entry was returned for ${tc.tcKey}.`];
       if (entry && errors.length === 0) {
-        outcomes.set(tc.tcKey, toOutcome(entry, attempt));
+        outcomes.set(tc.tcKey, toOutcome(entry, attempt, discoveryProvenance(entry, ctx)));
       } else {
         retry.push(tc);
         feedback.push({ tcKey: tc.tcKey, errors });

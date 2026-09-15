@@ -6,7 +6,8 @@
  * @version 1.0.0
  */
 
-require('dotenv').config();
+// Resolve .env from the framework root, not the working directory, so agents started from elsewhere get the same settings
+require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
 
 // ─── Pipeline Stage Registry ──────────────────────────────────────────────────
 
@@ -208,6 +209,28 @@ const GMAIL_CONFIG = {
 
 // ─── Framework Configuration ──────────────────────────────────────────────────
 
+/** Gemini candidates: the fallback chain behind each agent's Bedrock model. */
+const GEMINI_FALLBACKS = Object.freeze([
+  { provider: 'gemini', model: process.env.LLM_MODEL_DEFAULT || 'gemini-3.5-flash' },
+  { provider: 'gemini', model: 'gemini-3.6-flash' },
+  { provider: 'gemini', model: 'gemini-3.7-flash' },
+  { provider: 'gemini', model: 'gemini-flash-latest' },
+  { provider: 'gemini', model: 'gemini-3.1-flash-lite-preview' },
+  { provider: 'gemini', model: 'gemini-flash-lite-latest' },
+]);
+
+/**
+ * Model for one agent: its Bedrock model (own env var, else BEDROCK_MODEL_DEFAULT) with Gemini as fallback.
+ * Without a Bedrock API key or model, the agent keeps the Gemini chain.
+ * @param {string} envVar - Per-agent model env var, e.g. LLM_MODEL_05
+ */
+function bedrockStage(envVar: string) {
+  const model = process.env[envVar] || process.env.BEDROCK_MODEL_DEFAULT;
+  const [gemini, ...geminiFallbacks] = GEMINI_FALLBACKS;
+  if (!process.env.AWS_BEARER_TOKEN_BEDROCK || !model) return { ...gemini, fallbacks: geminiFallbacks };
+  return { provider: 'bedrock', model, fallbacks: [...GEMINI_FALLBACKS] };
+}
+
 const FRAMEWORK_CONFIG = {
   projectId: process.env.FRAMEWORK_PROJECT_ID || 'default',
   logLevel: process.env.FRAMEWORK_LOG_LEVEL || 'info',
@@ -305,6 +328,17 @@ const FRAMEWORK_CONFIG = {
       '09-report-generator': 'data',
       '10-auto-healer': 'coding',
     },
+    // Per-agent models (Bedrock first, Gemini fallback). Stages listed here ignore stageMapping.
+    stageModels: {
+      '01-requirement-analyzer': bedrockStage('LLM_MODEL_01'),
+      '02-test-case-generator': bedrockStage('LLM_MODEL_02'),
+      '05-playwright-script-generator': bedrockStage('LLM_MODEL_05'),
+      '06-automation-reviewer': bedrockStage('LLM_MODEL_06'),
+      '08-bug-reporter': bedrockStage('BEDROCK_MODEL_DEFAULT'),
+      '09-report-generator': bedrockStage('BEDROCK_MODEL_DEFAULT'),
+      '10-auto-healer': bedrockStage('LLM_MODEL_10'),
+      'system-utility': bedrockStage('BEDROCK_MODEL_DEFAULT'),
+    } as Record<string, { provider: string; model: string; fallbacks: Array<{ provider: string; model: string }> }>,
   },
 
   pipeline: PIPELINE_STAGES,

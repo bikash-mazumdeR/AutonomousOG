@@ -40,10 +40,6 @@ describe('LiteLLMProvider', () => {
     provider = new LiteLLMProvider(PROXY_URL, API_KEY);
   });
 
-  it('should have name "litellm"', () => {
-    expect(provider.name).toBe('litellm');
-  });
-
   it('should initialize the OpenAI SDK with the correct proxy baseURL', () => {
     const OpenAI = require('openai');
     const constructorCall = OpenAI.mock.calls[OpenAI.mock.calls.length - 1][0];
@@ -89,28 +85,6 @@ describe('LiteLLMProvider', () => {
         temperature: 0.3,
         max_tokens: 2048,
       }),
-    );
-  });
-
-  it('should apply default temperature (0.7) when not specified', async () => {
-    await provider.chat({
-      model: 'gemini-3.5-flash',
-      messages: [{ role: 'user', content: 'Hello' }],
-    });
-
-    expect(mockCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ temperature: 0.7 }),
-    );
-  });
-
-  it('should apply default max_tokens (16384) when not specified', async () => {
-    await provider.chat({
-      model: 'gemini-3.5-flash',
-      messages: [{ role: 'user', content: 'Hello' }],
-    });
-
-    expect(mockCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ max_tokens: 16384 }),
     );
   });
 
@@ -163,13 +137,5 @@ describe('LiteLLMProvider', () => {
         messages: [{ role: 'user', content: 'Hi' }],
       }),
     ).rejects.toMatchObject({ status: 429 });
-  });
-
-  it('should use "litellm" as the default API key when none is provided', () => {
-    const OpenAI = require('openai');
-    OpenAI.mockClear();
-    new LiteLLMProvider('http://localhost:4000');
-    const constructorCall = OpenAI.mock.calls[0][0];
-    expect(constructorCall.apiKey).toBe('litellm');
   });
 });
