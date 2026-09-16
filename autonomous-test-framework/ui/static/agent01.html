@@ -329,6 +329,29 @@
     <div class="left-col">
 
       <!-- Phase 1: Input -->
+      <!-- Shown when an upload is recognised as a requirement already processed. -->
+      <div id="duplicateNotice" class="hidden" style="border:1px solid var(--warning,#f59e0b); background:rgba(245,158,11,0.10);
+           border-radius:10px; padding:16px; margin-bottom:16px;">
+        <div style="font-weight:700; margin-bottom:6px;">Requirement already processed</div>
+        <div style="font-size:13px; line-height:1.55; opacity:.9;" id="duplicateMessage">
+          This requirement is identical to the one already ingested, so nothing was changed.
+        </div>
+        <div style="font-size:12px; opacity:.7; margin-top:8px;" id="duplicateFingerprint"></div>
+        <div style="display:flex; gap:10px; margin-top:12px;">
+          <button class="btn btn-outline" id="viewExistingBtn">View existing analysis</button>
+          <button class="btn btn-outline" id="forceReanalyzeBtn">Re-analyze anyway</button>
+        </div>
+      </div>
+
+      <!-- Advisory only: the content fingerprint decides a new version, this explains what moved. -->
+      <div id="changeSummaryCard" class="hidden" style="border:1px solid var(--border,#334155);
+           border-radius:10px; padding:16px; margin-bottom:16px;">
+        <div style="font-weight:700; margin-bottom:6px;">Requirement changed since the last analysis</div>
+        <div style="font-size:12px; opacity:.7;" id="changeFingerprints"></div>
+        <pre id="changeSummaryText" style="white-space:pre-wrap; font-size:12.5px; line-height:1.55;
+             margin-top:10px; opacity:.92;">Summarising what changed…</pre>
+      </div>
+
       <div id="phaseInput">
         <div class="card">
           <div class="card-title"><span class="icon">📄</span> Input Requirements</div>
@@ -637,8 +660,26 @@ async function startAnalysis() {
       alert('Error: ' + (err.error || 'Failed to start agent'));
       showOnly('phaseInput'); return;
     }
+    const data = await resp.json();
+
+    if (data.duplicate) {
+      // Idempotent path: nothing was written, so do not enter the running phase at all.
+      if (sseSource) { sseSource.close(); sseSource = null; }
+      document.getElementById('spinner').classList.add('hidden');
+      document.getElementById('duplicateMessage').textContent = data.message;
+      document.getElementById('duplicateFingerprint').textContent =
+        'Content fingerprint ' + String(data.requirementFingerprint || '').slice(0, 16) + '…';
+      document.getElementById('duplicateNotice').classList.remove('hidden');
+      document.getElementById('changeSummaryCard').classList.add('hidden');
+      showOnly('phaseInput');
+      if (data.analysis) { lastDuplicateAnalysis = data.analysis; }
+      return;
+    }
+
+    document.getElementById('duplicateNotice').classList.add('hidden');
     // Switch fully to running phase
     showOnly('phaseRunning');
+    loadChangeSummary();
     startPolling();
   } catch (e) {
     runBtn.classList.remove('btn-loading');
@@ -646,6 +687,45 @@ async function startAnalysis() {
     showOnly('phaseInput');
   }
 }
+
+// ── Requirement change detection ───────────────────────────────────────────
+/** Analysis returned when an upload is recognised as already processed. */
+let lastDuplicateAnalysis = null;
+
+/**
+ * Fetches the advisory summary of what changed. Never gates anything: the content fingerprint has
+ * already decided this is a new version, so a failure here just leaves the panel empty.
+ */
+async function loadChangeSummary() {
+  const card = document.getElementById('changeSummaryCard');
+  try {
+    const resp = await fetch('/api/agent01/change-summary');
+    const data = await resp.json();
+    if (!data.available) { card.classList.add('hidden'); return; }
+
+    document.getElementById('changeFingerprints').textContent =
+      String(data.fingerprintBefore || '').slice(0, 12) + '… → ' + String(data.fingerprintAfter || '').slice(0, 12) + '…';
+    document.getElementById('changeSummaryText').textContent =
+      data.summary || ('Summary unavailable' + (data.error ? ' (' + data.error + ')' : '') + ' — the requirement still changed.');
+    card.classList.remove('hidden');
+  } catch (_) {
+    card.classList.add('hidden');
+  }
+}
+
+document.getElementById('viewExistingBtn').addEventListener('click', () => {
+  if (!lastDuplicateAnalysis) return;
+  document.getElementById('duplicateNotice').classList.add('hidden');
+  renderResults(lastDuplicateAnalysis);
+  showOnly('phaseResults');
+});
+
+document.getElementById('forceReanalyzeBtn').addEventListener('click', () => {
+  // Same upload, but with the override set so the agent re-ingests instead of short-circuiting.
+  document.getElementById('reanalyzeInput').checked = true;
+  document.getElementById('duplicateNotice').classList.add('hidden');
+  document.getElementById('runBtn').click();
+});
 
 // ── SSE ────────────────────────────────────────────────────────────────────
 function connectSSE() {

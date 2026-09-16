@@ -2,8 +2,21 @@
   "version": "1.0.0",
   "projectId": "default",
   "createdAt": "2026-05-12T00:00:00.000Z",
-  "updatedAt": "2026-09-16T09:10:20.762Z",
+  "updatedAt": "2026-09-16T09:21:04.709Z",
   "cycles": [
+    {
+      "id": "cycle_1789550464709",
+      "timestamp": "2026-09-16T09:21:04.709Z",
+      "runId": "run_1789550464704",
+      "passRate": 0,
+      "totalTests": 0,
+      "bugsFound": 0,
+      "autoHeals": 0,
+      "stages": {
+        "07-test-runner": "COMPLETED"
+      },
+      "keyLearnings": []
+    },
     {
       "id": "cycle_1789545933861",
       "timestamp": "2026-09-16T08:05:33.861Z",
@@ -653,14 +666,6 @@
     "testDataPatterns": {},
     "failurePatterns": [],
     "approvalFeedback": [
-      {
-        "id": "fb_1788850807092",
-        "stageId": "04-test-data-generator",
-        "status": "APPROVED",
-        "comment": "AUTO-APPROVED",
-        "content": "Resolved: 110, Unresolved: 0",
-        "timestamp": "2026-09-08T07:00:07.092Z"
-      },
       {
         "id": "fb_1788850874283",
         "stageId": "06-automation-reviewer",
@@ -4652,6 +4657,14 @@
         "comment": "Verification: approving to confirm the email actually sends.",
         "content": "",
         "timestamp": "2026-09-16T09:03:02.585Z"
+      },
+      {
+        "id": "fb_1789550456689",
+        "stageId": "10-auto-healer",
+        "status": "APPROVED",
+        "comment": "Healing patches reviewed and accepted.",
+        "content": "",
+        "timestamp": "2026-09-16T09:20:56.689Z"
       }
     ],
     "performanceBaselines": {},
@@ -5482,11 +5495,11 @@
     }
   ],
   "metrics": {
-    "totalRuns": 32,
+    "totalRuns": 33,
     "totalTestsRun": 435,
     "totalBugsFound": 99,
     "totalAutoHeals": 8,
-    "avgPassRate": 44.32,
+    "avgPassRate": 42.98,
     "avgHealingRate": 0
   }
 }

@@ -23,6 +23,8 @@ import { contextSqueezer } from '../../core/llm/ContextSqueezer';
 import { AgentResult } from '../../core/types';
 import { jiraClient } from '../../mcp/jira/jira-mcp-client';
 import { computeInputFingerprint, findReusableAnalysis, ANALYSIS_SOURCE } from './inputFingerprint';
+import { computeRequirementFingerprint } from '../../core/requirements/requirementFingerprint';
+import { stateDb } from '../../core/state-manager/Database';
 import { clarificationRequestFor, normalizeAmbiguities, normalizeQuestion } from './ambiguities';
 import { ClarificationStore } from '../../core/clarifications/ClarificationStore';
 
@@ -51,9 +53,26 @@ export class RequirementAnalyzerAgent {
 
     try {
       const memoryContext = await memoryEngine.getContextForStage(STAGE_ID);
-      await stateManager.markStageRunning(STAGE_ID);
 
       let rawRequirements = await this._parseInput(input);
+
+      // Identity of the requirement itself, independent of the prompt, skill or clarifications that
+      // decide whether the LLM must run again. Checked before any state is touched: an unchanged
+      // requirement must leave the run, the artifacts and the analysis file exactly as they were.
+      const requirementFingerprint = computeRequirementFingerprint(rawRequirements);
+      const alreadyProcessed = await this._findProcessedAnalysis(requirementFingerprint, input);
+      if (alreadyProcessed) {
+        this._logger.info(
+          `Requirement already processed — skipping ingestion (content ${requirementFingerprint.slice(0, 12)})`,
+          { analysisId: alreadyProcessed.analysisId },
+        );
+        const result = this._buildAgentResult(alreadyProcessed, [], Date.now() - startMs);
+        result.duplicate = true;
+        result.requirementFingerprint = requirementFingerprint;
+        return result;
+      }
+
+      await stateManager.markStageRunning(STAGE_ID);
       // Fingerprint before squeezing: squeeze is itself an LLM call and not reproducible.
       const inputFingerprint = computeInputFingerprint({
         rawRequirements,
@@ -69,6 +88,8 @@ export class RequirementAnalyzerAgent {
       
       const analysisReport = await this._resolveAnalysis(rawRequirements, inputFingerprint, input, memoryContext);
       analysisReport.featureFilePaths = [];
+      // Stamped so the next upload of identical content is recognised as already processed.
+      analysisReport.requirementFingerprint = requirementFingerprint;
 
       const resolvedAmbiguities = await this._autoResolveClarifications(
         analysisReport.ambiguities || [],
@@ -110,8 +131,10 @@ export class RequirementAnalyzerAgent {
         state.pipeline.healingPatches = null;
         state.pipeline.retestResults = null;
         try {
-          const db = stateManager.getDatabase();
-          db.prepare("DELETE FROM artifacts WHERE run_id = ? AND key NOT IN ('requirements', 'analyzedRequirements')").run(state.runId);
+          // stateDb, not stateManager: StateManager exposes no database accessor, so the call that
+          // used to live here threw on every run and stale downstream artifacts were never purged.
+          stateDb.initialize();
+          stateDb.prepare("DELETE FROM artifacts WHERE run_id = ? AND key NOT IN ('requirements', 'analyzedRequirements')").run(state.runId);
         } catch (_) {}
         return state;
       });
@@ -149,6 +172,30 @@ export class RequirementAnalyzerAgent {
       await stateManager.markStageFailed(STAGE_ID, error);
       throw error;
     }
+  }
+
+  /**
+   * The stored analysis for this exact requirement content, when one exists.
+   *
+   * This is the idempotency gate: a match means the upload is a duplicate of a requirement already
+   * ingested, so nothing may be written — not the analysis file, not an artifact, not a clarification.
+   * `--reanalyze` deliberately bypasses it so a human can force a re-ingest.
+   *
+   * The lookup spans runs, because a duplicate upload is normally a *new* attempt at a requirement
+   * processed during an earlier run.
+   *
+   * @param {string} requirementFingerprint
+   * @param {any} input
+   * @returns {Promise<any|null>} The previous analysis, or null when this content is new
+   * @private
+   */
+  private async _findProcessedAnalysis(requirementFingerprint: string, input: any): Promise<any | null> {
+    if (input.reanalyze) return null;
+    const previous = await stateManager.getLatestArtifactForProject('analyzedRequirements');
+    if (!previous || previous.requirementFingerprint !== requirementFingerprint) return null;
+    // An empty analysis is not worth preserving — treat it as unprocessed and ingest again.
+    if (!Array.isArray(previous.features) || previous.features.length === 0) return null;
+    return JSON.parse(JSON.stringify(previous));
   }
 
   /**
@@ -800,7 +847,9 @@ if (require.main === module) {
       }
     }
 
-    await stateManager.startNewRun(opts.project || 'default');
+    // initialize, not startNewRun: a new run per invocation left an orphan run (and a full set of
+    // stage rows) behind on every upload, and duplicate uploads must not create a run at all.
+    await stateManager.initialize(opts.project || 'default');
     await memoryEngine.initialize(opts.project || 'default');
 
     const result = await agent.run({

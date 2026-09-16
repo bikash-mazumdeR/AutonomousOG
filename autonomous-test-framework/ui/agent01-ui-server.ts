@@ -28,6 +28,7 @@ import { isTestCaseSelected, setTestCaseSelected } from '../core/types';
 import { syncFixturesFileFromTestData } from '../core/state-manager/FixtureSync';
 import { loadCurrentTestData } from '../core/state-manager/TestDataFreshness';
 import { projectPaths, readActiveProjectSlug } from '../core/aut/projectPaths';
+import { computeRequirementFingerprint, uploadFileNameFor } from '../core/requirements/requirementFingerprint';
 import { registerAgent03ReviewRoutes } from './agent03ReviewRoutes';
 import { registerAgent04DataRoutes } from './agent04DataRoutes';
 import { registerAgent06Routes } from './agent06Routes';
@@ -70,6 +71,21 @@ const upload = multer({
 // ── Agent process management ──────────────────────────────────────────────────
 let activeProcess: ChildProcess | null = null;
 const sseClients: Set<Response> = new Set();
+
+/**
+ * What changed between the previously ingested requirement and the one now being processed.
+ *
+ * Held in memory for the advisory summary: the `requirements` artifact is overwritten as soon as the
+ * agent runs, so the previous text has to be captured before spawning. The summary is advice for the
+ * human — the fingerprint alone decides whether this is a new version.
+ */
+let lastRequirementChange: {
+  fingerprintBefore: string;
+  fingerprintAfter: string;
+  previousText: string;
+  currentText: string;
+  summary?: string;
+} | null = null;
 
 /** Broadcasts an SSE event to all connected clients. */
 function broadcastSSE(event: Record<string, any>): void {
@@ -132,12 +148,65 @@ app.post('/api/agent01/run', upload.single('file'), async (req: Request, res: Re
     requirementsArg = jiraId;
     formatArg       = 'jira';
   } else if (uploadedFile) {
-    // Append the real extension so the agent detects the file type correctly
-    const ext       = path.extname(uploadedFile.originalname) || '.md';
-    const finalPath = uploadedFile.path + ext;
-    fs.renameSync(uploadedFile.path, finalPath);
+    formatArg = 'file';
+
+    // Identity comes from content, never from the filename or the upload event, so the same
+    // requirement uploaded again under any name is recognised as already processed.
+    const content = fs.readFileSync(uploadedFile.path, 'utf-8');
+    const fingerprint = computeRequirementFingerprint(content);
+
+    let previous: any = null;
+    try {
+      await stateManager.initialize(projectName);
+      previous = await stateManager.getLatestArtifactForProject('analyzedRequirements');
+    } catch (err: any) {
+      logger.warn('Could not read the previous analysis; treating this upload as new', { error: err.message });
+    }
+
+    const alreadyProcessed = !reanalyze
+      && previous?.requirementFingerprint === fingerprint
+      && Array.isArray(previous.features) && previous.features.length > 0;
+
+    if (alreadyProcessed) {
+      // Nothing may be written: no stored upload, no run, no stage row, no analysis file.
+      fs.rmSync(uploadedFile.path, { force: true });
+      logger.info('Duplicate requirement upload — no artifacts written', {
+        fingerprint: fingerprint.slice(0, 12), project: projectName,
+      });
+      return res.json({
+        ok: true,
+        duplicate: true,
+        project: projectName,
+        requirementFingerprint: fingerprint,
+        analysis: previous,
+        message: 'This requirement has already been processed — nothing was changed. Use "Re-analyze anyway" to force a fresh ingestion.',
+      });
+    }
+
+    if (previous?.requirementFingerprint && previous.requirementFingerprint !== fingerprint) {
+      // Capture before the agent overwrites the requirements artifact.
+      let previousText = '';
+      try { previousText = (await stateManager.getPipelineArtifact('requirements')) || ''; } catch { /* advisory only */ }
+      lastRequirementChange = {
+        fingerprintBefore: previous.requirementFingerprint,
+        fingerprintAfter: fingerprint,
+        previousText,
+        currentText: content,
+      };
+    } else {
+      lastRequirementChange = null;
+    }
+
+    // Content-addressed filename: identical content always resolves to the same path, so a repeat
+    // upload can never leave a second randomly-named copy behind.
+    const ext = (path.extname(uploadedFile.originalname) || '.md').toLowerCase();
+    const finalPath = path.join(uploadsDir, uploadFileNameFor(fingerprint, ext));
+    if (fs.existsSync(finalPath)) {
+      fs.rmSync(uploadedFile.path, { force: true }); // same content by construction — keep the stored copy
+    } else {
+      fs.renameSync(uploadedFile.path, finalPath);
+    }
     requirementsArg = finalPath;
-    formatArg       = 'file';
   } else {
     return res.status(400).json({ error: 'Provide either a file upload (.md / .txt) or a Jira story ID.' });
   }
@@ -146,9 +215,10 @@ app.post('/api/agent01/run', upload.single('file'), async (req: Request, res: Re
   // what the agent passes to stateManager.initialize() via --project=<name>
   const projectId = projectName;
 
-  // Initialise shared services with a clean run for the project
+  // Reuse the project's existing run. startNewRun() here (and again in the agent's own CLI) created
+  // two runs per upload — one of them an orphan carrying a full set of empty stage rows.
   try {
-    await stateManager.startNewRun(projectId);
+    await stateManager.initialize(projectId);
     await memoryEngine.initialize(projectId);
     // synchronously mark as running so frontend polling immediately sees RUNNING and doesn't snap to old results
     await stateManager.markStageRunning('01-requirement-analyzer');
@@ -204,6 +274,63 @@ app.post('/api/agent01/run', upload.single('file'), async (req: Request, res: Re
   });
 
   res.json({ ok: true, format: formatArg, project: projectName });
+});
+
+// ── GET /api/agent01/change-summary ──────────────────────────────────────────
+/**
+ * Advisory description of what changed between the previous requirement and the current one.
+ *
+ * Purely informational. The content fingerprint alone decides whether an upload is a new version;
+ * this only tells the human what moved, and whether it looks material or cosmetic. Deciding with an
+ * LLM instead would risk silently swallowing a real requirement change.
+ */
+app.get('/api/agent01/change-summary', async (_req: Request, res: Response) => {
+  if (!lastRequirementChange) {
+    return res.json({ available: false, reason: 'No requirement change was detected in this session.' });
+  }
+  if (lastRequirementChange.summary) {
+    return res.json({ available: true, cached: true, ...lastRequirementChange, summary: lastRequirementChange.summary });
+  }
+
+  const MAX_CHARS = 12000; // keep the comparison inside a single comfortable request
+  try {
+    const response = await llmClient.chat('01-requirement-analyzer', {
+      messages: [
+        {
+          role: 'system' as const,
+          content: [
+            'You compare two versions of a software requirement document.',
+            'Reply with at most six short bullet points naming what actually changed: acceptance criteria,',
+            'business rules, functional behaviour, or requirements added or removed.',
+            'Ignore pure formatting, whitespace and wording that carries the same meaning.',
+            'End with one line: "Verdict: MATERIAL" or "Verdict: COSMETIC".',
+          ].join(' '),
+        },
+        {
+          role: 'user' as const,
+          content: `=== PREVIOUS ===
+${lastRequirementChange.previousText.slice(0, MAX_CHARS)}
+
+=== CURRENT ===
+${lastRequirementChange.currentText.slice(0, MAX_CHARS)}`,
+        },
+      ],
+      temperature: 0.1,
+      max_tokens: 600,
+    });
+    lastRequirementChange.summary = response.text;
+    return res.json({ available: true, cached: false, ...lastRequirementChange });
+  } catch (err: any) {
+    logger.warn('Change summary failed', { error: err.message });
+    // Advisory only — a failure here must never imply the requirement did not change.
+    return res.json({
+      available: true,
+      summary: null,
+      error: err.message,
+      fingerprintBefore: lastRequirementChange.fingerprintBefore,
+      fingerprintAfter: lastRequirementChange.fingerprintAfter,
+    });
+  }
 });
 
 // ── GET /api/agent01/logs ─────────────────────────────────────────────────────

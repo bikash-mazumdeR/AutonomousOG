@@ -291,6 +291,10 @@ export interface AgentResult {
   approvalStatus: ApprovalStatus;
   approvalComment?: string;
   usage?: TokenUsage;
+  /** Set when the stage short-circuited because its input was already processed. */
+  duplicate?: boolean;
+  /** Content hash of the ingested requirement, for stages that key on requirement identity. */
+  requirementFingerprint?: string;
 }
 
 // ─── Stage State ──────────────────────────────────────────────────────────────
