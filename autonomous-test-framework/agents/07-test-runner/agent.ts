@@ -29,13 +29,42 @@ const JSON_REPORT_PATH = path.join(REPORTS_DIR, 'json/playwright-results.json');
 const HTML_REPORT_DIR = path.join(REPORTS_DIR, 'html');
 const ATTACH_DIR = path.join(REPORTS_DIR, 'attachments');
 
+/**
+ * NDJSON progress stream consumed by the Agent 07 UI's live results grid. A fixed path lets the UI
+ * tail it without first discovering a run id; AriaProgressReporter truncates it on every run start.
+ */
+const PROGRESS_FILE_PATH = path.join(REPORTS_DIR, 'json', 'agent07-progress.ndjson');
+
 /** @enum {string} */
 const TEST_RESULT = Object.freeze({
   PASSED: 'passed',
   FAILED: 'failed',
   SKIPPED: 'skipped',
   FLAKY: 'flaky',
+  TIMED_OUT: 'timedOut',
+  INTERRUPTED: 'interrupted',
 });
+
+/**
+ * Statuses that mean the test did not pass. Playwright reports timeouts as 'timedOut' and aborted
+ * runs as 'interrupted'; counting only 'failed' left those tests in `total` but in none of the
+ * pass/fail/skip buckets, silently deflating passRate.
+ */
+const FAILING_STATUSES = Object.freeze([
+  TEST_RESULT.FAILED, TEST_RESULT.TIMED_OUT, TEST_RESULT.INTERRUPTED,
+]);
+
+/** Playwright colourises error text; strip control codes before they reach a report or the UI. */
+const ANSI_PATTERN = /\[[0-9;]*[a-zA-Z]/g;
+
+/**
+ * Removes ANSI escape codes from a string.
+ * @param {string} value
+ * @returns {string}
+ */
+function stripAnsi(value: unknown): string {
+  return typeof value === 'string' ? value.replace(ANSI_PATTERN, '') : '';
+}
 
 /** @enum {string} */
 const RUN_MODE = Object.freeze({
@@ -104,7 +133,7 @@ class TestRunnerAgent {
       }
 
       // ── 3. Parse and enrich results ────────────────────────────────────
-      const executionResults = this._parseResults(playwrightResult, k6Results);
+      const executionResults = this._parseResults(playwrightResult, k6Results, mode);
 
       // ── 4. Collect attachments index ──────────────────────────────────
       executionResults.attachments = this._collectAttachments();
@@ -242,9 +271,9 @@ class TestRunnerAgent {
         break;
       case RUN_MODE.FAILED:
         if (targetTCKeys && targetTCKeys.length > 0) {
-          // Run only tests matching TC keys
-          const pattern = targetTCKeys.join('|');
-          args.push(`--grep="${pattern}"`);
+          // spawn passes argv entries verbatim — wrapping this in quotes would make the quote
+          // characters part of the regex itself, so the grep would match nothing.
+          args.push(`--grep=${targetTCKeys.join('|')}`);
         } else {
           args.push('--last-failed');
         }
@@ -338,31 +367,37 @@ class TestRunnerAgent {
    * Parses Playwright JSON report + K6 results into unified ExecutionReport.
    * @private
    */
-  _parseResults(playwrightResult, k6Results) {
+  _parseResults(playwrightResult, k6Results, mode = RUN_MODE.FULL) {
     const pwResults = this._parsePlaywrightJSON(playwrightResult);
+
+    // Browsers actually exercised, from the Playwright project each test ran under. The AUT profile
+    // can declare several (playwright.config.ts builds one project per browser).
+    const browsers = [...new Set(pwResults.tests.map((t) => t.project).filter(Boolean))];
+    const flakyCount = pwResults.tests.filter((t) => t.status === TEST_RESULT.FLAKY).length;
 
     const summary = {
       total: pwResults.total,
       passed: pwResults.passed,
       failed: pwResults.failed,
       skipped: pwResults.skipped,
-      flaky: 0,
+      flaky: flakyCount,
       passRate: pwResults.total > 0
         ? Math.round((pwResults.passed / pwResults.total) * 100)
         : 0,
       duration: Date.now() - this._startTime,
       environment: FRAMEWORK_CONFIG.environment,
-      browser: 'chromium',
+      browser: browsers.join(', ') || 'chromium',
+      browsers: browsers.length > 0 ? browsers : ['chromium'],
       workers: FRAMEWORK_CONFIG.playwright.workers,
       retries: FRAMEWORK_CONFIG.playwright.retries,
     };
 
-    const failedTests = pwResults.tests.filter((t) => t.status === TEST_RESULT.FAILED);
+    const failedTests = pwResults.tests.filter((t) => FAILING_STATUSES.includes(t.status));
 
     return {
       runId: `run_${Date.now()}`,
       executedAt: new Date().toISOString(),
-      mode: RUN_MODE.FULL,
+      mode,
       summary,
       tests: pwResults.tests,
       failedTests,
@@ -405,17 +440,20 @@ class TestRunnerAgent {
           for (const result of spec.tests || []) {
             const status = this._normalizeStatus(result.status, result.results);
             const title = spec.title || result.title || '';
+            const attempts = result.results || [];
             const test = {
               tcKey: this._extractTCKey(title, result.annotations),
               title,
               status,
-              duration: result.results?.[0]?.duration || 0,
-              retries: (result.results?.length || 1) - 1,
-              error: status === TEST_RESULT.FAILED
-                ? this._extractError(result.results)
-                : null,
-              attachments: this._extractAttachments(result.results),
+              // The last attempt is the one that decided the outcome.
+              duration: attempts[attempts.length - 1]?.duration || attempts[0]?.duration || 0,
+              retries: (attempts.length || 1) - 1,
+              error: status === TEST_RESULT.PASSED || status === TEST_RESULT.SKIPPED
+                ? null
+                : this._extractError(attempts),
+              attachments: this._extractAttachments(attempts),
               annotations: result.annotations || [],
+              project: result.projectName || null,
               location: spec.file
                 ? { file: spec.file, line: spec.line || result.line || 0 }
                 : null,
@@ -423,7 +461,7 @@ class TestRunnerAgent {
 
             tests.push(test);
             if (status === TEST_RESULT.PASSED || status === TEST_RESULT.FLAKY) passed++;
-            else if (status === TEST_RESULT.FAILED) failed++;
+            else if (FAILING_STATUSES.includes(status)) failed++;
             else if (status === TEST_RESULT.SKIPPED) skipped++;
           }
         }
@@ -508,13 +546,17 @@ class TestRunnerAgent {
    */
   _extractError(results) {
     for (const result of results || []) {
-      if (result.status === 'failed' && result.error) {
-        return {
-          message: result.error.message || 'Unknown error',
-          stack: result.error.stack || '',
-          location: result.error.location || null,
-        };
-      }
+      if (!FAILING_STATUSES.includes(result.status)) continue;
+      // `error` is the first entry of `errors`; a timed-out test may only populate the array.
+      const error = result.error || (result.errors || [])[0];
+      if (!error) continue;
+      return {
+        message: stripAnsi(error.message) || 'Unknown error',
+        stack: stripAnsi(error.stack) || '',
+        // The location lives on the result, not on the error object — reading error.location
+        // always yielded null, which broke line-level deep-linking from a failure.
+        location: result.errorLocation || error.location || null,
+      };
     }
     return null;
   }
@@ -524,12 +566,23 @@ class TestRunnerAgent {
    * @private
    */
   _extractAttachments(results) {
-    const attachments = { screenshots: [], networkLogs: [], consoleLogs: [] };
+    const attachments = {
+      screenshots: [], videos: [], traces: [], networkLogs: [], consoleLogs: [], other: [],
+    };
     for (const result of results || []) {
       for (const attach of result.attachments || []) {
-        if (attach.contentType === 'image/png') attachments.screenshots.push(attach.path);
-        else if (attach.name === 'network-log') attachments.networkLogs.push(attach.path);
-        else if (attach.name === 'console-log') attachments.consoleLogs.push(attach.path);
+        if (!attach.path) continue;
+        const name = attach.name || '';
+        const type = attach.contentType || '';
+        // Playwright's built-in attachment names are screenshot / video / trace. The previous
+        // network-log and console-log names are BasePage-written kinds, kept for those specs
+        // that call the helpers explicitly.
+        if (type === 'image/png' || name === 'screenshot') attachments.screenshots.push(attach.path);
+        else if (type.startsWith('video/') || name === 'video') attachments.videos.push(attach.path);
+        else if (name === 'trace' || attach.path.endsWith('trace.zip')) attachments.traces.push(attach.path);
+        else if (name === 'network-log') attachments.networkLogs.push(attach.path);
+        else if (name === 'console-log') attachments.consoleLogs.push(attach.path);
+        else attachments.other.push(attach.path);
       }
     }
     return attachments;
@@ -542,18 +595,30 @@ class TestRunnerAgent {
    * @private
    */
   _collectAttachments() {
-    const collect = (dir, ext) => {
-      if (!fs.existsSync(dir)) return [];
-      return fs.readdirSync(dir)
-        .filter((f) => f.endsWith(ext))
-        .map((f) => path.join(dir, f));
+    const index = {
+      screenshots: [], videos: [], traces: [], networkLogs: [], consoleLogs: [],
     };
+    if (!fs.existsSync(ATTACH_DIR)) return index;
 
-    return {
-      screenshots: collect(path.join(ATTACH_DIR, 'screenshots'), '.png'),
-      networkLogs: collect(path.join(ATTACH_DIR, 'network-logs'), '.json'),
-      consoleLogs: collect(path.join(ATTACH_DIR, 'console-logs'), '.log'),
+    // Playwright writes artifacts into a per-test folder under outputDir
+    // (reports/attachments/<sanitized-test-name>/), so a flat scan of the legacy
+    // screenshots/ network-logs/ console-logs/ folders finds nothing. Walk the whole tree.
+    const walk = (dir) => {
+      let entries = [];
+      try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+      for (const entry of entries) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) { walk(full); continue; }
+        const lower = entry.name.toLowerCase();
+        if (lower.endsWith('.png')) index.screenshots.push(full);
+        else if (lower.endsWith('.webm') || lower.endsWith('.mp4')) index.videos.push(full);
+        else if (lower.endsWith('.zip')) index.traces.push(full);
+        else if (dir.includes('network-logs') || lower.endsWith('.har')) index.networkLogs.push(full);
+        else if (dir.includes('console-logs') || lower.endsWith('.log')) index.consoleLogs.push(full);
+      }
     };
+    walk(ATTACH_DIR);
+    return index;
   }
 
   // ── Flaky Test Detection ──────────────────────────────────────────────────
@@ -627,8 +692,13 @@ class TestRunnerAgent {
       PLAYWRIGHT_HEADLESS: String(FRAMEWORK_CONFIG.playwright.headless),
       K6_VUS: String(FRAMEWORK_CONFIG.k6.vus),
       K6_DURATION: FRAMEWORK_CONFIG.k6.duration,
-      K6_THRESHOLD_P95: String(500),
+      K6_THRESHOLD_P95: process.env.K6_THRESHOLD_P95 || String(500),
       TEST_AUTH_TOKEN: process.env.TEST_AUTH_TOKEN || '',
+      // Turns on AriaProgressReporter in the Playwright child so the UI can render live progress.
+      ARIA_PROGRESS_FILE: PROGRESS_FILE_PATH,
+      // Lets BasePage breadcrumbs attribute themselves to this stage and project.
+      ARIA_PROJECT_ID: stateManager.getProjectId?.() || process.env.ARIA_PROJECT_ID || '',
+      ARIA_CURRENT_STAGE: STAGE_ID,
     };
   }
 
@@ -711,17 +781,62 @@ class TestRunnerAgent {
 
 export { TestRunnerAgent, RUN_MODE };
 
+/**
+ * Parses `--key=value` / `--key value` / `--flag` CLI arguments.
+ * @param {string[]} argv
+ * @returns {Record<string, any>}
+ */
+function parseCliArgs(argv: string[]): Record<string, any> {
+  const opts: Record<string, any> = {};
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (arg === '--' || !arg.startsWith('--')) continue;
+    const [key, val] = arg.slice(2).split('=');
+    if (val !== undefined) {
+      opts[key] = val;
+    } else if (argv[i + 1] !== undefined && !argv[i + 1].startsWith('--')) {
+      opts[key] = argv[i + 1];
+      i += 1;
+    } else {
+      opts[key] = true;
+    }
+  }
+  return opts;
+}
+
+/**
+ * Resolves the project id from `--project`, else the newest real run in the state DB.
+ * @param {Record<string, any>} opts
+ * @returns {string}
+ */
+function resolveProjectId(opts: Record<string, any>): string {
+  if (opts.project) return opts.project;
+  try {
+    const { stateDb } = require('../../core/state-manager/Database');
+    stateDb.initialize();
+    const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get();
+    if (latestRun?.project_id) return latestRun.project_id;
+  } catch {
+    // fall back to configuration
+  }
+  return FRAMEWORK_CONFIG.projectId;
+}
+
+/**
+ * Resolves the run mode from `--mode`, defaulting to FULL for anything unrecognised.
+ * @param {Record<string, any>} opts
+ * @returns {string}
+ */
+function resolveMode(opts: Record<string, any>): string {
+  const requested = String(opts.mode || '').toUpperCase();
+  return (RUN_MODE as Record<string, string>)[requested] || RUN_MODE.FULL;
+}
+
 if (require.main === module) {
   (async () => {
-    let projectId = FRAMEWORK_CONFIG.projectId;
-    try {
-      const { stateDb } = require('../../core/state-manager/Database');
-      stateDb.initialize();
-      const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get();
-      if (latestRun && latestRun.project_id) {
-        projectId = latestRun.project_id;
-      }
-    } catch {}
+    const cliOpts = parseCliArgs(process.argv.slice(2));
+    const projectId = resolveProjectId(cliOpts);
+    const mode = resolveMode(cliOpts);
 
     await stateManager.initialize(projectId);
     await memoryEngine.initialize(projectId);
@@ -760,8 +875,14 @@ if (require.main === module) {
       process.exit(1);
     }
 
-    const result = await agent.run({ reviewedScripts, testData });
-    console.log(`\n✅ Agent 07 complete — Pass: ${result.output.summary.passed}, Fail: ${result.output.summary.failed}`);
+    const targetTCKeys = typeof cliOpts.tcKeys === 'string'
+      ? cliOpts.tcKeys.split(',').map((k: string) => k.trim()).filter(Boolean)
+      : undefined;
+
+    const result = await agent.run({
+      reviewedScripts, testData, mode, targetTCKeys,
+    });
+    console.log(`\n✅ Agent 07 complete (${mode}) — Pass: ${result.output.summary.passed}, Fail: ${result.output.summary.failed}`);
     process.exit(result.approvalStatus === 'APPROVED' ? 0 : 1);
   })();
 }

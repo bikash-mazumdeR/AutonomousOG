@@ -563,17 +563,50 @@ Return ONLY the raw JSON array.
 
 export { AutomationReviewerAgent };
 
+/**
+ * Parses `--key=value` / `--key value` / `--flag` CLI arguments.
+ * @param {string[]} argv
+ * @returns {Record<string, any>}
+ */
+function parseCliArgs(argv: string[]): Record<string, any> {
+  const opts: Record<string, any> = {};
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (arg === '--' || !arg.startsWith('--')) continue;
+    const [key, val] = arg.slice(2).split('=');
+    if (val !== undefined) {
+      opts[key] = val;
+    } else if (argv[i + 1] !== undefined && !argv[i + 1].startsWith('--')) {
+      opts[key] = argv[i + 1];
+      i += 1;
+    } else {
+      opts[key] = true;
+    }
+  }
+  return opts;
+}
+
+/**
+ * Resolves the project id from `--project`, else the newest real run in the state DB.
+ * @param {Record<string, any>} opts
+ * @returns {string}
+ */
+function resolveProjectId(opts: Record<string, any>): string {
+  if (opts.project) return opts.project;
+  try {
+    const { stateDb } = require('../../core/state-manager/Database');
+    stateDb.initialize();
+    const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get();
+    if (latestRun?.project_id) return latestRun.project_id;
+  } catch {
+    // fall back to configuration
+  }
+  return FRAMEWORK_CONFIG.projectId;
+}
+
 if (require.main === module) {
   (async () => {
-    let projectId = FRAMEWORK_CONFIG.projectId;
-    try {
-      const { stateDb } = require('../../core/state-manager/Database');
-      stateDb.initialize();
-      const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get();
-      if (latestRun && latestRun.project_id) {
-        projectId = latestRun.project_id;
-      }
-    } catch {}
+    const projectId = resolveProjectId(parseCliArgs(process.argv.slice(2)));
 
     await stateManager.initialize(projectId);
     await memoryEngine.initialize(projectId);

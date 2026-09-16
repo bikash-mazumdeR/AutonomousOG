@@ -13,8 +13,8 @@
     { num: 3, id: '03-test-case-reviewer', name: 'Test Case Reviewer', page: '/agent03.html' },
     { num: 4, id: '04-test-data-generator', name: 'Test Data Generator', page: '/agent04.html' },
     { num: 5, id: '05-playwright-script-generator', name: 'Script Generator', page: '/agent05.html' },
-    { num: 6, id: '06-automation-reviewer', name: 'Code Reviewer', page: null },
-    { num: 7, id: '07-test-runner', name: 'Test Runner', page: null },
+    { num: 6, id: '06-automation-reviewer', name: 'Code Reviewer', page: '/agent06.html' },
+    { num: 7, id: '07-test-runner', name: 'Test Runner', page: '/agent07.html' },
     { num: 8, id: '08-bug-reporter', name: 'Bug Reporter', page: null },
     { num: 9, id: '09-report-generator', name: 'Report Generator', page: null },
     { num: 10, id: '10-auto-healer', name: 'Auto Healer', page: null },
@@ -119,6 +119,18 @@
   }
 
   window.AriaPipelineNav = {
+    /**
+     * Page a stage is served at, so a caller can avoid navigating to a stage that has no UI yet.
+     * STAGES is the single source of truth for which pages exist; a stage still carrying
+     * `page: null` returns null and the caller should stay put.
+     * @param {number} stageNumber - 1-based stage number
+     * @returns {string|null} Page path, or null when that stage has no page
+     */
+    pageForStage(stageNumber) {
+      const stage = STAGES.find((s) => s.num === stageNumber);
+      return (stage && stage.page) || null;
+    },
+
     /**
      * Renders the pipeline bar for the page's stage and keeps it in sync with the pipeline state.
      * @param {number} stageNumber - 1-based stage of the current page

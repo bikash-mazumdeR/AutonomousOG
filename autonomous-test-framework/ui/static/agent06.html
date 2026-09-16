@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ARIA — Agent 06: Automation Code Reviewer</title>
+  <link rel="stylesheet" href="/aria.css" />
+  <script src="/pipeline-nav.js"></script>
+</head>
+<body>
+
+  <header class="header">
+    <div class="header-logo">ARIA <span>/</span> Agent 06</div>
+    <div class="header-badge">Automation Code Reviewer</div>
+  </header>
+
+  <div class="pipeline-bar" id="pipelineBar"></div>
+  <div class="toast" id="toastNotification">✓ Saved</div>
+
+  <div class="page-body">
+    <div class="alert alert-success hidden" id="successAlert"></div>
+    <div class="alert alert-danger hidden" id="errorAlert"></div>
+
+    <!-- ── Phase 1: scope & launcher ─────────────────────────────────────── -->
+    <div class="card" id="inputPhase">
+      <div class="card-title">Static Code Review Scope</div>
+      <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px; line-height:1.5;">
+        Agent 06 runs AST-based rules across every generated spec, page object and K6 script, then adds an
+        AI logic review of the specs. It is <strong>detect-only</strong> — it never rewrites your files, so
+        anything it flags is fixed here, by you, and re-reviewed.
+      </p>
+
+      <div class="stat-grid">
+        <div class="stat-item">
+          <div class="stat-label">Spec Files</div>
+          <div class="stat-value" id="inSpecCount" style="color:#a5b4fc;">—</div>
+          <div class="stat-sub">Playwright *.spec.ts</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Page Objects</div>
+          <div class="stat-value" id="inPomCount" style="color:#c084fc;">—</div>
+          <div class="stat-sub">*Page.ts classes</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">K6 Scripts</div>
+          <div class="stat-value" id="inK6Count" style="color:#fbbf24;">—</div>
+          <div class="stat-sub">Performance scripts</div>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:12px; align-items:center; margin-top:8px;">
+        <input type="text" id="projectNameInput" class="text-input" style="flex:1;"
+               placeholder="Project ID (defaults to latest active pipeline run)">
+        <button id="runBtn" class="btn btn-primary" style="min-width:230px; height:38px;">
+          <span>Run Code Review</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ── Phase 2: running ──────────────────────────────────────────────── -->
+    <div class="card hidden" id="runningPhase">
+      <div class="card-title">Reviewing Generated Automation Code</div>
+      <div class="log-stream" id="logStream"></div>
+      <div style="margin-top:14px; font-size:12px; color:var(--text-muted); display:flex; align-items:center; gap:8px;">
+        <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:var(--accent); animation:pulse 1s infinite alternate;"></span>
+        Running AST rules, integrity checks and AI logic review…
+      </div>
+    </div>
+
+    <!-- ── Phase 3: results ──────────────────────────────────────────────── -->
+    <div id="resultsPhase" class="hidden">
+
+      <div class="verdict" id="verdictBanner">
+        <div class="verdict-grade" id="verdictGrade">—</div>
+        <div class="verdict-main">
+          <div class="verdict-decision" id="verdictDecision">—</div>
+          <div class="verdict-sub" id="verdictSub"></div>
+        </div>
+      </div>
+
+      <div class="stat-grid">
+        <div class="stat-item">
+          <div class="stat-label">Files Reviewed</div>
+          <div class="stat-value" id="resFiles">—</div>
+          <div class="stat-sub" id="resFilesSub">—</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Blockers</div>
+          <div class="stat-value" id="resBlockers" style="color:#f87171;">—</div>
+          <div class="stat-sub">Must be fixed to pass (−25 each)</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Majors</div>
+          <div class="stat-value" id="resMajors" style="color:#fbbf24;">—</div>
+          <div class="stat-sub">−10 each</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Minors</div>
+          <div class="stat-value" id="resMinors" style="color:#67e8f9;">—</div>
+          <div class="stat-sub">−2 each</div>
+        </div>
+      </div>
+
+      <div class="card hidden" id="tokenCard">
+        <div class="card-title"><span>🪙</span> Token Usage</div>
+        <div class="token-row"><span class="token-label">Prompt tokens</span><span class="token-value" id="tokPrompt">—</span></div>
+        <div class="token-row"><span class="token-label">Completion tokens</span><span class="token-value" id="tokCompletion">—</span></div>
+        <div class="token-row"><span class="token-label">Total tokens</span><span class="token-value" id="tokTotal">—</span></div>
+        <div class="token-row"><span class="token-label">Estimated cost</span><span class="token-value" id="tokCost">—</span></div>
+      </div>
+
+      <div class="advisory-card hidden" id="recoCard">
+        <div class="advisory-header">
+          <div class="advisory-title">Reviewer Recommendations</div>
+        </div>
+        <div class="advisory-body"><ul id="recoList" style="margin-left:18px; line-height:1.7;"></ul></div>
+      </div>
+
+      <div class="filter-tabs">
+        <button class="tab-btn active" data-tab="tabFindings">Findings</button>
+        <button class="tab-btn" data-tab="tabFiles">Files</button>
+        <select class="select-input" id="severityFilter" title="Filter by severity">
+          <option value="">All severities</option>
+          <option value="BLOCKER">Blocker</option>
+          <option value="MAJOR">Major</option>
+          <option value="MINOR">Minor</option>
+          <option value="INFO">Info</option>
+        </select>
+        <input type="text" class="search-input" id="searchInput" placeholder="Filter by rule, file or message…">
+        <button id="rerunBtn" class="btn btn-secondary" style="height:34px; font-size:12px; padding:0 12px; white-space:nowrap;">
+          ↻ Re-run Review
+        </button>
+      </div>
+
+      <!-- Findings -->
+      <div id="tabFindings" class="tab-pane">
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:96px;">Severity</th>
+                <th style="width:120px;">Rule</th>
+                <th style="width:150px;">Dimension</th>
+                <th style="width:190px;">Location</th>
+                <th>Finding</th>
+                <th style="width:110px; text-align:right;">Action</th>
+              </tr>
+            </thead>
+            <tbody id="findingsBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Files -->
+      <div id="tabFiles" class="tab-pane hidden">
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>File</th>
+                <th style="width:90px;">Type</th>
+                <th style="width:90px;">Lines</th>
+                <th style="width:110px;">Status</th>
+                <th style="width:150px;">Quality</th>
+                <th style="width:90px;">Findings</th>
+                <th style="width:120px; text-align:right;">Action</th>
+              </tr>
+            </thead>
+            <tbody id="filesBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Action bar ──────────────────────────────────────────────────────── -->
+  <div class="action-bar hidden" id="actionBar">
+    <div style="margin-right:auto; font-size:13px; color:var(--text-muted);">
+      Stage 06: <strong style="color:var(--text);" id="actionBarSummary">Code review complete</strong>
+    </div>
+    <button class="btn btn-secondary hidden" id="runAgent05Btn">↻ Re-generate via Agent 05</button>
+    <button class="btn btn-danger" id="rejectBtn">Reject</button>
+    <button class="btn btn-success" id="approveBtn">Approve &amp; Proceed to Agent 07</button>
+  </div>
+
+  <!-- ── Code editor modal ───────────────────────────────────────────────── -->
+  <div class="modal" id="codeModal">
+    <div class="code-modal-dialog">
+      <div class="code-modal-head">
+        <div class="code-modal-head-left">
+          <div class="code-modal-title" id="codeModalTitle">File Editor</div>
+          <div class="code-modal-badge" id="codeModalBadge">TypeScript</div>
+        </div>
+        <button class="code-modal-close-btn" id="codeModalCloseTopBtn" title="Close without saving">✕</button>
+      </div>
+
+      <div id="findingContext" class="hidden" style="padding:12px 24px; background:rgba(239,68,68,0.08); border-bottom:1px solid var(--border);">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+          <span class="sev" id="ctxSeverity">—</span>
+          <span class="rule-id" id="ctxRule">—</span>
+          <span class="dimension" id="ctxDimension">—</span>
+          <span class="finding-loc no-line" id="ctxLine"></span>
+        </div>
+        <div class="finding-message" id="ctxMessage" style="font-size:13px;"></div>
+        <div class="finding-suggestion" id="ctxSuggestion"></div>
+      </div>
+
+      <div class="code-modal-toolbar">
+        <div class="syntax-indicator syntax-valid" id="syntaxIndicator"><span>✓ Balanced Syntax</span></div>
+        <div style="color:var(--text-dim); margin-left:8px;" id="fileInfoBar">Path: tests/…</div>
+        <div style="margin-left:auto; display:flex; gap:8px;">
+          <button class="btn btn-secondary btn-sm" id="revertCodeBtn">↺ Revert to Disk</button>
+        </div>
+      </div>
+
+      <div class="code-modal-body">
+        <textarea class="code-editor-textarea" id="codeEditorTextarea" spellcheck="false"></textarea>
+      </div>
+
+      <div class="code-modal-foot">
+        <button class="btn btn-secondary" id="modalCloseBtn">✕ Close</button>
+        <button class="btn btn-primary" id="modalSaveBtn">💾 Save Changes</button>
+        <button class="btn btn-success" id="modalSaveRerunBtn">💾 Save &amp; Re-review</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Approval / rejection modals ─────────────────────────────────────── -->
+  <div class="modal" id="approvalModal">
+    <div class="modal-card">
+      <h2>Approve Stage 06</h2>
+      <p>Confirm the reviewed automation code and proceed to Agent 07 (Test Runner).</p>
+      <textarea id="approvalComment" placeholder="Approval notes (optional)…">Reviewed automation code approved for execution.</textarea>
+      <div class="modal-buttons">
+        <button class="btn btn-secondary" id="cancelApprovalBtn">Cancel</button>
+        <button class="btn btn-success" id="confirmApprovalBtn">Confirm &amp; Advance</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="rejectionModal">
+    <div class="modal-card">
+      <h2>Reject Stage 06</h2>
+      <p>Provide a reason. Agent 05 can then re-generate the scripts with this feedback.</p>
+      <textarea id="rejectionComment" placeholder="Rejection rationale / rework instructions (required)…"></textarea>
+      <div class="modal-buttons">
+        <button class="btn btn-secondary" id="cancelRejectionBtn">Cancel</button>
+        <button class="btn btn-danger" id="confirmRejectionBtn">Reject Stage</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Chat ────────────────────────────────────────────────────────────── -->
+  <button class="chat-toggle-btn" id="chatToggleBtn" title="Ask ARIA Code Reviewer">💬</button>
+  <div class="chat-drawer" id="chatDrawer">
+    <div class="chat-header">
+      <span>ARIA AI Code Reviewer</span>
+      <button class="chat-close" id="chatCloseBtn">✕</button>
+    </div>
+    <div class="chat-messages" id="chatMessages">
+      <div class="chat-bubble aria">
+        Ask me about any finding — why a rule fired, whether it can block the stage, or how to fix it.
+      </div>
+    </div>
+    <div class="chat-input-area">
+      <input type="text" id="chatInput" placeholder="Ask about a rule or finding…">
+      <button class="btn btn-primary" id="chatSendBtn">Send</button>
+    </div>
+  </div>
+
+  <script>
+    'use strict';
+
+    const ADVISORY_RULE_ID = 'LOGIC-AI';
+    const SEVERITY_ORDER = { BLOCKER: 0, MAJOR: 1, MINOR: 2, INFO: 3 };
+
+    let stateData = null;
+    let sseSource = null;
+    let statePollInterval = null;
+    let allFindings = [];
+    let currentOpenPath = null;
+    let originalFileContent = '';
+    const chatHistory = [];
+
+    // ── Utilities ─────────────────────────────────────────────────────────
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      return String(str).replace(/[&<>"']/g, (m) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[m]));
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toastNotification');
+      t.textContent = msg || '✓ Saved';
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    function startStatePolling() {
+      if (!statePollInterval) statePollInterval = setInterval(fetchState, 2000);
+    }
+    function stopStatePolling() {
+      if (statePollInterval) { clearInterval(statePollInterval); statePollInterval = null; }
+    }
+
+    // ── State ─────────────────────────────────────────────────────────────
+    async function fetchState() {
+      try {
+        const res = await fetch('/api/agent06/state');
+        if (!res.ok) throw new Error(res.statusText);
+        stateData = await res.json();
+        applyState(stateData);
+      } catch (err) {
+        console.error('Error fetching state:', err);
+      }
+    }
+
+    function applyState(data) {
+      if (!data) return;
+
+      const scripts = data.playwrightScripts || {};
+      document.getElementById('inSpecCount').textContent = (scripts.specFiles || []).length || '—';
+      document.getElementById('inPomCount').textContent = (scripts.pomFiles || []).length || '—';
+      document.getElementById('inK6Count').textContent = (scripts.k6Files || []).length || '0';
+
+      const review = data.reviewedScripts;
+      // Agent 06 blocks at its approval gate after completing, so the process never exits on its
+      // own — the artifact's presence is the completion signal, not an SSE 'exit' event.
+      const hasReview = !!(review && review.fileReviews);
+
+      if (hasReview && !data.running) {
+        stopStatePolling();
+        if (sseSource) { sseSource.close(); sseSource = null; }
+        show('resultsPhase'); hide('inputPhase'); hide('runningPhase');
+        document.getElementById('actionBar').classList.remove('hidden');
+        renderResults(review, data);
+      } else if (data.running) {
+        hide('inputPhase'); show('runningPhase'); hide('resultsPhase');
+        document.getElementById('actionBar').classList.add('hidden');
+        if (!sseSource) connectSSE();
+        startStatePolling();
+      } else {
+        stopStatePolling();
+        show('inputPhase'); hide('runningPhase'); hide('resultsPhase');
+        document.getElementById('actionBar').classList.add('hidden');
+        const errorAlert = document.getElementById('errorAlert');
+        if (data.stage && data.stage.status === 'FAILED') {
+          const msg = (data.stage.error && data.stage.error.message) || 'Agent 06 failed. Check the logs.';
+          errorAlert.textContent = '⚠️ Code review failed: ' + msg;
+          errorAlert.classList.remove('hidden');
+        } else {
+          errorAlert.classList.add('hidden');
+        }
+      }
+    }
+
+    const show = (id) => document.getElementById(id).classList.remove('hidden');
+    const hide = (id) => document.getElementById(id).classList.add('hidden');
+
+    // ── Rendering ─────────────────────────────────────────────────────────
+    function renderResults(review, data) {
+      const score = review.overallScore || {};
+      const decision = review.reviewDecision || '—';
+
+      const banner = document.getElementById('verdictBanner');
+      banner.className = 'verdict ' + (
+        decision === 'REJECT' ? 'verdict-reject'
+          : decision === 'APPROVE_WITH_WARNINGS' ? 'verdict-approve-warnings'
+            : 'verdict-approve');
+
+      const gradeEl = document.getElementById('verdictGrade');
+      gradeEl.textContent = score.grade || '?';
+      gradeEl.className = 'verdict-grade grade-' + String(score.grade || 'f').toLowerCase();
+
+      document.getElementById('verdictDecision').textContent =
+        decision === 'APPROVE' ? '✅ Approve'
+          : decision === 'APPROVE_WITH_WARNINGS' ? '⚠️ Approve with warnings'
+            : '🛑 Reject';
+
+      document.getElementById('verdictSub').textContent =
+        `Score ${score.score ?? '—'}/100 · ${review.totalFindings ?? 0} finding(s) across ${review.totalFiles ?? 0} file(s)` +
+        (score.blockers ? ` · ${score.blockers} blocker(s) must be resolved before execution.` : '');
+
+      document.getElementById('resFiles').textContent = review.totalFiles ?? '—';
+      document.getElementById('resFilesSub').textContent =
+        `${review.passedFiles ?? 0} passed · ${review.failedFiles ?? 0} blocked`;
+      document.getElementById('resBlockers').textContent = score.blockers ?? 0;
+      document.getElementById('resMajors').textContent = score.majors ?? 0;
+      document.getElementById('resMinors').textContent = score.minors ?? 0;
+
+      updateTokenCard(data.stage && data.stage.usage);
+
+      const recos = review.recommendations || [];
+      const recoCard = document.getElementById('recoCard');
+      if (recos.length) {
+        recoCard.classList.remove('hidden');
+        document.getElementById('recoList').innerHTML =
+          recos.map((r) => `<li>${escapeHtml(r)}</li>`).join('');
+      } else {
+        recoCard.classList.add('hidden');
+      }
+
+      document.getElementById('actionBarSummary').textContent =
+        `${decision} · Grade ${score.grade || '?'} (${score.score ?? '—'}/100)`;
+      document.getElementById('runAgent05Btn').classList.toggle('hidden', decision !== 'REJECT');
+
+      // Flatten findings, carrying the owning file so each row can open the editor.
+      allFindings = [];
+      (review.fileReviews || []).forEach((file) => {
+        (file.findings || []).forEach((f) => {
+          allFindings.push({ ...f, fileName: file.fileName, relativePath: file.relativePath });
+        });
+      });
+      allFindings.sort((a, b) =>
+        (SEVERITY_ORDER[a.severity] ?? 9) - (SEVERITY_ORDER[b.severity] ?? 9));
+
+      renderFindings();
+      renderFiles(review.fileReviews || []);
+    }
+
+    function updateTokenCard(usage) {
+      const card = document.getElementById('tokenCard');
+      if (!usage) { card.classList.add('hidden'); return; }
+      document.getElementById('tokPrompt').textContent = (usage.promptTokens || 0).toLocaleString();
+      document.getElementById('tokCompletion').textContent = (usage.completionTokens || 0).toLocaleString();
+      document.getElementById('tokTotal').textContent = (usage.totalTokens || 0).toLocaleString();
+      document.getElementById('tokCost').textContent = '$' + (usage.estimatedCost || 0).toFixed(6);
+      card.classList.remove('hidden');
+    }
+
+    function renderFindings() {
+      const severity = document.getElementById('severityFilter').value;
+      const query = document.getElementById('searchInput').value.toLowerCase().trim();
+      const tbody = document.getElementById('findingsBody');
+
+      const rows = allFindings.filter((f) => {
+        if (severity && f.severity !== severity) return false;
+        if (!query) return true;
+        return [f.ruleId, f.dimension, f.fileName, f.message, f.suggestion]
+          .join(' ').toLowerCase().includes(query);
+      });
+
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-dim); padding:24px;">'
+          + (allFindings.length ? 'No findings match the current filter.' : '🎉 No findings — every rule passed.')
+          + '</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = rows.map((f, idx) => {
+        const advisory = f.ruleId === ADVISORY_RULE_ID;
+        // Deterministic rules carry a line number; the AI logic review does not, which in practice
+        // is most findings. Say so rather than rendering a misleading "line ?".
+        const loc = f.line
+          ? `<a class="finding-loc" data-idx="${idx}">${escapeHtml(f.fileName)}:${f.line}</a>`
+          : `<span class="finding-loc no-line" title="This finding has no line number">${escapeHtml(f.fileName)} · whole file</span>`;
+        return `
+          <tr class="tc-row">
+            <td><span class="sev sev-${String(f.severity || '').toLowerCase()}">${escapeHtml(f.severity)}</span></td>
+            <td><span class="rule-id">${escapeHtml(f.ruleId)}</span>
+                ${advisory ? '<br><span class="sev sev-advisory" title="AI logic review — advisory only, capped at MAJOR and can never block the stage">advisory</span>' : ''}</td>
+            <td><span class="dimension">${escapeHtml(f.dimension)}</span></td>
+            <td>${loc}</td>
+            <td>
+              <div class="finding-message">${escapeHtml(f.message)}</div>
+              ${f.suggestion ? `<div class="finding-suggestion">${escapeHtml(f.suggestion)}</div>` : ''}
+            </td>
+            <td style="text-align:right;">
+              ${f.relativePath ? `<button class="btn btn-secondary btn-sm open-finding" data-idx="${idx}">✏ Fix</button>` : ''}
+            </td>
+          </tr>`;
+      }).join('');
+
+      tbody.querySelectorAll('.open-finding, .finding-loc[data-idx]').forEach((el) => {
+        el.addEventListener('click', () => {
+          const f = rows[parseInt(el.dataset.idx, 10)];
+          if (f) openCodeModal(f.relativePath, f);
+        });
+      });
+    }
+
+    function renderFiles(fileReviews) {
+      const tbody = document.getElementById('filesBody');
+      if (!fileReviews.length) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--text-dim); padding:24px;">No files reviewed.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = fileReviews.map((f) => {
+        const score = f.qualityScore ?? 0;
+        const colour = score >= 90 ? 'var(--success)' : score >= 60 ? 'var(--warning)' : 'var(--danger)';
+        return `
+          <tr class="tc-row">
+            <td><span class="file-name">${escapeHtml(f.fileName)}</span></td>
+            <td><span class="badge badge-${escapeHtml(f.fileType)}">${escapeHtml(String(f.fileType).toUpperCase())}</span></td>
+            <td style="color:var(--text-muted);">${f.linesOfCode ?? '—'}</td>
+            <td><span class="badge status-${String(f.status || '').toLowerCase()}">${escapeHtml(f.status)}</span></td>
+            <td>
+              <span class="score-bar"><span class="score-bar-fill" style="width:${score}%; background:${colour};"></span></span>
+              <span style="font-weight:700;">${score}</span>
+            </td>
+            <td style="color:var(--text-muted);">${(f.findings || []).length}</td>
+            <td style="text-align:right;">
+              ${f.relativePath ? `<button class="btn btn-secondary btn-sm open-file" data-path="${escapeHtml(f.relativePath)}">👁 View / ✏ Edit</button>` : ''}
+            </td>
+          </tr>`;
+      }).join('');
+
+      tbody.querySelectorAll('.open-file').forEach((btn) => {
+        btn.addEventListener('click', () => openCodeModal(btn.dataset.path, null));
+      });
+    }
+
+    document.getElementById('severityFilter').addEventListener('change', renderFindings);
+    document.getElementById('searchInput').addEventListener('input', renderFindings);
+
+    document.querySelectorAll('.filter-tabs .tab-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.filter-tabs .tab-btn').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.querySelectorAll('.tab-pane').forEach((p) => p.classList.add('hidden'));
+        document.getElementById(btn.dataset.tab).classList.remove('hidden');
+      });
+    });
+
+    // ── Code editor ───────────────────────────────────────────────────────
+    const codeModal = document.getElementById('codeModal');
+    const codeEditor = document.getElementById('codeEditorTextarea');
+    const syntaxIndicator = document.getElementById('syntaxIndicator');
+
+    async function openCodeModal(relPath, finding) {
+      if (!relPath) { alert('This finding has no editable file path.'); return; }
+      currentOpenPath = relPath;
+      document.getElementById('codeModalTitle').textContent = relPath.split(/[\\/]/).pop();
+      document.getElementById('fileInfoBar').textContent = 'Path: ' + relPath;
+      renderFindingContext(finding);
+
+      try {
+        const res = await fetch('/api/agent06/file?path=' + encodeURIComponent(relPath));
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || 'Failed to read file');
+        originalFileContent = data.content || '';
+        codeEditor.value = originalFileContent;
+        validateSyntax();
+        codeModal.classList.add('open');
+        if (finding && finding.line) scrollToLine(finding.line);
+      } catch (err) {
+        alert('Could not open file: ' + err.message);
+      }
+    }
+
+    function renderFindingContext(finding) {
+      const ctx = document.getElementById('findingContext');
+      if (!finding) { ctx.classList.add('hidden'); return; }
+      const sev = document.getElementById('ctxSeverity');
+      sev.textContent = finding.severity;
+      sev.className = 'sev sev-' + String(finding.severity || '').toLowerCase();
+      document.getElementById('ctxRule').textContent = finding.ruleId;
+      document.getElementById('ctxDimension').textContent = finding.dimension;
+      document.getElementById('ctxLine').textContent = finding.line ? 'line ' + finding.line : 'no line reported';
+      document.getElementById('ctxMessage').textContent = finding.message || '';
+      document.getElementById('ctxSuggestion').textContent = finding.suggestion || '';
+      ctx.classList.remove('hidden');
+    }
+
+    /** Places the caret on a 1-based line and scrolls it into view. */
+    function scrollToLine(line) {
+      const lines = codeEditor.value.split('\n');
+      const target = Math.min(Math.max(line, 1), lines.length);
+      const offset = lines.slice(0, target - 1).join('\n').length + (target > 1 ? 1 : 0);
+      codeEditor.focus();
+      codeEditor.setSelectionRange(offset, offset + (lines[target - 1] || '').length);
+      const lineHeight = parseFloat(getComputedStyle(codeEditor).lineHeight) || 21;
+      codeEditor.scrollTop = Math.max(0, (target - 4) * lineHeight);
+    }
+
+    function validateSyntax() {
+      const code = codeEditor.value;
+      const count = (re) => (code.match(re) || []).length;
+      const braces = [count(/\{/g), count(/\}/g)];
+      const parens = [count(/\(/g), count(/\)/g)];
+      if (braces[0] === braces[1] && parens[0] === parens[1]) {
+        syntaxIndicator.className = 'syntax-indicator syntax-valid';
+        syntaxIndicator.textContent = '✓ Balanced Syntax';
+        return true;
+      }
+      syntaxIndicator.className = 'syntax-indicator syntax-warn';
+      syntaxIndicator.textContent = `⚠ Unbalanced: { ${braces[0]}/${braces[1]} } ( ${parens[0]}/${parens[1]} )`;
+      return false;
+    }
+    codeEditor.addEventListener('input', validateSyntax);
+
+    function closeCodeModal() {
+      codeModal.classList.remove('open');
+      currentOpenPath = null;
+    }
+    document.getElementById('modalCloseBtn').addEventListener('click', closeCodeModal);
+    document.getElementById('codeModalCloseTopBtn').addEventListener('click', closeCodeModal);
+    document.getElementById('revertCodeBtn').addEventListener('click', () => {
+      codeEditor.value = originalFileContent;
+      validateSyntax();
+      showToast('Reverted to disk version');
+    });
+
+    async function saveFile() {
+      if (!currentOpenPath) return false;
+      try {
+        const res = await fetch('/api/agent06/file', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: currentOpenPath, content: codeEditor.value })
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || 'Failed to save');
+        originalFileContent = codeEditor.value;
+        return true;
+      } catch (err) {
+        alert('Save failed: ' + err.message);
+        return false;
+      }
+    }
+
+    document.getElementById('modalSaveBtn').addEventListener('click', async () => {
+      if (await saveFile()) { closeCodeModal(); showToast('✓ File saved to disk'); }
+    });
+    document.getElementById('modalSaveRerunBtn').addEventListener('click', async () => {
+      if (await saveFile()) { closeCodeModal(); showToast('✓ Saved — re-running review'); triggerRun(); }
+    });
+
+    // ── Run ───────────────────────────────────────────────────────────────
+    async function triggerRun() {
+      const projectName = (document.getElementById('projectNameInput').value || '').trim();
+      hide('inputPhase'); hide('resultsPhase');
+      document.getElementById('actionBar').classList.add('hidden');
+      show('runningPhase');
+      document.getElementById('logStream').innerHTML = '';
+
+      connectSSE();
+      startStatePolling();
+      try {
+        const res = await fetch('/api/agent06/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectName })
+        });
+        if (!res.ok) throw new Error('Failed to start Agent 06');
+      } catch (err) {
+        alert('Error starting Agent 06: ' + err.message);
+        show('inputPhase'); hide('runningPhase');
+      }
+    }
+    document.getElementById('runBtn').addEventListener('click', triggerRun);
+    document.getElementById('rerunBtn').addEventListener('click', triggerRun);
+
+    document.getElementById('runAgent05Btn').addEventListener('click', async () => {
+      try {
+        const res = await fetch('/api/agent05/run', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({})
+        });
+        if (res.status === 404) {
+          alert('Agent 05 is not mounted on this server.\nUse the combined UI (npm run ui:agent01) or run: npm run agent:05');
+          return;
+        }
+        showToast('Agent 05 re-generation started…');
+        setTimeout(() => { window.location.href = '/agent05.html'; }, 1200);
+      } catch (err) {
+        alert('Could not start Agent 05: ' + err.message);
+      }
+    });
+
+    // ── SSE ───────────────────────────────────────────────────────────────
+    function connectSSE() {
+      if (sseSource) sseSource.close();
+      const logContainer = document.getElementById('logStream');
+      sseSource = new EventSource('/api/agent06/logs');
+      sseSource.onmessage = (e) => {
+        let ev;
+        try { ev = JSON.parse(e.data); } catch { return; }
+        if (ev.type === 'log') {
+          const line = document.createElement('div');
+          line.className = ev.level === 'error' ? 'log-error' : 'log-info';
+          line.textContent = ev.message;
+          logContainer.appendChild(line);
+          logContainer.scrollTop = logContainer.scrollHeight;
+        } else if (ev.type === 'exit') {
+          sseSource.close();
+          sseSource = null;
+          if (ev.code && ev.code !== 0) {
+            const line = document.createElement('div');
+            line.className = 'log-error';
+            line.textContent = `Agent exited with code ${ev.code}. If no review appeared, run Agent 05 first.`;
+            logContainer.appendChild(line);
+          }
+          setTimeout(fetchState, 1200);
+        }
+      };
+    }
+
+    // ── Approval ──────────────────────────────────────────────────────────
+    const approvalModal = document.getElementById('approvalModal');
+    const rejectionModal = document.getElementById('rejectionModal');
+
+    document.getElementById('approveBtn').addEventListener('click', () => approvalModal.classList.add('open'));
+    document.getElementById('cancelApprovalBtn').addEventListener('click', () => approvalModal.classList.remove('open'));
+    document.getElementById('confirmApprovalBtn').addEventListener('click', async () => {
+      const comment = document.getElementById('approvalComment').value.trim();
+      approvalModal.classList.remove('open');
+      try {
+        await fetch('/api/agent06/approve', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comment })
+        });
+        showToast('✓ Stage 06 approved — proceeding to Agent 07…');
+        setTimeout(() => { window.location.href = '/agent07.html'; }, 1500);
+      } catch (err) {
+        alert('Approval failed: ' + err.message);
+      }
+    });
+
+    document.getElementById('rejectBtn').addEventListener('click', () => rejectionModal.classList.add('open'));
+    document.getElementById('cancelRejectionBtn').addEventListener('click', () => rejectionModal.classList.remove('open'));
+    document.getElementById('confirmRejectionBtn').addEventListener('click', async () => {
+      const comment = document.getElementById('rejectionComment').value.trim();
+      if (!comment) { alert('Please provide a rejection reason.'); return; }
+      rejectionModal.classList.remove('open');
+      try {
+        await fetch('/api/agent06/reject', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comment })
+        });
+        showToast('Stage 06 rejected.');
+        await fetchState();
+      } catch (err) {
+        alert('Rejection failed: ' + err.message);
+      }
+    });
+
+    // ── Chat ──────────────────────────────────────────────────────────────
+    const chatDrawer = document.getElementById('chatDrawer');
+    document.getElementById('chatToggleBtn').addEventListener('click', () => chatDrawer.classList.toggle('open'));
+    document.getElementById('chatCloseBtn').addEventListener('click', () => chatDrawer.classList.remove('open'));
+
+    async function sendChatMessage() {
+      const input = document.getElementById('chatInput');
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = '';
+      const box = document.getElementById('chatMessages');
+
+      const user = document.createElement('div');
+      user.className = 'chat-bubble user';
+      user.textContent = text;
+      box.appendChild(user);
+      chatHistory.push({ role: 'user', content: text });
+
+      const reply = document.createElement('div');
+      reply.className = 'chat-bubble aria';
+      reply.textContent = 'Analysing the review report…';
+      box.appendChild(reply);
+      box.scrollTop = box.scrollHeight;
+
+      try {
+        const res = await fetch('/api/agent06/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: text, history: chatHistory })
+        });
+        const data = await res.json();
+        reply.textContent = data.reply || data.error || 'No response from assistant.';
+        chatHistory.push({ role: 'assistant', content: reply.textContent });
+      } catch (err) {
+        reply.textContent = 'Error: ' + err.message;
+      }
+      box.scrollTop = box.scrollHeight;
+    }
+    document.getElementById('chatSendBtn').addEventListener('click', sendChatMessage);
+    document.getElementById('chatInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') sendChatMessage();
+    });
+
+    // ── Init ──────────────────────────────────────────────────────────────
+    window.addEventListener('DOMContentLoaded', () => {
+      AriaPipelineNav.start(6);
+      fetchState();
+    });
+  </script>
+</body>
+</html>

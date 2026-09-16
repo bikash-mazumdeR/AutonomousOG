@@ -44,7 +44,12 @@ module.exports = defineConfig({
     ['html', { outputFolder: 'reports/html', open: 'never' }],
     ['json', { outputFile: 'reports/json/playwright-results.json' }],
     ['junit', { outputFile: 'reports/json/junit-results.xml' }],
-    ['list'],
+    // Streams per-test progress as NDJSON so the Agent 07 UI can render a live results grid.
+    // No-ops unless ARIA_PROGRESS_FILE is set, so a manual `npx playwright test` is unaffected.
+    [path.join(__dirname, 'core', 'reporters', 'AriaProgressReporter.ts')],
+    // An agent-driven run already gets structured progress from the reporter above, so the
+    // chattier `list` output is only worth its log volume for a human-driven terminal run.
+    [process.env.ARIA_PROGRESS_FILE ? 'dot' : 'list'],
   ],
 
   // ── Global Use Settings ──────────────────────────────────────────────────

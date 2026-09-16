@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ARIA — Agent 07: Test Runner</title>
+  <link rel="stylesheet" href="/aria.css" />
+  <script src="/pipeline-nav.js"></script>
+</head>
+<body>
+
+  <header class="header">
+    <div class="header-logo">ARIA <span>/</span> Agent 07</div>
+    <div class="header-badge">Test Runner</div>
+  </header>
+
+  <div class="pipeline-bar" id="pipelineBar"></div>
+  <div class="toast" id="toastNotification">✓ Done</div>
+
+  <div class="page-body">
+    <div class="alert alert-success hidden" id="successAlert"></div>
+    <div class="alert alert-danger hidden" id="errorAlert"></div>
+    <div class="alert alert-warning hidden" id="reviewAlert"></div>
+
+    <!-- ── Phase 1: scope & launcher ─────────────────────────────────────── -->
+    <div class="card" id="inputPhase">
+      <div class="card-title">Test Execution Scope</div>
+      <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px; line-height:1.5;">
+        Agent 07 runs the approved Playwright specs and any K6 performance scripts, then collects results,
+        screenshots, video and traces for the stages that follow.
+      </p>
+
+      <div class="stat-grid">
+        <div class="stat-item">
+          <div class="stat-label">Spec Files</div>
+          <div class="stat-value" id="inSpecCount" style="color:#a5b4fc;">—</div>
+          <div class="stat-sub">Reviewed by Agent 06</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">K6 Scripts</div>
+          <div class="stat-value" id="inK6Count" style="color:#fbbf24;">—</div>
+          <div class="stat-sub">Skipped in FAILED mode</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Workers / Retries</div>
+          <div class="stat-value" id="inWorkers" style="font-size:18px; color:#93c5fd;">—</div>
+          <div class="stat-sub" id="inHeadless">—</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Environment</div>
+          <div class="stat-value" id="inEnv" style="font-size:18px; color:#4ade80;">—</div>
+          <div class="stat-sub">Target of this run</div>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:12px; align-items:center; margin-top:8px; flex-wrap:wrap;">
+        <select id="modeSelect" class="select-input" style="height:38px; min-width:190px;">
+          <option value="FULL">FULL — every spec</option>
+          <option value="SMOKE">SMOKE — @smoke only</option>
+          <option value="REGRESSION">REGRESSION — @regression only</option>
+          <option value="FAILED">FAILED — last failed only</option>
+        </select>
+        <input type="text" id="projectNameInput" class="text-input" style="flex:1; min-width:220px;"
+               placeholder="Project ID (defaults to latest active pipeline run)">
+        <button id="runBtn" class="btn btn-primary" style="min-width:200px; height:38px;">
+          <span>▶ Run Tests</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ── Phase 2: live run ─────────────────────────────────────────────── -->
+    <div class="card hidden" id="runningPhase">
+      <div class="card-title">Executing Tests</div>
+
+      <div class="progress-head">
+        <div class="progress-counts">
+          <span class="pc-pass" id="livePassed">✓ 0</span>
+          <span class="pc-fail" id="liveFailed">✗ 0</span>
+          <span class="pc-skip" id="liveSkipped">· 0</span>
+          <span class="pc-total" id="liveTotal">of —</span>
+        </div>
+        <div style="margin-left:auto; font-size:12px; color:var(--text-muted);" id="liveStatusText">Starting…</div>
+      </div>
+      <div class="progress-track" id="progressTrack">
+        <div class="progress-seg pass" id="segPass" style="width:0%"></div>
+        <div class="progress-seg fail" id="segFail" style="width:0%"></div>
+        <div class="progress-seg skip" id="segSkip" style="width:0%"></div>
+      </div>
+
+      <div class="table-container" style="margin-top:16px; max-height:420px;">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:40px;"></th>
+              <th style="width:110px;">TC Key</th>
+              <th>Test</th>
+              <th style="width:110px;">Duration</th>
+              <th style="width:90px;">Retry</th>
+            </tr>
+          </thead>
+          <tbody id="liveGridBody"></tbody>
+        </table>
+      </div>
+
+      <details style="margin-top:14px;">
+        <summary style="cursor:pointer; font-size:12px; color:var(--text-muted);">Show raw runner log</summary>
+        <div class="log-stream" id="logStream" style="margin-top:10px;"></div>
+      </details>
+    </div>
+
+    <!-- ── Phase 3: results ──────────────────────────────────────────────── -->
+    <div id="resultsPhase" class="hidden">
+
+      <div class="verdict" id="verdictBanner">
+        <div class="verdict-grade" id="verdictRate">—</div>
+        <div class="verdict-main">
+          <div class="verdict-decision" id="verdictHeadline">—</div>
+          <div class="verdict-sub" id="verdictSub"></div>
+        </div>
+      </div>
+
+      <div class="stat-grid">
+        <div class="stat-item">
+          <div class="stat-label">Passed</div>
+          <div class="stat-value" id="resPassed" style="color:#4ade80;">—</div>
+          <div class="stat-sub">Flaky tests count as passed</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Failed</div>
+          <div class="stat-value" id="resFailed" style="color:#f87171;">—</div>
+          <div class="stat-sub">Includes timed-out</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Skipped</div>
+          <div class="stat-value" id="resSkipped" style="color:var(--text-dim);">—</div>
+          <div class="stat-sub">Not executed</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Duration</div>
+          <div class="stat-value" id="resDuration" style="font-size:20px;">—</div>
+          <div class="stat-sub" id="resMeta">—</div>
+        </div>
+      </div>
+
+      <div class="filter-tabs">
+        <button class="tab-btn active" data-tab="tabResults">Results</button>
+        <button class="tab-btn" data-tab="tabK6">K6 Performance</button>
+        <button class="tab-btn" data-tab="tabFlaky">Retried / Flaky</button>
+        <button class="tab-btn" data-tab="tabReport">HTML Report</button>
+        <select class="select-input" id="statusFilter">
+          <option value="">All statuses</option>
+          <option value="passed">Passed</option>
+          <option value="failed">Failed</option>
+          <option value="skipped">Skipped</option>
+          <option value="flaky">Flaky</option>
+        </select>
+        <input type="text" class="search-input" id="searchInput" placeholder="Filter by TC key or title…">
+        <button id="rerunBtn" class="btn btn-secondary" style="height:34px; font-size:12px; padding:0 12px; white-space:nowrap;">↻ Re-run</button>
+      </div>
+
+      <div id="tabResults" class="tab-pane">
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:40px;"></th>
+                <th style="width:110px;">TC Key</th>
+                <th>Test</th>
+                <th style="width:110px;">Status</th>
+                <th style="width:100px;">Duration</th>
+                <th style="width:80px;">Retries</th>
+              </tr>
+            </thead>
+            <tbody id="resultsBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="tabK6" class="tab-pane hidden">
+        <div id="k6Panel"></div>
+      </div>
+
+      <div id="tabFlaky" class="tab-pane hidden">
+        <div class="advisory-card" style="margin-bottom:16px;">
+          <div class="advisory-body">
+            A test appears here when it needed a retry. Note the summary counts flaky tests as
+            <strong>passed</strong> in the pass rate.
+          </div>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr><th style="width:120px;">TC Key</th><th>Test</th><th style="width:100px;">Retries</th><th style="width:110px;">Final</th></tr>
+            </thead>
+            <tbody id="flakyBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="tabReport" class="tab-pane hidden">
+        <div id="reportHost">
+          <div class="report-placeholder" id="reportPlaceholder">
+            <div>The Playwright HTML report loads once a run has finished.</div>
+            <button class="btn btn-secondary btn-sm" id="loadReportBtn">Load report</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Action bar ──────────────────────────────────────────────────────── -->
+  <div class="action-bar hidden" id="actionBar">
+    <div style="margin-right:auto; font-size:13px; color:var(--text-muted);">
+      Stage 07: <strong style="color:var(--text);" id="actionBarSummary">Execution complete</strong>
+    </div>
+    <button class="btn btn-danger" id="rejectBtn">Reject</button>
+    <button class="btn btn-success" id="approveBtn">Approve &amp; Proceed to Agent 08</button>
+  </div>
+
+  <!-- ── Approval / rejection modals ─────────────────────────────────────── -->
+  <div class="modal" id="approvalModal">
+    <div class="modal-card">
+      <h2>Approve Stage 07</h2>
+      <p>Confirm the execution results and proceed to Agent 08 (Bug Reporter).</p>
+      <textarea id="approvalComment" placeholder="Approval notes (optional)…">Execution results reviewed and approved.</textarea>
+      <div class="modal-buttons">
+        <button class="btn btn-secondary" id="cancelApprovalBtn">Cancel</button>
+        <button class="btn btn-success" id="confirmApprovalBtn">Confirm &amp; Advance</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="rejectionModal">
+    <div class="modal-card">
+      <h2>Reject Stage 07</h2>
+      <p>Provide a reason — for example an environment problem that invalidates this run.</p>
+      <textarea id="rejectionComment" placeholder="Rejection rationale (required)…"></textarea>
+      <div class="modal-buttons">
+        <button class="btn btn-secondary" id="cancelRejectionBtn">Cancel</button>
+        <button class="btn btn-danger" id="confirmRejectionBtn">Reject Stage</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Chat ────────────────────────────────────────────────────────────── -->
+  <button class="chat-toggle-btn" id="chatToggleBtn" title="Ask ARIA about this run">💬</button>
+  <div class="chat-drawer" id="chatDrawer">
+    <div class="chat-header">
+      <span>ARIA AI Test Analyst</span>
+      <button class="chat-close" id="chatCloseBtn">✕</button>
+    </div>
+    <div class="chat-messages" id="chatMessages">
+      <div class="chat-bubble aria">Ask me why a test failed, which failures share a root cause, or how the run compares on performance.</div>
+    </div>
+    <div class="chat-input-area">
+      <input type="text" id="chatInput" placeholder="Ask about a failure…">
+      <button class="btn btn-primary" id="chatSendBtn">Send</button>
+    </div>
+  </div>
+
+  <script>
+    'use strict';
+
+    let stateData = null;
+    let sseSource = null;
+    let statePollInterval = null;
+    let allTests = [];
+    let reportLoaded = false;
+    const liveRows = new Map();   // testId -> { tcKey, title, status, duration, retry }
+    let liveTotal = 0;
+    const chatHistory = [];
+
+    const show = (id) => document.getElementById(id).classList.remove('hidden');
+    const hide = (id) => document.getElementById(id).classList.add('hidden');
+
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      return String(str).replace(/[&<>"']/g, (m) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[m]));
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toastNotification');
+      t.textContent = msg || '✓ Done';
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    const fmtDuration = (ms) => (!ms && ms !== 0 ? '—' : ms < 1000 ? ms + 'ms' : (ms / 1000).toFixed(1) + 's');
+    const artifactUrl = (p) => '/api/agent07/artifact?path=' + encodeURIComponent(p);
+
+    function startStatePolling() {
+      if (!statePollInterval) statePollInterval = setInterval(fetchState, 2500);
+    }
+    function stopStatePolling() {
+      if (statePollInterval) { clearInterval(statePollInterval); statePollInterval = null; }
+    }
+
+    // ── State ─────────────────────────────────────────────────────────────
+    async function fetchState() {
+      try {
+        const res = await fetch('/api/agent07/state');
+        if (!res.ok) throw new Error(res.statusText);
+        stateData = await res.json();
+        applyState(stateData);
+      } catch (err) {
+        console.error('Error fetching state:', err);
+      }
+    }
+
+    function applyState(data) {
+      if (!data) return;
+
+      const approved = (data.reviewedScripts && data.reviewedScripts.approvedScripts) || {};
+      document.getElementById('inSpecCount').textContent = (approved.specFiles || []).length || '—';
+      document.getElementById('inK6Count').textContent = (approved.k6Files || []).length || '0';
+
+      const cfg = data.config || {};
+      document.getElementById('inWorkers').textContent = `${cfg.workers ?? '—'} / ${cfg.retries ?? '—'}`;
+      document.getElementById('inHeadless').textContent = cfg.headless === false ? 'Headed mode' : 'Headless mode';
+      document.getElementById('inEnv').textContent = cfg.environment || '—';
+
+      // Agent 07 ignores Agent 06's verdict and will execute blocked specs regardless — say so.
+      const reviewAlert = document.getElementById('reviewAlert');
+      if (data.reviewedScripts && data.reviewedScripts.reviewDecision === 'REJECT') {
+        reviewAlert.innerHTML = '⚠️ Agent 06 rejected this code review ('
+          + escapeHtml(String((data.reviewedScripts.overallScore || {}).blockers || 0))
+          + ' blocker(s)). Agent 07 does not enforce that verdict — these specs will run anyway.';
+        reviewAlert.classList.remove('hidden');
+      } else {
+        reviewAlert.classList.add('hidden');
+      }
+
+      const results = data.executionResults;
+      const hasResults = !!(results && results.summary);
+
+      if (data.running) {
+        hide('inputPhase'); show('runningPhase'); hide('resultsPhase');
+        document.getElementById('actionBar').classList.add('hidden');
+        if (!sseSource) connectSSE();
+        applyProgressSnapshot(data.progress || []);
+        startStatePolling();
+      } else if (hasResults) {
+        stopStatePolling();
+        if (sseSource) { sseSource.close(); sseSource = null; }
+        hide('inputPhase'); hide('runningPhase'); show('resultsPhase');
+        document.getElementById('actionBar').classList.remove('hidden');
+        renderResults(results);
+      } else {
+        stopStatePolling();
+        show('inputPhase'); hide('runningPhase'); hide('resultsPhase');
+        document.getElementById('actionBar').classList.add('hidden');
+        const errorAlert = document.getElementById('errorAlert');
+        if (data.stage && data.stage.status === 'FAILED') {
+          const msg = (data.stage.error && data.stage.error.message) || 'Agent 07 failed. Check the logs.';
+          errorAlert.textContent = '⚠️ Test run failed: ' + msg;
+          errorAlert.classList.remove('hidden');
+        } else {
+          errorAlert.classList.add('hidden');
+        }
+      }
+    }
+
+    // ── Live progress ─────────────────────────────────────────────────────
+    function applyProgressSnapshot(events) {
+      liveRows.clear();
+      liveTotal = 0;
+      events.forEach(handleProgressEvent);
+      renderLiveGrid();
+    }
+
+    function handleProgressEvent(ev) {
+      if (!ev || !ev.t) return;
+      if (ev.t === 'begin') {
+        liveTotal = ev.total || 0;
+        document.getElementById('liveStatusText').textContent =
+          `Running with ${ev.workers || '?'} worker(s)…`;
+      } else if (ev.t === 'start') {
+        liveRows.set(ev.testId, {
+          tcKey: ev.tcKey, title: ev.title, file: ev.file, status: 'running', duration: null, retry: 0
+        });
+      } else if (ev.t === 'test') {
+        // Retries overwrite the earlier attempt, so the row always shows the latest outcome.
+        liveRows.set(ev.testId, {
+          tcKey: ev.tcKey, title: ev.title, file: ev.file,
+          status: ev.status, duration: ev.duration, retry: ev.retry || 0
+        });
+      } else if (ev.t === 'end') {
+        document.getElementById('liveStatusText').textContent =
+          `Run finished (${ev.status}). Collecting artifacts…`;
+      }
+    }
+
+    function renderLiveGrid() {
+      const rows = [...liveRows.values()];
+      const passed = rows.filter((r) => r.status === 'passed').length;
+      const failed = rows.filter((r) => ['failed', 'timedOut', 'interrupted'].includes(r.status)).length;
+      const skipped = rows.filter((r) => r.status === 'skipped').length;
+      const total = liveTotal || rows.length || 1;
+
+      document.getElementById('livePassed').textContent = '✓ ' + passed;
+      document.getElementById('liveFailed').textContent = '✗ ' + failed;
+      document.getElementById('liveSkipped').textContent = '· ' + skipped;
+      document.getElementById('liveTotal').textContent = `of ${liveTotal || '—'}`;
+      document.getElementById('segPass').style.width = (passed / total * 100) + '%';
+      document.getElementById('segFail').style.width = (failed / total * 100) + '%';
+      document.getElementById('segSkip').style.width = (skipped / total * 100) + '%';
+
+      const icon = { passed: '✓', failed: '✗', timedOut: '⏱', interrupted: '⊘', skipped: '·', running: '⟳' };
+      document.getElementById('liveGridBody').innerHTML = rows.map((r) => `
+        <tr class="tc-row">
+          <td class="run-row-status run-${escapeHtml(r.status)}">${icon[r.status] || '·'}</td>
+          <td><span class="rule-id">${escapeHtml(r.tcKey || '—')}</span></td>
+          <td>${escapeHtml(r.title || '')}</td>
+          <td style="color:var(--text-muted);">${r.duration != null ? fmtDuration(r.duration) : '…'}</td>
+          <td style="color:var(--text-muted);">${r.retry ? '↻ ' + r.retry : '—'}</td>
+        </tr>`).join('');
+    }
+
+    // ── Results ───────────────────────────────────────────────────────────
+    function renderResults(results) {
+      const s = results.summary || {};
+      allTests = results.tests || [];
+
+      const banner = document.getElementById('verdictBanner');
+      banner.className = 'verdict ' + (s.failed > 0 ? 'verdict-reject'
+        : (results.flakyTests || []).length ? 'verdict-approve-warnings' : 'verdict-approve');
+
+      const rate = document.getElementById('verdictRate');
+      rate.textContent = (s.passRate ?? 0) + '%';
+      rate.style.fontSize = '24px';
+      rate.className = 'verdict-grade ' + (s.passRate >= 90 ? 'grade-a' : s.passRate >= 75 ? 'grade-b' : s.passRate >= 60 ? 'grade-c' : 'grade-f');
+
+      document.getElementById('verdictHeadline').textContent =
+        s.failed > 0 ? `${s.failed} test(s) failed` : 'All tests passed';
+      document.getElementById('verdictSub').textContent =
+        `${s.passed ?? 0}/${s.total ?? 0} passed · mode ${results.mode || 'FULL'} · ${s.browser || '—'} · run ${results.runId || '—'}`;
+
+      document.getElementById('resPassed').textContent = s.passed ?? 0;
+      document.getElementById('resFailed').textContent = s.failed ?? 0;
+      document.getElementById('resSkipped').textContent = s.skipped ?? 0;
+      document.getElementById('resDuration').textContent = fmtDuration(s.duration);
+      document.getElementById('resMeta').textContent =
+        `${s.workers ?? '—'} workers · ${s.retries ?? '—'} retries · ${new Date(results.executedAt).toLocaleString()}`;
+
+      document.getElementById('actionBarSummary').textContent =
+        `${s.passed ?? 0} passed / ${s.failed ?? 0} failed (${s.passRate ?? 0}%)`;
+
+      renderResultsTable();
+      renderK6(results.k6Results || []);
+      renderFlaky(results.flakyTests || []);
+      reportLoaded = false;
+      resetReportTab(stateData && stateData.reportAvailable);
+    }
+
+    function renderResultsTable() {
+      const status = document.getElementById('statusFilter').value;
+      const query = document.getElementById('searchInput').value.toLowerCase().trim();
+      const tbody = document.getElementById('resultsBody');
+
+      const rows = allTests.filter((t) => {
+        if (status && t.status !== status) return false;
+        if (!query) return true;
+        return `${t.tcKey || ''} ${t.title || ''}`.toLowerCase().includes(query);
+      });
+
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-dim); padding:24px;">No tests match the filter.</td></tr>';
+        return;
+      }
+
+      const icon = { passed: '✓', failed: '✗', timedOut: '⏱', interrupted: '⊘', skipped: '·', flaky: '⚡' };
+      tbody.innerHTML = rows.map((t, idx) => {
+        const failed = ['failed', 'timedOut', 'interrupted'].includes(t.status);
+        return `
+          <tr class="tc-row ${failed ? 'expandable' : ''}" data-idx="${idx}" ${failed ? 'style="cursor:pointer;"' : ''}>
+            <td class="run-row-status run-${escapeHtml(t.status)}">${icon[t.status] || '·'}</td>
+            <td><span class="rule-id">${escapeHtml(t.tcKey || '—')}</span></td>
+            <td>${escapeHtml(t.title || '')}${failed ? ' <span style="color:var(--text-dim); font-size:11px;">▼ details</span>' : ''}</td>
+            <td><span class="status-badge ${escapeHtml(String(t.status).toLowerCase())}">${escapeHtml(t.status)}</span></td>
+            <td style="color:var(--text-muted);">${fmtDuration(t.duration)}</td>
+            <td style="color:var(--text-muted);">${t.retries ? '↻ ' + t.retries : '—'}</td>
+          </tr>
+          ${failed ? `<tr class="detail-row hidden" data-detail="${idx}"><td colspan="6">${failureDetail(t)}</td></tr>` : ''}`;
+      }).join('');
+
+      tbody.querySelectorAll('tr.expandable').forEach((row) => {
+        row.addEventListener('click', () => {
+          const detail = tbody.querySelector(`tr[data-detail="${row.dataset.idx}"]`);
+          if (detail) detail.classList.toggle('hidden');
+        });
+      });
+    }
+
+    function failureDetail(t) {
+      const att = t.attachments || {};
+      const loc = t.error && t.error.location
+        ? `${t.error.location.file ? t.error.location.file.split(/[\\/]/).pop() : ''}:${t.error.location.line || '?'}`
+        : null;
+
+      const shots = (att.screenshots || []).map((p, i) => `
+        <div class="artifact-box">
+          <div class="artifact-label">Screenshot${(att.screenshots.length > 1) ? ` · attempt ${i + 1}` : ''}</div>
+          <img src="${artifactUrl(p)}" alt="Failure screenshot" loading="lazy">
+        </div>`).join('');
+
+      const videos = (att.videos || []).map((p, i) => `
+        <div class="artifact-box">
+          <div class="artifact-label">Video${(att.videos.length > 1) ? ` · attempt ${i + 1}` : ''}</div>
+          <video src="${artifactUrl(p)}" controls preload="metadata" width="480"></video>
+        </div>`).join('');
+
+      // trace: 'on-first-retry', so a first-attempt failure legitimately has none.
+      const traces = (att.traces || []).length
+        ? (att.traces || []).map((p) => `
+            <div class="artifact-box">
+              <div class="artifact-label">Trace</div>
+              <a class="btn btn-secondary btn-sm" href="${artifactUrl(p)}" download>⬇ Download trace.zip</a>
+              <div class="trace-cmd">npx playwright show-trace "${escapeHtml(p)}"</div>
+            </div>`).join('')
+        : `<div class="artifact-box"><div class="artifact-label">Trace</div>
+             <div class="artifact-missing">No trace — tracing is set to <code>on-first-retry</code>.</div></div>`;
+
+      return `
+        <div class="detail-panel">
+          ${loc ? `<div style="font-size:12px; color:var(--text-muted); margin-bottom:8px;">Failed at <span class="finding-loc">${escapeHtml(loc)}</span></div>` : ''}
+          <div class="detail-error">${escapeHtml((t.error && t.error.message) || 'No error message was captured.')}</div>
+          <div class="artifact-grid">${shots}${videos}${traces}</div>
+        </div>`;
+    }
+
+    function renderK6(k6Results) {
+      const host = document.getElementById('k6Panel');
+      if (!k6Results.length) {
+        host.innerHTML = '<div class="card"><div class="advisory-body">No K6 performance scripts were executed for this run.</div></div>';
+        return;
+      }
+      host.innerHTML = k6Results.map((k) => {
+        if (k.skipped) {
+          return `<div class="card">
+            <div class="card-title">${escapeHtml(k.scriptName)} <span class="badge badge-k6">SKIPPED</span></div>
+            <div class="advisory-body">${escapeHtml(k.error || 'k6 is not installed or not on PATH — the performance run was skipped, not failed.')}</div>
+          </div>`;
+        }
+        const s = k.summary || {};
+        return `<div class="card">
+          <div class="card-title">${escapeHtml(k.scriptName)}
+            <span class="status-badge ${k.passed ? 'passed' : 'failed'}">${k.passed ? 'thresholds met' : 'thresholds breached'}</span>
+          </div>
+          <div class="stat-grid" style="margin-bottom:0;">
+            <div class="stat-item"><div class="stat-label">p95 response</div><div class="stat-value" style="font-size:20px;">${s.p95ResponseTime != null ? s.p95ResponseTime + ' ms' : '—'}</div></div>
+            <div class="stat-item"><div class="stat-label">Error rate</div><div class="stat-value" style="font-size:20px;">${s.errorRate != null ? s.errorRate + '%' : '—'}</div></div>
+            <div class="stat-item"><div class="stat-label">Total requests</div><div class="stat-value" style="font-size:20px;">${s.totalRequests != null ? s.totalRequests.toLocaleString() : '—'}</div></div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    function renderFlaky(flaky) {
+      const tbody = document.getElementById('flakyBody');
+      if (!flaky.length) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--text-dim); padding:24px;">No test needed a retry.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = flaky.map((f) => `
+        <tr class="tc-row">
+          <td><span class="rule-id">${escapeHtml(f.tcKey || '—')}</span></td>
+          <td>${escapeHtml(f.title || '')}</td>
+          <td style="color:var(--text-muted);">↻ ${f.retries}</td>
+          <td><span class="status-badge ${escapeHtml(String(f.status).toLowerCase())}">${escapeHtml(f.status)}</span></td>
+        </tr>`).join('');
+    }
+
+    // ── HTML report ───────────────────────────────────────────────────────
+    function resetReportTab(available) {
+      const host = document.getElementById('reportHost');
+      host.innerHTML = `
+        <div class="report-placeholder" id="reportPlaceholder">
+          <div>${available ? 'The Playwright HTML report is ready.' : 'No HTML report on disk yet — run the tests first.'}</div>
+          ${available ? '<button class="btn btn-secondary btn-sm" id="loadReportBtn">Load report</button>' : ''}
+        </div>`;
+      const btn = document.getElementById('loadReportBtn');
+      if (btn) btn.addEventListener('click', loadReport);
+    }
+
+    function loadReport() {
+      // Playwright deletes and rebuilds reports/html at the end of every run, so the iframe is only
+      // mounted on demand and cache-busted. The trailing index.html matters: the report references
+      // its attachments relatively as data/…, which breaks without the directory in the path.
+      document.getElementById('reportHost').innerHTML =
+        `<iframe class="report-frame" src="/api/agent07/report/index.html?t=${Date.now()}"
+                 title="Playwright HTML report"></iframe>`;
+      reportLoaded = true;
+    }
+
+    document.getElementById('statusFilter').addEventListener('change', renderResultsTable);
+    document.getElementById('searchInput').addEventListener('input', renderResultsTable);
+
+    document.querySelectorAll('.filter-tabs .tab-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.filter-tabs .tab-btn').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.querySelectorAll('.tab-pane').forEach((p) => p.classList.add('hidden'));
+        document.getElementById(btn.dataset.tab).classList.remove('hidden');
+        if (btn.dataset.tab === 'tabReport' && !reportLoaded && stateData && stateData.reportAvailable) loadReport();
+      });
+    });
+
+    // ── Run ───────────────────────────────────────────────────────────────
+    async function triggerRun() {
+      const projectName = (document.getElementById('projectNameInput').value || '').trim();
+      const mode = document.getElementById('modeSelect').value;
+
+      liveRows.clear();
+      liveTotal = 0;
+      renderLiveGrid();
+      hide('inputPhase'); hide('resultsPhase');
+      document.getElementById('actionBar').classList.add('hidden');
+      show('runningPhase');
+      document.getElementById('logStream').innerHTML = '';
+      document.getElementById('liveStatusText').textContent = 'Starting…';
+
+      connectSSE();
+      startStatePolling();
+      try {
+        const res = await fetch('/api/agent07/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectName, mode })
+        });
+        if (!res.ok) throw new Error('Failed to start Agent 07');
+      } catch (err) {
+        alert('Error starting Agent 07: ' + err.message);
+        show('inputPhase'); hide('runningPhase');
+      }
+    }
+    document.getElementById('runBtn').addEventListener('click', triggerRun);
+    document.getElementById('rerunBtn').addEventListener('click', () => {
+      show('inputPhase'); hide('resultsPhase');
+      document.getElementById('actionBar').classList.add('hidden');
+    });
+
+    // ── SSE ───────────────────────────────────────────────────────────────
+    function connectSSE() {
+      if (sseSource) sseSource.close();
+      const logContainer = document.getElementById('logStream');
+      sseSource = new EventSource('/api/agent07/logs');
+      sseSource.onmessage = (e) => {
+        let ev;
+        try { ev = JSON.parse(e.data); } catch { return; }
+
+        if (ev.type === 'connected') {
+          // A replayed stream re-sends everything buffered, so rebuild from scratch.
+          liveRows.clear();
+          liveTotal = 0;
+          logContainer.innerHTML = '';
+        } else if (ev.type === 'progress') {
+          handleProgressEvent(ev.event);
+          renderLiveGrid();
+        } else if (ev.type === 'log') {
+          const line = document.createElement('div');
+          line.className = ev.level === 'error' ? 'log-error' : 'log-info';
+          line.textContent = ev.message;
+          logContainer.appendChild(line);
+          logContainer.scrollTop = logContainer.scrollHeight;
+        } else if (ev.type === 'exit') {
+          sseSource.close();
+          sseSource = null;
+          setTimeout(fetchState, 1500);
+        }
+      };
+    }
+
+    // ── Approval ──────────────────────────────────────────────────────────
+    const approvalModal = document.getElementById('approvalModal');
+    const rejectionModal = document.getElementById('rejectionModal');
+
+    document.getElementById('approveBtn').addEventListener('click', () => approvalModal.classList.add('open'));
+    document.getElementById('cancelApprovalBtn').addEventListener('click', () => approvalModal.classList.remove('open'));
+    document.getElementById('confirmApprovalBtn').addEventListener('click', async () => {
+      const comment = document.getElementById('approvalComment').value.trim();
+      approvalModal.classList.remove('open');
+      try {
+        await fetch('/api/agent07/approve', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comment })
+        });
+        // Agent 08 has no page yet. Ask the nav for one rather than hard-coding the path, so this
+        // starts navigating on its own the day agent08.html lands instead of 404ing until then.
+        const nextPage = window.AriaPipelineNav && window.AriaPipelineNav.pageForStage(8);
+        if (nextPage) {
+          showToast('✓ Stage 07 approved — proceeding to Agent 08…');
+          setTimeout(() => { window.location.href = nextPage; }, 1500);
+        } else {
+          showToast('✓ Stage 07 approved — Agent 08 has no UI yet, run: npm run agent:08');
+          await fetchState();
+        }
+      } catch (err) {
+        alert('Approval failed: ' + err.message);
+      }
+    });
+
+    document.getElementById('rejectBtn').addEventListener('click', () => rejectionModal.classList.add('open'));
+    document.getElementById('cancelRejectionBtn').addEventListener('click', () => rejectionModal.classList.remove('open'));
+    document.getElementById('confirmRejectionBtn').addEventListener('click', async () => {
+      const comment = document.getElementById('rejectionComment').value.trim();
+      if (!comment) { alert('Please provide a rejection reason.'); return; }
+      rejectionModal.classList.remove('open');
+      try {
+        await fetch('/api/agent07/reject', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comment })
+        });
+        showToast('Stage 07 rejected.');
+        await fetchState();
+      } catch (err) {
+        alert('Rejection failed: ' + err.message);
+      }
+    });
+
+    // ── Chat ──────────────────────────────────────────────────────────────
+    const chatDrawer = document.getElementById('chatDrawer');
+    document.getElementById('chatToggleBtn').addEventListener('click', () => chatDrawer.classList.toggle('open'));
+    document.getElementById('chatCloseBtn').addEventListener('click', () => chatDrawer.classList.remove('open'));
+
+    async function sendChatMessage() {
+      const input = document.getElementById('chatInput');
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = '';
+      const box = document.getElementById('chatMessages');
+
+      const user = document.createElement('div');
+      user.className = 'chat-bubble user';
+      user.textContent = text;
+      box.appendChild(user);
+      chatHistory.push({ role: 'user', content: text });
+
+      const reply = document.createElement('div');
+      reply.className = 'chat-bubble aria';
+      reply.textContent = 'Analysing the execution report…';
+      box.appendChild(reply);
+      box.scrollTop = box.scrollHeight;
+
+      try {
+        const res = await fetch('/api/agent07/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: text, history: chatHistory })
+        });
+        const data = await res.json();
+        reply.textContent = data.reply || data.error || 'No response from assistant.';
+        chatHistory.push({ role: 'assistant', content: reply.textContent });
+      } catch (err) {
+        reply.textContent = 'Error: ' + err.message;
+      }
+      box.scrollTop = box.scrollHeight;
+    }
+    document.getElementById('chatSendBtn').addEventListener('click', sendChatMessage);
+    document.getElementById('chatInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') sendChatMessage();
+    });
+
+    // ── Init ──────────────────────────────────────────────────────────────
+    window.addEventListener('DOMContentLoaded', () => {
+      AriaPipelineNav.start(7);
+      fetchState();
+    });
+  </script>
+</body>
+</html>

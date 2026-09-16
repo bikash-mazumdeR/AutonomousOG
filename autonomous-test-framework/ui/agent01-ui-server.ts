@@ -30,6 +30,8 @@ import { loadCurrentTestData } from '../core/state-manager/TestDataFreshness';
 import { projectPaths, readActiveProjectSlug } from '../core/aut/projectPaths';
 import { registerAgent03ReviewRoutes } from './agent03ReviewRoutes';
 import { registerAgent04DataRoutes } from './agent04DataRoutes';
+import { registerAgent06Routes } from './agent06Routes';
+import { registerAgent07Routes } from './agent07Routes';
 
 require('dotenv').config();
 
@@ -1156,6 +1158,12 @@ app.post('/api/agent04/chat', async (req: Request, res: Response) => {
 // ── PUT / POST /api/agent04/data (Human Test Data Override) ─────────────────
 registerAgent04DataRoutes(app, logger, FIXTURES_PATH);
 
+// ── Agents 06 & 07 ──────────────────────────────────────────────────────────
+// Registrars rather than inline routes: each owns its own runner, SSE stream and approval proxy,
+// so mounting them here costs two lines instead of ~400 copy-pasted ones.
+registerAgent06Routes(app, logger);
+registerAgent07Routes(app, logger);
+
 // ── Agent 05 (Playwright Script Generator) Routes ───────────────────────────
 
 const HELPERS_DIR_05 = path.join(FRAMEWORK_DIR, 'tests', 'helpers');
@@ -1500,3 +1508,24 @@ if (AGENT05_PORT !== PORT && AGENT05_PORT !== ALT_PORT && AGENT05_PORT !== AGENT
     });
   } catch (_) {}
 }
+
+/**
+ * Binds the combined app to one more agent port, so every page and API is reachable from it.
+ * @param {number} port
+ * @param {string} label - Page the port is conventionally associated with
+ */
+function bindAlternatePort(port: number, label: string): void {
+  const taken = [PORT, ALT_PORT, AGENT03_PORT, AGENT04_PORT, AGENT05_PORT];
+  if (taken.includes(port)) return;
+  try {
+    const server = app.listen(port, () => {
+      logger.info(`Agent UI also listening on port ${port} (http://localhost:${port}/${label})`);
+    });
+    server.on('error', (err: any) => {
+      logger.info(`Port ${port} not bound: ${err.message}`);
+    });
+  } catch (_) { /* a busy port is not fatal — the primary listener still serves every page */ }
+}
+
+bindAlternatePort(parseInt(process.env.AGENT06_UI_PORT || '3005', 10), 'agent06.html');
+bindAlternatePort(parseInt(process.env.AGENT07_UI_PORT || '3006', 10), 'agent07.html');
