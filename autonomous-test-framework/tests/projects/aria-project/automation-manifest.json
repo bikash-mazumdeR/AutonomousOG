@@ -1,7 +1,7 @@
 {
   "version": 1,
   "projectSlug": "aria-project",
-  "sourceReviewId": "tc_review_1789490485178",
+  "sourceReviewId": "tc_review_1789555293871",
   "files": [
     "tests/projects/aria-project/pages/F01Page.ts",
     "tests/projects/aria-project/specs/F-01.spec.ts"
@@ -9,11 +9,8 @@
   "testCases": [
     {
       "tcKey": "TC-001",
-      "status": "NEEDS_CONTEXT"
-    },
-    {
-      "tcKey": "TC-005",
-      "status": "NEEDS_CONTEXT"
+      "status": "GENERATED",
+      "file": "tests/projects/aria-project/specs/F-01.spec.ts"
     },
     {
       "tcKey": "TC-006",
@@ -22,8 +19,7 @@
     },
     {
       "tcKey": "TC-007",
-      "status": "GENERATED",
-      "file": "tests/projects/aria-project/specs/F-01.spec.ts"
+      "status": "NEEDS_CONTEXT"
     },
     {
       "tcKey": "TC-008",
@@ -35,25 +31,29 @@
       "status": "NEEDS_CONTEXT"
     },
     {
+      "tcKey": "TC-010",
+      "status": "NEEDS_CONTEXT"
+    },
+    {
       "tcKey": "TC-011",
-      "status": "NEEDS_CONTEXT"
-    },
-    {
-      "tcKey": "TC-012",
-      "status": "NEEDS_CONTEXT"
-    },
-    {
-      "tcKey": "TC-015",
       "status": "GENERATED",
       "file": "tests/projects/aria-project/specs/F-01.spec.ts"
     },
     {
-      "tcKey": "TC-016",
+      "tcKey": "TC-019",
       "status": "GENERATED",
       "file": "tests/projects/aria-project/specs/F-01.spec.ts"
     },
     {
       "tcKey": "TC-020",
+      "status": "BLOCKED"
+    },
+    {
+      "tcKey": "TC-022",
+      "status": "NEEDS_CONTEXT"
+    },
+    {
+      "tcKey": "TC-023",
       "status": "NEEDS_CONTEXT"
     },
     {
@@ -62,32 +62,12 @@
       "file": "tests/projects/aria-project/specs/F-01.spec.ts"
     },
     {
-      "tcKey": "TC-025",
-      "status": "BLOCKED"
-    },
-    {
-      "tcKey": "TC-026",
-      "status": "BLOCKED"
-    },
-    {
       "tcKey": "TC-027",
-      "status": "BLOCKED"
-    },
-    {
-      "tcKey": "TC-037",
-      "status": "NEEDS_CONTEXT"
-    },
-    {
-      "tcKey": "TC-038",
       "status": "GENERATED",
       "file": "tests/projects/aria-project/specs/F-01.spec.ts"
     },
     {
-      "tcKey": "TC-039",
-      "status": "NEEDS_CONTEXT"
-    },
-    {
-      "tcKey": "TC-040",
+      "tcKey": "TC-028",
       "status": "GENERATED",
       "file": "tests/projects/aria-project/specs/F-01.spec.ts"
     }

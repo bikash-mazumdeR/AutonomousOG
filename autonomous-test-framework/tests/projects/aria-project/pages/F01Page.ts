@@ -17,11 +17,22 @@ export class F01Page extends BasePage {
   }
 
   /**
-   * Verified action sequence in state "start": fill usernameInput, fill passwordInput, click loginButton. Performs actions only and asserts nothing (verified by TC-015, TC-016, TC-038, TC-040).
+   * Verified action sequence in state "start": fill usernameInput, fill passwordInput, click loginButton. Performs actions only and asserts nothing (verified by TC-020, TC-027).
    * @param {{ usernameInput: string, passwordInput: string }} values
    */
   async startClickLoginButtonFlow(values: { usernameInput: string; passwordInput: string }): Promise<void> {
     await this.usernameInput.fill(values.usernameInput);
+    await this.passwordInput.fill(values.passwordInput);
+    await this.loginButton.click();
+  }
+
+  /**
+   * Verified action sequence in state "start": fill usernameInput, fill usernameInput, fill passwordInput, click loginButton. Performs actions only and asserts nothing (verified by TC-001, TC-019, TC-020, TC-024, TC-028).
+   * @param {{ usernameInput: string, usernameInput2: string, passwordInput: string }} values
+   */
+  async startClickLoginButtonFlow2(values: { usernameInput: string; usernameInput2: string; passwordInput: string }): Promise<void> {
+    await this.usernameInput.fill(values.usernameInput);
+    await this.usernameInput.fill(values.usernameInput2);
     await this.passwordInput.fill(values.passwordInput);
     await this.loginButton.click();
   }

@@ -1,4 +1,6 @@
 {
-  "validPassword": "secret_sauce",
-  "validUsername": "standard_user"
+  "invalidPassword": "Aria_Wrong_ef0176cf!",
+  "invalidUsername": "aria_unknown_user_ef0176cf",
+  "TC020_invalidPassword": "Aria_Wrong_08e5a9a1!",
+  "TC020_invalidUsername": "aria_unknown_user_08e5a9a1"
 }
