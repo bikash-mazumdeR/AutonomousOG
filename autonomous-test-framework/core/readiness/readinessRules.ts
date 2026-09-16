@@ -7,8 +7,8 @@
  */
 
 import {
-  ABSENCE_OUTCOME, ELEMENT_STATE, HEX_COLOUR, HTTP_METHODS, INPUT_VERBS, K6_SCENARIOS, NUMBER_WITH_UNIT, PLACEHOLDER_TOKEN, QUOTED_TEXT, READINESS_RULE as RULE,
-  REVIEWER_CLARIFICATION_MARKER, REVIEWER_REWRITE_MARKER, TEXT_NOUNS, TIMING_CLAUSE, UI_TARGET_NOUNS,
+  ABSENCE_OUTCOME, ELEMENT_STATE, HEX_COLOUR, HTTP_METHODS, INPUT_VERBS, K6_SCENARIOS, NON_TEXT_ELEMENT_NOUNS, NUMBER_WITH_UNIT, PLACEHOLDER_TOKEN,
+  QUOTED_TEXT, READINESS_RULE as RULE, REVIEWER_CLARIFICATION_MARKER, REVIEWER_REWRITE_MARKER, SUBJECT_QUALIFIER, SUBJECT_VERB, TEXT_NOUNS, TIMING_CLAUSE, UI_TARGET_NOUNS,
   UNSUPPORTED_OBSERVATION, URL_PATH, VAGUE_OUTCOME,
 } from './readinessConstants';
 import {
@@ -18,6 +18,19 @@ import { SUPPORTED_BROWSER_ENGINES } from './browserTargets';
 
 function isConcrete(text: string): boolean {
   return [QUOTED_TEXT, URL_PATH, PLACEHOLDER_TOKEN, NUMBER_WITH_UNIT, HEX_COLOUR].some((pattern) => pattern.test(text));
+}
+
+/**
+ * Whether the expected result is about an element that has no text of its own: the last word before the first verb
+ * names an icon, image, logo, spinner and the like ("an error icon is displayed alongside the error message").
+ */
+function aboutNonTextElement(line: string): boolean {
+  const verb = line.match(SUBJECT_VERB);
+  if (!verb || verb.index === undefined) return false;
+  // The head noun comes before any qualifying phrase: "an error message with an icon" is about the message
+  const subject = line.slice(0, verb.index).split(SUBJECT_QUALIFIER)[0];
+  const words = subject.trim().split(/\s+/);
+  return NON_TEXT_ELEMENT_NOUNS.test(words[words.length - 1] || '');
 }
 
 function isRelativePath(value: string | undefined): boolean {
@@ -42,7 +55,7 @@ function expectationItem(step: ReadinessStep, line: string, mode: ReadinessMode)
     };
   }
   // Absence ("no longer displayed") and element states ("masked", "disabled") are asserted without quoting any text
-  if (TEXT_NOUNS.test(line) && !isConcrete(line) && !ABSENCE_OUTCOME.test(line) && !ELEMENT_STATE.test(line)) {
+  if (TEXT_NOUNS.test(line) && !isConcrete(line) && !ABSENCE_OUTCOME.test(line) && !ELEMENT_STATE.test(line) && !aboutNonTextElement(line)) {
     return {
       kind: 'EXPECTED_RESULT', ruleId: RULE.UNQUOTED_TEXT, ...at, detail: `Step ${step.index}: "${line}" does not quote the exact text to verify.`,
     };

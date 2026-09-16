@@ -55,6 +55,7 @@ export class GeminiProvider implements LLMProvider {
 
     return {
       text: textPart?.text || '',
+      ...(candidate?.finishReason === 'MAX_TOKENS' ? { truncated: true } : {}),
       usage: {
         promptTokens: response.data.usageMetadata?.promptTokenCount ?? 0,
         completionTokens: response.data.usageMetadata?.candidatesTokenCount ?? 0,

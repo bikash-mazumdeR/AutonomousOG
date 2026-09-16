@@ -47,6 +47,15 @@ export const VAGUE_OUTCOME = /\b(properly|correctly|as expected|appropriately|su
 /** Nouns whose expected result is a piece of text that has to be quoted exactly. */
 export const TEXT_NOUNS = /\b(message|error|text|label|title|heading|notification|toast|alert|dialog|banner|tooltip|warning)\b/i;
 
+/** Elements that carry no text of their own; "an error icon is displayed" has nothing to quote. */
+export const NON_TEXT_ELEMENT_NOUNS = /\b(icons?|images?|imgs?|logos?|spinners?|loaders?|avatars?|badges?|checkbox(?:es)?|radio buttons?|toggles?|switch(?:es)?|progress bars?|charts?|graphs?|thumbnails?|svgs?)\b/i;
+
+/** The verb that ends the subject of an expected result ("<subject> is displayed …"). */
+export const SUBJECT_VERB = /\b(is|are|was|were|appears?|shows?|displays?|becomes?|remains?|stays?|should|must|will|gets?)\b/i;
+
+/** Words that start a phrase qualifying the subject ("an error message with an icon", "the banner below the form"). */
+export const SUBJECT_QUALIFIER = /\b(?:with|alongside|next to|beside|near|inside|within|in|on|under|below|above|of|for|containing)\b/i;
+
 /** An element going away: asserted by its absence, so there is no text to quote. */
 export const ABSENCE_OUTCOME = /\b(no longer (?:displayed|shown|visible|present)|(?:is|are) not (?:displayed|shown|visible|present)|disappears?|(?:is|are|gets?) (?:hidden|removed|dismissed|cleared)|not rendered)\b/i;
 

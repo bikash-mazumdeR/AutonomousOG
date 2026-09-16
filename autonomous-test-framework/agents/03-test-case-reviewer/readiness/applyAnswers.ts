@@ -6,6 +6,7 @@
  */
 
 import { CLARIFICATION_STATUS, Clarification, ClarificationStore } from '../../../core/clarifications/ClarificationStore';
+import { isNonAnswer } from '../../../core/clarifications/answerQuality';
 import { OWNING_STAGE } from '../../../core/readiness/ownership';
 import { QUOTED_TEXT, READINESS_RULE as RULE } from '../../../core/readiness/readinessConstants';
 
@@ -100,7 +101,8 @@ export function applyClarificationAnswers(testCases: any[], store: Clarification
   for (const clarification of answered) {
     const tc = clarification.tcKey ? byKey.get(clarification.tcKey) : undefined;
     const sameContent = !clarification.subjectHash || !tc?.hash || clarification.subjectHash === tc.hash;
-    if (!tc || !clarification.answer || !sameContent) continue;
+    // A declined reply ("Skip", "N/A") recorded before non-answers were rejected must not rewrite the test case.
+    if (!tc || !clarification.answer || isNonAnswer(clarification.answer) || !sameContent) continue;
     const apply = (clarification.ruleId && APPLIERS[clarification.ruleId]) || recordNote;
     if (!apply(tc, clarification.answer.trim(), clarification)) continue;
     if (clarification.status !== CLARIFICATION_STATUS.APPLIED) store.markApplied(clarification.id);

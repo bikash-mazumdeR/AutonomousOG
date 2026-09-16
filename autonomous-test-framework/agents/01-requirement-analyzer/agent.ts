@@ -22,7 +22,11 @@ import { llmClient } from '../../core/llm/LLMClient';
 import { contextSqueezer } from '../../core/llm/ContextSqueezer';
 import { AgentResult } from '../../core/types';
 import { jiraClient } from '../../mcp/jira/jira-mcp-client';
-import { computeInputFingerprint, findReusableAnalysis, ANALYSIS_SOURCE } from './inputFingerprint';
+import {
+  computeInputFingerprint, findReusableAnalysis, ANALYSIS_SOURCE, ANALYSIS_PROMPT_VERSION,
+} from './inputFingerprint';
+import { assessAnalysisQuality } from './analysisQuality';
+import { isNonAnswer } from '../../core/clarifications/answerQuality';
 import { computeRequirementFingerprint } from '../../core/requirements/requirementFingerprint';
 import { stateDb } from '../../core/state-manager/Database';
 import { clarificationRequestFor, normalizeAmbiguities, normalizeQuestion } from './ambiguities';
@@ -34,6 +38,10 @@ const STAGE_ID   = '01-requirement-analyzer';
 const STAGE_NAME = 'Requirement Deep Analyzer';
 const NEXT_STAGE = '02-test-case-generator';
 const ANALYSIS_SEED = 42;
+/** Output budget for the analysis JSON; the provider may cap it lower (e.g. BEDROCK_MAX_TOKENS). */
+const ANALYSIS_MAX_TOKENS = 16384;
+/** Corrective LLM rounds when the story structure does not match the document. */
+const MAX_STRUCTURE_CORRECTIONS = 1;
 
 export class RequirementAnalyzerAgent {
   private _logger: Logger;
@@ -53,6 +61,8 @@ export class RequirementAnalyzerAgent {
 
     try {
       const memoryContext = await memoryEngine.getContextForStage(STAGE_ID);
+      // Declined replies ("Skip", "N/A") saved before they were rejected do not settle a question: ask it again.
+      memoryContext.resolvedClarifications = (memoryContext.resolvedClarifications || []).filter((c: any) => !isNonAnswer(c.answer));
 
       let rawRequirements = await this._parseInput(input);
 
@@ -90,6 +100,7 @@ export class RequirementAnalyzerAgent {
       analysisReport.featureFilePaths = [];
       // Stamped so the next upload of identical content is recognised as already processed.
       analysisReport.requirementFingerprint = requirementFingerprint;
+      analysisReport.analysisPromptVersion = ANALYSIS_PROMPT_VERSION;
 
       const resolvedAmbiguities = await this._autoResolveClarifications(
         analysisReport.ambiguities || [],
@@ -152,7 +163,7 @@ export class RequirementAnalyzerAgent {
         nextStageName: NEXT_STAGE,
         summary:       this._buildApprovalSummary(analysisReport),
         fullOutput:    analysisReport,
-        warnings:      [],
+        warnings:      analysisReport.analysisWarnings || [],
         clarifications: pendingAmbiguities.map((a: any) => a.question),
         usage,
       });
@@ -193,6 +204,8 @@ export class RequirementAnalyzerAgent {
     if (input.reanalyze) return null;
     const previous = await stateManager.getLatestArtifactForProject('analyzedRequirements');
     if (!previous || previous.requirementFingerprint !== requirementFingerprint) return null;
+    // An analysis made with an older prompt is not a duplicate: the same content must be analysed again.
+    if (previous.analysisPromptVersion !== ANALYSIS_PROMPT_VERSION) return null;
     // An empty analysis is not worth preserving — treat it as unprocessed and ingest again.
     if (!Array.isArray(previous.features) || previous.features.length === 0) return null;
     return JSON.parse(JSON.stringify(previous));
@@ -238,6 +251,28 @@ ${rawRequirements}
 
 MANDATORY ANALYSIS MANDATE:
 Extract and cover the requirements comprehensively. You must consolidate the provided requirements into a SINGLE Feature.
+
+USER STORY IDENTITY (strict):
+- Create EXACTLY ONE user story for each user story the document defines (a story id such as "Story ID: ABC-001", or an
+  "As a … I want … so that …" narrative). Never split a story by flow, section, persona, test account or requirement type.
+- Numbered flows, sections, tables and test accounts belong to that story as acceptance criteria and business rules.
+- Copy the document's story id into "sourceStoryId" and its title, role, goal and benefit as written.
+- Only when the document defines no user story at all, create one story for the feature with "sourceStoryId": null.
+
+ANALYSIS RULES:
+- Every acceptance criterion appears once. Never repeat the same criterion in different words or in another story.
+- Add only criteria the document states. Never add labels, attributes or behaviours for elements the document does
+  not describe (e.g. screen-reader labels when only error announcements are required).
+- CONTRADICTIONS: when two statements in the document disagree (e.g. a control "active when the form is completed" vs
+  "enabled at all times", "Desktop" devices vs mobile viewports, two different viewport ranges), do not pick one — raise a
+  REQUIREMENT ambiguity quoting both statements.
+- VAGUE OR OPEN VALUES: qualitative limits without a number ("slow", "fast", "noticeable latency") and statements the
+  document itself marks as to be clarified are TEST_VALUE or REQUIREMENT ambiguities, not criteria with invented values.
+- Stated behaviours with unstated wording (e.g. "the user is instructed to contact support") stay acceptance criteria AND
+  raise an ELEMENT_IDENTIFICATION ambiguity for the exact text.
+- Internal implementation statements that cannot be observed through the product (e.g. "parameterized queries enforced")
+  are not acceptance criteria: list them under the story's "assumptions".
+- API, PERFORMANCE and integration points only when the document names an endpoint, a measurable threshold or a service.
 Cover the following aspects using Scenario tags instead of separate features:
 - Functional Requirements (@functional)
 - UI / UX Requirements (@ui)
@@ -278,7 +313,7 @@ Return ONLY a single valid JSON object (no prose, no markdown outside the JSON b
 
 {
   "totalFeatures": 1,
-  "totalUserStories": 2,
+  "totalUserStories": 1,
 
   "features": [
     {
@@ -289,8 +324,11 @@ Return ONLY a single valid JSON object (no prose, no markdown outside the JSON b
       "userStories": [
         {
           "id": "US-01",
+          "sourceStoryId": "<story id exactly as written in the document, or null>",
           "title": "Add to cart",
+          "role": "shopper",
           "goal": "Allow users to add items to their cart",
+          "benefit": "buy several products in one order",
           "acceptanceCriteria": ["[@functional] Clicking Add to cart adds the item to the cart"],
           "testDataValues": [{ "name": "productName", "value": "<value quoted in the requirement>", "sourceRef": "AC-1", "sensitive": false }],
           "testTypes": ["Functional", "UI"]
@@ -324,36 +362,83 @@ Return ONLY a single valid JSON object (no prose, no markdown outside the JSON b
 }
 
 CRITICAL:
-- Consolidate requirements into a SINGLE primary feature.
+- Consolidate requirements into a SINGLE primary feature, with exactly one user story per story the document defines.
+- Return the COMPLETE JSON object; keep criteria concise so the whole analysis fits in one response.
 - Extract concrete, unambiguous acceptance criteria (concise 1-2 sentence statements or standard BDD format).
 - Avoid repetitive or circular text to ensure clean, structured JSON output.
 `;
 
+    const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+      { role: 'system', content: this._skill },
+      { role: 'user', content: prompt },
+    ];
+    let text = await this._requestAnalysis(messages);
+    let report = this._parseAnalysis(text);
+    let quality = assessAnalysisQuality(report, rawRequirements);
+
+    for (let round = 0; round < MAX_STRUCTURE_CORRECTIONS && quality.issues.length > 0; round += 1) {
+      this._logger.warn('Analysis story structure does not match the document — requesting a correction', { issues: quality.issues });
+      messages.push({ role: 'assistant', content: text }, { role: 'user', content: this._structureCorrectionPrompt(quality.issues) });
+      // eslint-disable-next-line no-await-in-loop -- each correction depends on the previous answer
+      text = await this._requestAnalysis(messages);
+      report = this._parseAnalysis(text);
+      quality = assessAnalysisQuality(report, rawRequirements);
+    }
+
+    report.analysisWarnings = [
+      ...quality.issues.map((issue) => `Story structure: ${issue}`),
+      ...quality.warnings,
+    ];
+    return report;
+  }
+
+  /**
+   * Sends the analysis conversation and refuses output that was cut off at the token limit, which would otherwise be
+   * "repaired" into a silently incomplete analysis.
+   */
+  private async _requestAnalysis(messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>): Promise<string> {
     const response = await llmClient.chat(STAGE_ID, {
-      messages: [
-        { role: 'system', content: this._skill },
-        { role: 'user', content: prompt }
-      ],
+      messages,
       temperature: 0,
       seed: ANALYSIS_SEED,
-      max_tokens: 16384,
+      max_tokens: ANALYSIS_MAX_TOKENS,
       json: true,
     });
+    if (response.truncated) {
+      throw new Error(`The requirement analysis was cut off at the model's output token limit after ${response.usage.completionTokens} tokens, `
+        + 'so it is incomplete and was not saved. Raise the output limit (BEDROCK_MAX_TOKENS for Bedrock; Agent 01 requests '
+        + `${ANALYSIS_MAX_TOKENS}) or split the requirement document, then run the analysis again.`);
+    }
+    return response.text;
+  }
 
+  private _parseAnalysis(text: string): any {
+    let report: any;
     try {
-      const report = this._repairAndParseJson(response.text);
-      report.features = report.features || [];
-      report.businessRules = report.businessRules || [];
-      report.stateTransitions = report.stateTransitions || [];
-      report.integrationPoints = report.integrationPoints || [];
-      report.ambiguities = normalizeAmbiguities(report.ambiguities || [], report.features);
-      report.totalFeatures = report.totalFeatures ?? report.features.length;
-      report.totalUserStories = report.totalUserStories ?? report.features.reduce((acc: number, f: any) => acc + (f.userStories?.length || 0), 0);
-      return report;
+      report = this._repairAndParseJson(text);
     } catch (error: any) {
-      this._logger.error('Failed to parse LLM JSON', { response: response.text });
+      this._logger.error('Failed to parse LLM JSON', { response: text, error: error.message });
       throw new Error('LLM did not return valid JSON analysis.');
     }
+    report.features = report.features || [];
+    report.businessRules = report.businessRules || [];
+    report.stateTransitions = report.stateTransitions || [];
+    report.integrationPoints = report.integrationPoints || [];
+    report.ambiguities = normalizeAmbiguities(report.ambiguities || [], report.features);
+    report.totalFeatures = report.features.length;
+    report.totalUserStories = report.features.reduce((acc: number, f: any) => acc + (f.userStories?.length || 0), 0);
+    return report;
+  }
+
+  private _structureCorrectionPrompt(issues: string[]): string {
+    return [
+      'Your analysis does not follow the USER STORY IDENTITY rules:',
+      ...issues.map((issue, idx) => `${idx + 1}. ${issue}`),
+      '',
+      'Return the COMPLETE corrected JSON analysis. Merge the acceptance criteria, business rules, test data values, assumptions',
+      'and out-of-scope items of stories that must be combined, remove duplicate criteria, renumber test data sourceRefs and',
+      'update ambiguity userStoryIds to the new story ids. Do not add or drop requirements.',
+    ].join('\n');
   }
 
   private _repairAndParseJson(rawText: string): any {
@@ -387,45 +472,7 @@ CRITICAL:
       // Proceed to truncation repair
     }
 
-    // Attempt 3: Truncation recovery (unclosed strings, brackets, braces)
-    let inString = false;
-    let escaped = false;
-    const stack: string[] = [];
-
-    for (let i = 0; i < cleaned.length; i++) {
-      const c = cleaned[i];
-      if (escaped) {
-        escaped = false;
-        continue;
-      }
-      if (c === '\\') {
-        escaped = true;
-        continue;
-      }
-      if (c === '"') {
-        inString = !inString;
-        continue;
-      }
-      if (!inString) {
-        if (c === '{' || c === '[') {
-          stack.push(c);
-        } else if (c === '}' || c === ']') {
-          stack.pop();
-        }
-      }
-    }
-
-    if (inString) {
-      cleaned += '"';
-    }
-
-    cleaned = cleaned.replace(/,\s*$/, '');
-
-    while (stack.length > 0) {
-      const open = stack.pop();
-      cleaned += open === '{' ? '}' : ']';
-    }
-
+    // No truncation "recovery": closing an unfinished object would silently drop the rest of the analysis.
     return JSON.parse(cleaned);
   }
 
@@ -770,7 +817,7 @@ CRITICAL:
     const answers = new Map<string, string>();
     (resolved || []).forEach((r: any) => answers.set(normalizeQuestion(r.question), r.answer));
     (await this._clarificationStore()).listResolvedFor(STAGE_ID)
-      .filter((c) => c.owningStage === STAGE_ID && c.answer)
+      .filter((c) => c.owningStage === STAGE_ID && c.answer && !isNonAnswer(c.answer))
       .forEach((c) => answers.set(normalizeQuestion(c.question), c.answer as string));
     return ambiguities.map((amb) => {
       const answer = answers.get(normalizeQuestion(amb.question));

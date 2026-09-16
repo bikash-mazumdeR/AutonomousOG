@@ -7,7 +7,11 @@ import { validateStoryScenarios, ScenarioContext } from '../../agents/02-test-ca
 import {
   buildTestCases, computeRequirementCoverage, priorityFor,
 } from '../../agents/02-test-case-generator/builders/testCaseBuilder';
-import { generateStoryScenarios, ChatMessage } from '../../agents/02-test-case-generator/generation/storyGenerator';
+import {
+  generateStoryScenarios, ChatMessage, extractUnacceptedBlocks, dropUnfinishedScenario,
+} from '../../agents/02-test-case-generator/generation/storyGenerator';
+import { buildStoryPrompt } from '../../agents/02-test-case-generator/prompts/storyPrompt';
+import { filterByActiveTypes, resolveActiveTypeTags } from '../../agents/02-test-case-generator/prompts/systemPrompt';
 import { buildGherkinScenarioText } from '../../agents/02-test-case-generator/utils';
 import {
   buildGenerationMeta, describeInputChanges, formatInputChanges,
@@ -60,7 +64,10 @@ Scenario: Empty username shows the username required error
   And the user remains on the login page
 `;
 
-function contextFor(analysis = rawAnalysis(), excluded: string[] = []): ScenarioContext {
+/** The fixture documents no edge behaviour, so the shared context runs with @edge deselected. */
+const NO_EDGE = ['edge'];
+
+function contextFor(analysis = rawAnalysis(), excluded: string[] = NO_EDGE): ScenarioContext {
   const { features } = normalizeAnalysis(analysis);
   const [feature] = features;
   const [story] = feature.userStories;
@@ -189,7 +196,7 @@ describe('Agent 02 — scenario validator', () => {
   });
 
   it('drops excluded types with a warning instead of an error', () => {
-    const result = validate(VALID_GHERKIN, contextFor(rawAnalysis(), ['negative']));
+    const result = validate(VALID_GHERKIN, contextFor(rawAnalysis(), ['negative', 'edge']));
     expect(result.scenarios).toHaveLength(1);
     expect(result.warnings.join('\n')).toMatch(/@negative scenarios are excluded/);
   });
@@ -255,7 +262,7 @@ describe('Agent 02 — self-correction loop', () => {
   const request = (maxRetries: number) => {
     const { feature, story } = contextFor();
     return {
-      feature, story, systemPrompt: 'skill', excludedTypeTags: new Set<string>(), openAmbiguities: [], stateTransitions: [], memoryContext: {}, maxRetries,
+      feature, story, systemPrompt: 'skill', excludedTypeTags: new Set<string>(NO_EDGE), openAmbiguities: [], stateTransitions: [], memoryContext: {}, maxRetries,
     };
   };
 
@@ -359,5 +366,134 @@ describe('Agent 02 — generation metadata', () => {
     expect(describeInputChanges(previous, meta())).toEqual(['requirements', 'skip options', 'LLM model']);
     expect(describeInputChanges(undefined, meta())).toBeNull();
     expect(formatInputChanges(null)).toMatch(/no previous generation/);
+  });
+});
+
+describe('Agent 02 — test type selection', () => {
+  const POSITIVE_ONLY = ['negative', 'edge'];
+  const POSITIVE = VALID_GHERKIN.split('@negative')[0];
+  const NEGATIVE_BLOCK = `@negative${VALID_GHERKIN.split('@negative')[1]}`;
+  const MISLABELLED = `
+@positive @ac-2 @error-handling
+Scenario: Empty username shows the username required error message
+  Given the user is on the login page
+  Then the login form is displayed
+  When the user clicks Login with only a password entered
+  Then the error "Epic sadface: Username is required" is displayed
+`;
+
+  it('rejects a @positive scenario that asserts a failure outcome', () => {
+    const errors = validate(`${POSITIVE}\n${MISLABELLED}`, contextFor(rawAnalysis(), POSITIVE_ONLY)).errors.join('\n');
+    expect(errors).toMatch(/tagged @positive but asserts a failure outcome/);
+    expect(errors).toMatch(/@negative is EXCLUDED for this run/);
+  });
+
+  it('does not treat negated failure wording as a failure outcome', () => {
+    const noError = POSITIVE.replace('Then the URL is /inventory.html', 'Then the URL is /inventory.html\n  And no error message is displayed');
+    expect(validate(`${noError}\n# UNCOVERED AC-2: @negative`, contextFor(rawAnalysis(), POSITIVE_ONLY)).errors).toEqual([]);
+  });
+
+  it('accepts a declared UNCOVERED criterion that only an excluded type can verify', () => {
+    const result = validate(`${POSITIVE}\n# UNCOVERED AC-2: @negative`, contextFor(rawAnalysis(), POSITIVE_ONLY));
+    expect(result.errors).toEqual([]);
+    expect(result.scenarios.map((s) => s.type)).toEqual(['Positive']);
+    expect(result.warnings.join('\n')).toMatch(/AC-2 .* not covered: requires @negative \(excluded for this run\)/);
+  });
+
+  it('keeps an undeclared or selected-type declaration as an error with a hint', () => {
+    const ctx = contextFor(rawAnalysis(), POSITIVE_ONLY);
+    expect(validate(POSITIVE, ctx).errors.join('\n')).toMatch(/AC-2 .* is not covered .*# UNCOVERED AC-2: @<type>/);
+    expect(validate(`${POSITIVE}\n# UNCOVERED AC-2: @positive`, ctx).errors.join('\n')).toMatch(/AC-2 .* is not covered/);
+  });
+
+  it('requires at least one scenario of every selected type', () => {
+    expect(validate(VALID_GHERKIN, contextFor(rawAnalysis(), [])).errors.join('\n')).toMatch(/no @edge scenario/);
+    expect(validate(VALID_GHERKIN, contextFor(rawAnalysis(), ['negative'])).errors.join('\n')).toMatch(/no @edge scenario/);
+    expect(validate(VALID_GHERKIN).errors.join('\n')).not.toMatch(/no @\w+ scenario/);
+  });
+
+  it('caps scenarios per type per story, but never below the story criteria count', () => {
+    process.env.AGENT02_MAX_TC_PER_TYPE = '1';
+    try {
+      const second = POSITIVE.replace('Login with valid credentials redirects to inventory', 'Second valid login lands on the inventory page')
+        .replace('the user logs in with valid credentials', 'the user logs in again with valid credentials');
+      const oneCriterion = contextFor(rawAnalysis({ acceptanceCriteria: ['[@functional] Valid credentials redirect to /inventory.html.'], businessRules: [] }));
+      const capped = validate(`${POSITIVE}\n${second}`, oneCriterion);
+      expect(capped.scenarios.map((s) => s.type)).toEqual(['Positive']);
+      expect(capped.warnings.join('\n')).toMatch(/exceeds the limit of 1 Positive scenarios per story/);
+
+      expect(validate(`${VALID_GHERKIN}\n${second}`).scenarios.map((s) => s.type)).toEqual(['Positive', 'Negative', 'Positive']);
+    } finally {
+      delete process.env.AGENT02_MAX_TC_PER_TYPE;
+    }
+  });
+
+  it('discards the unfinished last scenario of a truncated answer and asks to continue', async () => {
+    const { feature, story } = contextFor();
+    const calls: ChatMessage[][] = [];
+    const cutOff = `${POSITIVE}\n@negative @ac-2\nScenario: Empty username shows the username req`;
+    const replies = [{ text: cutOff, truncated: true }, { text: NEGATIVE_BLOCK }];
+    const outcome = await generateStoryScenarios({
+      feature, story, systemPrompt: 'skill', excludedTypeTags: new Set(NO_EDGE), openAmbiguities: [], stateTransitions: [], memoryContext: {}, maxRetries: 2,
+    }, async (messages) => {
+      calls.push([...messages]);
+      return replies[calls.length - 1];
+    });
+    expect(dropUnfinishedScenario(cutOff).trim()).toBe(POSITIVE.trim());
+    expect(outcome.scenarios.map((s) => s.type)).toEqual(['Positive', 'Negative']);
+    expect(calls[1][3].content).toMatch(/^Your previous output was cut off at the output token limit/);
+  });
+
+  it('never persists negatives in a positive-only run, even across retries', async () => {
+    const { feature, story } = contextFor();
+    const calls: ChatMessage[][] = [];
+    const responses = [VALID_GHERKIN, `${POSITIVE}\n# UNCOVERED AC-2: @negative`];
+    const outcome = await generateStoryScenarios({
+      feature, story, systemPrompt: 'skill', excludedTypeTags: new Set(POSITIVE_ONLY), openAmbiguities: [], stateTransitions: [], memoryContext: {}, maxRetries: 2,
+    }, async (messages) => {
+      calls.push([...messages]);
+      return responses[calls.length - 1];
+    });
+    expect(outcome.attempts).toBe(2);
+    expect(outcome.scenarios.map((s) => s.type)).toEqual(['Positive']);
+    expect(outcome.warnings.join('\n')).not.toMatch(/Unresolved/);
+    expect(calls[0][1].content).toMatch(/Selected types: @positive\n- EXCLUDED for this run: @negative @edge/);
+    expect(calls[0][1].content).toMatch(/# UNCOVERED AC-N/);
+    expect(calls[1][2].content).not.toContain('Login with valid credentials redirects to inventory');
+    expect(calls[1][2].content).not.toContain('@negative');
+    expect(calls[1][3].content).toMatch(/EXCLUDED types: @negative @edge/);
+    expect(calls[1][3].content).toMatch(/contained 1 @negative scenario\(s\); they were discarded/);
+  });
+});
+
+describe('Agent 02 — prompt token trimming', () => {
+  it('sends only the failing, non-excluded scenario blocks back on retry', () => {
+    const text = `\`\`\`gherkin\n${VALID_GHERKIN}\n@edge @ac-1\nScenario: [TC-009] Edge block title here\n  Given a\n  Then b\n# UNCOVERED AC-1: @edge\n\`\`\``;
+    const reduced = extractUnacceptedBlocks(text, ['Login with valid credentials redirects to inventory'], new Set(['edge']));
+    expect(reduced).toMatch(/^@negative @ac-2 @br-1 @error-handling\nScenario: Empty username/);
+    expect(reduced).not.toMatch(/Login with valid credentials|Edge block|UNCOVERED|```/);
+  });
+
+  it('strips type-scoped lines and blocks for inactive types', () => {
+    const markdown = ['keep', 'api row | <!-- type:api -->', 'neg row <!-- type:negative,edge -->', '<!-- type:edge -->', 'edge block', '<!-- /type -->', 'tail'].join('\n');
+    expect(filterByActiveTypes(markdown, new Set(['positive', 'negative']))).toBe('keep\nneg row\ntail');
+    expect(filterByActiveTypes(markdown, new Set(['positive']))).toBe('keep\ntail');
+  });
+
+  it('activates API/performance guidance only when a story gate is open and the type is selected', () => {
+    const { features } = normalizeAnalysis(rawAnalysis());
+    expect([...resolveActiveTypeTags(features, new Set(['edge']))]).toEqual(['positive', 'negative']);
+  });
+
+  it('applies memory rules scoped to ALL stages', () => {
+    const ctx = contextFor();
+    const prompt = buildStoryPrompt({
+      ...ctx,
+      openAmbiguities: [],
+      stateTransitions: [],
+      memoryContext: { improvementRules: [{ appliesTo: 'ALL', description: 'Quote messages verbatim' }, { appliesTo: '05-x', description: 'Other stage' }] },
+    });
+    expect(prompt).toContain('- Rule: Quote messages verbatim');
+    expect(prompt).not.toContain('Other stage');
   });
 });

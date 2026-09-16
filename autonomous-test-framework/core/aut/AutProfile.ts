@@ -21,6 +21,16 @@ export const CREDENTIAL_STORAGE = Object.freeze({
 } as const);
 export type CredentialStorage = typeof CREDENTIAL_STORAGE[keyof typeof CREDENTIAL_STORAGE];
 
+/** A locator the project declares for an element discovery cannot identify by itself. */
+export interface ExtraLocator {
+  /** camelCase page-object member name, e.g. "errorMessageContainer". */
+  name: string;
+  /** CSS selector that must match exactly one element in the state where the element is used. */
+  css: string;
+  /** What the element is, e.g. "error icon inside the username field". */
+  description?: string;
+}
+
 /** AUT profile schema (projects/<slug>/aut-profile.json). */
 export interface AutProfile {
   projectId: string;
@@ -35,6 +45,11 @@ export interface AutProfile {
     dynamicIdPatterns?: string[];
     /** Whether discovery may execute approved test-case steps against the application to reach deeper states. */
     executeTestSteps: boolean;
+    /**
+     * Elements discovery cannot identify on its own (no test id, role name, label or id — e.g. decorative icons or
+     * styling containers). Each is added to a captured state only when its CSS selector matches exactly one element there.
+     */
+    extraLocators?: ExtraLocator[];
   };
   auth: {
     strategy: AuthStrategy;
@@ -82,6 +97,25 @@ function validateDiscovery(discovery: any, errors: string[]): void {
   if (discovery.dynamicIdPatterns !== undefined && !isStringArray(discovery.dynamicIdPatterns)) {
     errors.push('discovery.dynamicIdPatterns must be an array of regex strings');
   }
+  if (discovery.extraLocators !== undefined) validateExtraLocators(discovery.extraLocators, errors);
+}
+
+const MEMBER_NAME = /^[a-z][A-Za-z0-9]*$/;
+
+function validateExtraLocators(locators: unknown, errors: string[]): void {
+  if (!Array.isArray(locators)) {
+    errors.push('discovery.extraLocators must be an array');
+    return;
+  }
+  const names = new Set<string>();
+  locators.forEach((locator: any, idx) => {
+    const label = `discovery.extraLocators[${idx}]`;
+    if (typeof locator?.name !== 'string' || !MEMBER_NAME.test(locator.name)) errors.push(`${label}.name must be a camelCase identifier`);
+    else if (names.has(locator.name)) errors.push(`${label}.name "${locator.name}" is declared twice`);
+    else names.add(locator.name);
+    if (typeof locator?.css !== 'string' || !locator.css.trim()) errors.push(`${label}.css must be a non-empty CSS selector`);
+    if (locator?.description !== undefined && typeof locator.description !== 'string') errors.push(`${label}.description must be a string`);
+  });
 }
 
 function validateEnvNames(values: unknown, label: string, errors: string[]): void {

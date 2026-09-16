@@ -388,6 +388,12 @@
     .status-REWRITTEN { background: rgba(168, 85, 247, 0.2); color: #c084fc; }
     .status-FLAGGED   { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
     .status-REJECTED  { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+    .status-HELD      { background: rgba(249, 115, 22, 0.2); color: #fb923c; }
+    .status-MANUAL    { background: rgba(100, 116, 139, 0.25); color: #cbd5e1; }
+
+    .hold-reason-inline {
+      margin-top: 4px; font-size: 11px; color: #fb923c; line-height: 1.4;
+    }
 
     .findings-chip {
       font-size: 11px; color: var(--text-dim); background: rgba(0,0,0,0.25);
@@ -686,6 +692,27 @@
     .finding-MINOR   { background: rgba(59, 130, 246, 0.15); border: 1px solid #3b82f6; color: #93c5fd; }
     .finding-INFO    { background: rgba(100, 116, 139, 0.15); border: 1px solid var(--border); color: var(--text-muted); }
 
+    /* Held test case: why it is held and how to resolve it */
+    .hold-panel {
+      border: 1px solid rgba(249, 115, 22, 0.6); background: rgba(249, 115, 22, 0.08);
+      border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 10px;
+    }
+    .hold-panel-title { font-size: 13px; font-weight: 700; color: #fb923c; }
+    .hold-panel-intro { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+    .hold-reason-card {
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
+      padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; font-size: 12px;
+    }
+    .hold-reason-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+    .hold-reason-tag {
+      font-size: 10px; font-weight: 700; text-transform: uppercase; padding: 2px 6px; border-radius: 4px;
+      background: rgba(99, 102, 241, 0.2); color: #a5b4fc;
+    }
+    .hold-reason-question { font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.45; }
+    .hold-reason-meta { color: var(--text-muted); line-height: 1.45; word-break: break-word; }
+    .hold-reason-warn { color: #fbbf24; line-height: 1.45; }
+    .hold-reason-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
     .step-card {
       background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
       padding: 14px; display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px;
@@ -929,6 +956,8 @@
               <button type="button" class="tab-btn" data-filter="REWRITTEN">Rewritten (<span id="countRewritten">0</span>)</button>
               <button type="button" class="tab-btn" data-filter="FLAGGED">Flagged (<span id="countFlagged">0</span>)</button>
               <button type="button" class="tab-btn" data-filter="REJECTED">Rejected (<span id="countRejected">0</span>)</button>
+              <button type="button" class="tab-btn" data-filter="HELD" title="Cannot be automated until their open questions are resolved">Held (<span id="countHeld">0</span>)</button>
+              <button type="button" class="tab-btn" data-filter="MANUAL">Manual (<span id="countManual">0</span>)</button>
               <button type="button" class="tab-btn hidden" id="tabExcluded" data-filter="EXCLUDED" style="border-color: rgba(239, 68, 68, 0.4); color: #f87171;">Excluded (<span id="countExcluded">0</span>)</button>
               
               <input type="text" id="tcSearchInput" class="search-input" placeholder="Search test cases...">
@@ -1037,6 +1066,9 @@
         <div id="modalAlert" class="alert alert-success hidden"></div>
         <div id="modalError" class="alert alert-danger hidden"></div>
 
+        <!-- Why the test case is held, with actions to resolve each question -->
+        <div id="modalHoldContainer" class="hold-panel hidden"></div>
+
         <!-- Findings Banner (if any) -->
         <div id="modalFindingsContainer"></div>
 
@@ -1055,6 +1087,8 @@
               <option value="REWRITTEN">REWRITTEN (Auto-Improved)</option>
               <option value="FLAGGED">FLAGGED (Needs Attention)</option>
               <option value="REJECTED">REJECTED (Do not execute)</option>
+              <option value="MANUAL">MANUAL (Test manually, not automated)</option>
+              <option value="HELD" disabled>HELD (Resolve the open questions above)</option>
             </select>
           </div>
           <div class="form-field">
@@ -1179,6 +1213,11 @@
     };
 
     // ── HTML Escaping ─────────────────────────────────────────────────────
+    /** Expected results are one per line: trim each line and drop blank ones (never merge lines). */
+    function normalizeExpectedLines(value) {
+      return String(value || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean).join('\n');
+    }
+
     function escapeHtml(str) {
       if (str === null || str === undefined) return '';
       return String(str)
@@ -1196,6 +1235,7 @@
     let allTestCases = [];
     let currentFilter = 'ALL';
     let currentEditingKey = null;
+    let currentEditingStatus = null;
     let chatHistory = [];
     let currentLiveInsights = null;
 
@@ -1257,6 +1297,7 @@
       modalTcTypeBadge: document.getElementById('modalTcTypeBadge'),
       modalTcStatusBadge: document.getElementById('modalTcStatusBadge'),
       modalFindingsContainer: document.getElementById('modalFindingsContainer'),
+      modalHoldContainer: document.getElementById('modalHoldContainer'),
       modalTcName: document.getElementById('modalTcName'),
       modalTcStatusSelect: document.getElementById('modalTcStatusSelect'),
       modalTcLabels: document.getElementById('modalTcLabels'),
@@ -1377,7 +1418,7 @@
         keyword: card.querySelector('.step-kw')?.value || 'When',
         description: (card.querySelector('.step-desc')?.value || '').trim(),
         testData: (card.querySelector('.step-data')?.value || '').trim(),
-        expectedResult: (card.querySelector('.step-expected')?.value || '').trim(),
+        expectedResult: normalizeExpectedLines(card.querySelector('.step-expected')?.value),
       }));
 
       const syntheticTc = {
@@ -1786,7 +1827,7 @@
       const excludedCases = allTestCases.filter(isExcluded);
 
       DOM.statReviewed.textContent = activeReviewed.length;
-      DOM.statApproved.textContent = activeReviewed.filter(t => t.reviewStatus !== 'REJECTED').length;
+      DOM.statApproved.textContent = activeReviewed.filter(t => !['REJECTED', 'HELD', 'MANUAL'].includes(t.reviewStatus)).length;
       DOM.statRewritten.textContent = activeReviewed.filter(t => (t.rewrittenSteps || 0) > 0).length;
       DOM.statDeduped.textContent = output.duplicatesRemoved || 0;
 
@@ -1796,6 +1837,8 @@
       document.getElementById('countRewritten').textContent = activeReviewed.filter(t => (t.rewrittenSteps || 0) > 0 || t.reviewStatus === 'REWRITTEN').length;
       document.getElementById('countFlagged').textContent = activeReviewed.filter(t => t.reviewStatus === 'FLAGGED').length;
       document.getElementById('countRejected').textContent = activeReviewed.filter(t => t.reviewStatus === 'REJECTED').length;
+      document.getElementById('countHeld').textContent = activeReviewed.filter(t => t.reviewStatus === 'HELD').length;
+      document.getElementById('countManual').textContent = activeReviewed.filter(t => t.reviewStatus === 'MANUAL').length;
 
       const tabExcluded = document.getElementById('tabExcluded');
       const countExcluded = document.getElementById('countExcluded');
@@ -1870,6 +1913,8 @@
           if (currentFilter === 'REWRITTEN' && ((tc.rewrittenSteps || 0) === 0 && tc.reviewStatus !== 'REWRITTEN')) return false;
           if (currentFilter === 'FLAGGED' && tc.reviewStatus !== 'FLAGGED') return false;
           if (currentFilter === 'REJECTED' && tc.reviewStatus !== 'REJECTED') return false;
+          if (currentFilter === 'HELD' && tc.reviewStatus !== 'HELD') return false;
+          if (currentFilter === 'MANUAL' && tc.reviewStatus !== 'MANUAL') return false;
         }
 
         // Query search
@@ -1897,8 +1942,11 @@
         const annotations = (reviewedOutput?.reviewAnnotations || []).filter(a => a.tcKey === tc.key);
 
         let findingsHtml = '<span class="findings-chip">Clean</span>';
+        const holdReasons = heldReasonsOf(tc);
         if (tcIsExcluded) {
           findingsHtml = '<span class="findings-chip warn">Excluded in Agent 02</span>';
+        } else if (holdReasons.length > 0) {
+          findingsHtml = `<span class="findings-chip danger" title="Open the test case to resolve">⏸ ${holdReasons.length} open question${holdReasons.length === 1 ? '' : 's'}</span>`;
         } else if (annotations.length > 0) {
           const hasBlocker = annotations.some(a => a.severity === 'BLOCKER');
           const chipClass = hasBlocker ? 'findings-chip danger' : 'findings-chip warn';
@@ -1914,6 +1962,7 @@
           <td><span class="tc-type type-${typeClass}">${escapeHtml(tc.type)}</span></td>
           <td>
             <a href="javascript:void(0)" class="tc-name-link" data-key="${tc.key}" style="font-weight: 600; color: var(--text);" id="name-${tc.key}" title="Click to inspect & edit">${escapeHtml(tc.name)}</a>
+            ${holdReasons.length > 0 ? `<div class="hold-reason-inline">⏸ Held: ${escapeHtml(describeHoldReason(holdReasons[0]))}${holdReasons.length > 1 ? ` (+${holdReasons.length - 1} more)` : ''}</div>` : ''}
             <div class="tc-preview-text" id="preview-${tc.key}">
               ${renderGherkinPreviewHtml(tc)}
             </div>
@@ -1983,13 +2032,141 @@
       DOM.selectAllTc.indeterminate = someChecked && !allChecked;
     }
 
+    // ── Held test cases: reasons & resolution ─────────────────────────────
+    const OWNER_LABELS = {
+      '01-requirement-analyzer': 'Requirements (Agent 01)',
+      '03-test-case-reviewer': 'Test case review (Agent 03)',
+      '04-test-data-generator': 'Test data (Agent 04)',
+      '05-playwright-script-generator': 'Script generation (Agent 05)',
+    };
+
+    function heldReasonsOf(tc) {
+      return tc && tc.reviewStatus === 'HELD' && Array.isArray(tc.openClarifications) ? tc.openClarifications : [];
+    }
+
+    function describeHoldReason(reason) {
+      return `${reason.stepIndex ? `Step ${reason.stepIndex}: ` : ''}${reason.question || reason.detail || reason.kind}`;
+    }
+
+    function showModalAlert(message, kind) {
+      DOM.modalAlert.className = `alert alert-${kind || 'success'}`;
+      DOM.modalAlert.textContent = message;
+    }
+
+    async function reloadReviewReport() {
+      const res = await fetch('/api/agent03/state');
+      const data = await res.json();
+      const report = data.reviewedTestCases || data.stage?.output;
+      if (!report) return;
+      currentLiveInsights = data.informationalInsights || currentLiveInsights;
+      renderReviewReport(report, currentLiveInsights);
+    }
+
+    function renderHoldPanel(tc) {
+      const container = DOM.modalHoldContainer;
+      const reasons = heldReasonsOf(tc);
+      container.innerHTML = '';
+      container.classList.toggle('hidden', reasons.length === 0);
+      if (reasons.length === 0) return;
+
+      const title = document.createElement('div');
+      title.className = 'hold-panel-title';
+      title.textContent = `⏸ Why is this test case held? (${reasons.length} open question${reasons.length === 1 ? '' : 's'})`;
+      const intro = document.createElement('div');
+      intro.className = 'hold-panel-intro';
+      intro.textContent = 'ARIA cannot automate this test case without guessing. Resolve every question below: answer it (the answer is applied to the steps), '
+        + 'or fix the steps in the editor and click Save Changes, or mark the test case as a manual test, or dismiss a question that does not apply. '
+        + 'The status updates as soon as no questions remain, and your fixes are kept when you re-run the review.';
+      container.append(title, intro);
+      reasons.forEach(reason => container.appendChild(buildHoldReasonCard(tc, reason)));
+    }
+
+    function buildHoldReasonCard(tc, reason) {
+      const card = document.createElement('div');
+      card.className = 'hold-reason-card';
+      const tags = [
+        reason.stepIndex ? `Step ${reason.stepIndex}` : 'Whole test case',
+        reason.kind,
+        OWNER_LABELS[reason.owningStage] || reason.owningStage,
+      ].filter(Boolean).map(t => `<span class="hold-reason-tag">${escapeHtml(t)}</span>`).join('');
+      card.innerHTML = `
+        <div class="hold-reason-head">${tags}</div>
+        <div class="hold-reason-question">${escapeHtml(reason.question || '')}</div>
+        ${reason.subject ? `<div class="hold-reason-meta">About: “${escapeHtml(reason.subject)}”</div>` : ''}
+        ${reason.detail && reason.detail !== reason.question ? `<div class="hold-reason-meta">Finding: ${escapeHtml(reason.detail)}</div>` : ''}
+        ${reason.previousAnswer ? `<div class="hold-reason-warn">An earlier answer did not resolve it: “${escapeHtml(reason.previousAnswer)}”</div>` : ''}
+        ${reason.requiresDecision ? '<div class="hold-reason-warn">Answers have not cleared this gap several times. Fix the steps in the editor, mark the test case manual, or dismiss the question.</div>' : ''}
+        ${reason.requiresDecision ? '' : '<textarea class="form-textarea hold-answer" rows="2" placeholder="Type the answer, e.g. the exact message text"></textarea>'}
+        <div class="hold-reason-actions">
+          ${reason.requiresDecision ? '' : '<button type="button" class="btn btn-primary btn-sm hold-answer-btn">Submit Answer</button>'}
+          <button type="button" class="btn btn-ghost btn-sm hold-manual-btn" title="Keep this test case as a manual test; it will not be automated">Mark as Manual Test</button>
+          <button type="button" class="btn btn-ghost btn-sm hold-dismiss-btn" title="The question does not apply to this test case">Dismiss Question</button>
+        </div>
+      `;
+      const answerBox = card.querySelector('.hold-answer');
+      const answerBtn = card.querySelector('.hold-answer-btn');
+      if (answerBtn) {
+        answerBtn.addEventListener('click', () => {
+          const answer = (answerBox.value || '').trim();
+          if (!answer) {
+            DOM.modalError.textContent = 'Type an answer before submitting.';
+            DOM.modalError.classList.remove('hidden');
+            answerBox.focus();
+            return;
+          }
+          decideClarification(tc.key, reason, { action: 'ANSWER', answer }, card);
+        });
+      }
+      card.querySelector('.hold-manual-btn').addEventListener('click', () => {
+        if (!confirm(`Mark ${tc.key} as a manual test case? It will not be automated.`)) return;
+        decideClarification(tc.key, reason, { action: 'MARK_MANUAL' }, card);
+      });
+      card.querySelector('.hold-dismiss-btn').addEventListener('click', () => {
+        const why = prompt('Why does this question not apply? (optional)', '');
+        if (why === null) return;
+        decideClarification(tc.key, reason, { action: 'DISMISS', reason: why.trim() || undefined }, card);
+      });
+      return card;
+    }
+
+    async function decideClarification(tcKey, reason, decision, card) {
+      DOM.modalError.classList.add('hidden');
+      card.querySelectorAll('button').forEach(b => { b.disabled = true; });
+      try {
+        const resp = await fetch('/api/agent03/clarify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: reason.id, ...decision }),
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.error || `Failed to record the decision (HTTP ${resp.status})`);
+
+        await reloadReviewReport();
+        const updated = allTestCases.find(t => t.key === tcKey);
+        openInspectionModal(tcKey);
+        const remaining = heldReasonsOf(updated).length;
+        if (updated && updated.reviewStatus !== 'HELD') {
+          showModalAlert(`✅ All questions resolved. ${tcKey} is now ${updated.reviewStatus}.`, 'success');
+        } else if (decision.action === 'ANSWER' && remaining > 0 && heldReasonsOf(updated).some(r => r.id === reason.id)) {
+          showModalAlert(`⚠️ The answer was recorded but did not clear this gap: ${describeHoldReason(reason)}. Refine the answer, or fix the steps directly and save.`, 'warning');
+        } else {
+          showModalAlert(`✅ Decision recorded. ${remaining} open question${remaining === 1 ? '' : 's'} remain for ${tcKey}.`, 'success');
+        }
+      } catch (err) {
+        DOM.modalError.textContent = `❌ ${err.message}`;
+        DOM.modalError.classList.remove('hidden');
+        card.querySelectorAll('button').forEach(b => { b.disabled = false; });
+      }
+    }
+
     // ── Inspection & Override Modal ───────────────────────────────────────
     function openInspectionModal(key) {
       const tc = allTestCases.find(t => t.key === key);
       if (!tc) return;
 
       currentEditingKey = key;
-      DOM.modalAlert.classList.add('hidden');
+      currentEditingStatus = tc.reviewStatus || 'PASSED';
+      DOM.modalAlert.className = 'alert alert-success hidden';
       DOM.modalError.classList.add('hidden');
 
       // Reset view tab to steps editor
@@ -2010,6 +2187,8 @@
       DOM.modalTcLabels.value = Array.isArray(tc.labels) ? tc.labels.join(', ') : (tc.labels || '');
       DOM.modalTcPrecondition.value = tc.precondition || '';
       DOM.modalTcObjective.value = tc.objective || '';
+
+      renderHoldPanel(tc);
 
       // Annotations/Findings for this test case
       const annotations = (reviewedOutput?.reviewAnnotations || []).filter(a => a.tcKey === tc.key);
@@ -2092,8 +2271,8 @@
             <input type="text" class="form-input step-data" placeholder="e.g. {{validUsername}}" value="${escapeHtml(step.testData || '')}">
           </div>
           <div class="form-field">
-            <label>Expected Result (Then ...)</label>
-            <input type="text" class="form-input step-expected" placeholder="e.g. user is redirected to inventory" value="${escapeHtml(step.expectedResult || '')}">
+            <label>Expected Results (Then ... — one per line)</label>
+            <textarea class="form-textarea step-expected" rows="${Math.max(2, String(step.expectedResult || '').split('\n').length)}" placeholder="One expected result per line, e.g.&#10;the URL is &quot;/inventory.html&quot;&#10;the product list is displayed">${escapeHtml(step.expectedResult || '')}</textarea>
           </div>
         </div>
       `;
@@ -2207,7 +2386,7 @@
         keyword: card.querySelector('.step-kw')?.value || 'When',
         description: (card.querySelector('.step-desc')?.value || '').trim(),
         testData: (card.querySelector('.step-data')?.value || '').trim(),
-        expectedResult: (card.querySelector('.step-expected')?.value || '').trim()
+        expectedResult: normalizeExpectedLines(card.querySelector('.step-expected')?.value)
       }));
 
       const newLabels = DOM.modalTcLabels.value.split(',').map(s => s.trim()).filter(Boolean);
@@ -2215,7 +2394,7 @@
       const payload = {
         key: currentEditingKey,
         name: newName,
-        reviewStatus: newStatus,
+        ...(newStatus && newStatus !== currentEditingStatus ? { reviewStatus: newStatus } : {}),
         labels: newLabels,
         objective: newObjective,
         precondition: newPrecondition,
@@ -2231,26 +2410,24 @@
 
         if (!resp.ok) {
           const err = await resp.json().catch(() => ({}));
+          if (resp.status === 409 && err.testCase) renderHoldPanel(err.testCase);
           throw new Error(err.error || `Failed to update test case (HTTP ${resp.status})`);
         }
 
-        const data = await resp.json();
-        const updated = data.testCase || payload;
-
-        // Update in-memory allTestCases
-        const targetIdx = allTestCases.findIndex(t => t.key === currentEditingKey);
-        if (targetIdx !== -1) {
-          allTestCases[targetIdx] = { ...allTestCases[targetIdx], ...updated };
+        const savedKey = currentEditingKey;
+        await reloadReviewReport();
+        const updated = allTestCases.find(t => t.key === savedKey);
+        if (updated && updated.reviewStatus === 'HELD') {
+          openInspectionModal(savedKey);
+          const remaining = heldReasonsOf(updated).length;
+          showModalAlert(`💾 Saved, but ${savedKey} is still held: ${remaining} open question${remaining === 1 ? '' : 's'} remain. Resolve them below.`, 'warning');
+          return;
         }
 
-        renderFilteredTable();
-
-        DOM.modalAlert.textContent = '✅ Test case reviewed and saved successfully in state!';
-        DOM.modalAlert.classList.remove('hidden');
-
+        showModalAlert(`✅ Saved. ${savedKey} is now ${(updated && updated.reviewStatus) || 'updated'}.`, 'success');
         setTimeout(() => {
           closeInspectionModal();
-        }, 800);
+        }, 900);
       } catch (err) {
         DOM.modalError.textContent = `❌ ${err.message}`;
         DOM.modalError.classList.remove('hidden');

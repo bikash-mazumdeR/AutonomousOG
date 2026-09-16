@@ -1003,6 +1003,11 @@
     };
 
     // ── HTML Escaping Helper ──────────────────────────────────────────────
+    /** Expected results are one per line: trim each line and drop blank ones (never merge lines). */
+    function normalizeExpectedLines(value) {
+      return String(value || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean).join('\n');
+    }
+
     function escapeHtml(str) {
       if (str === null || str === undefined) return '';
       return String(str)
@@ -1181,7 +1186,7 @@
         keyword: card.querySelector('.step-kw')?.value || 'When',
         description: (card.querySelector('.step-desc')?.value || '').trim(),
         testData: (card.querySelector('.step-data')?.value || '').trim(),
-        expectedResult: (card.querySelector('.step-expected')?.value || '').trim(),
+        expectedResult: normalizeExpectedLines(card.querySelector('.step-expected')?.value),
       }));
 
       const syntheticTc = {
@@ -1291,8 +1296,8 @@
             <input type="text" class="form-input step-data" placeholder="e.g. {{validUsername}} / {{validPassword}}" value="${escapeHtml(step.testData || '')}">
           </div>
           <div class="form-field">
-            <label>Expected Result (Then ...)</label>
-            <input type="text" class="form-input step-expected" placeholder="e.g. user is redirected to inventory" value="${escapeHtml(step.expectedResult || '')}">
+            <label>Expected Results (Then ... — one per line)</label>
+            <textarea class="form-textarea step-expected" rows="${Math.max(2, String(step.expectedResult || '').split('\n').length)}" placeholder="One expected result per line, e.g.&#10;the URL is &quot;/inventory.html&quot;&#10;the product list is displayed">${escapeHtml(step.expectedResult || '')}</textarea>
           </div>
         </div>
       `;
@@ -1380,7 +1385,7 @@
         keyword: card.querySelector('.step-kw')?.value || 'When',
         description: (card.querySelector('.step-desc')?.value || '').trim(),
         testData: (card.querySelector('.step-data')?.value || '').trim(),
-        expectedResult: (card.querySelector('.step-expected')?.value || '').trim()
+        expectedResult: normalizeExpectedLines(card.querySelector('.step-expected')?.value)
       }));
 
       const payload = {

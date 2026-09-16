@@ -9,8 +9,11 @@ import * as crypto from 'crypto';
 import {
   TYPE_TAGS, LABEL_TAGS, K6_SCENARIOS, HTTP_METHODS, TAG_PATTERN, IGNORED_TAGS, PLACEHOLDER_TOKEN,
   VALID_PLACEHOLDER, TITLE_LENGTH, MIN_OUT_OF_SCOPE_PHRASE_LENGTH, SMOKE_REQUIRED_RISKS, TC_TYPE,
+  SELECTABLE_UI_TYPE_TAGS, MIN_TC_PER_STORY_PER_TYPE, FAILURE_OUTCOME_PATTERN, NEGATED_FAILURE_PHRASE, maxTcPerStoryPerType,
 } from '../constants';
-import { GherkinParseResult, ParsedScenario, ParsedStep } from '../parsers/GherkinToZephyrParser';
+import {
+  GherkinParseResult, ParsedScenario, ParsedStep, UncoveredDeclaration,
+} from '../parsers/GherkinToZephyrParser';
 import { IntegrationPoint, NormalizedFeature, NormalizedStory } from '../analysis/normalizeAnalysis';
 import { GateResult, integrationTag } from '../analysis/requirementGates';
 
@@ -38,6 +41,10 @@ export interface StoryValidationResult {
   scenarios: ValidatedScenario[];
   errors: string[];
   warnings: string[];
+  /** Valid "# UNCOVERED" declarations accumulated across attempts. */
+  declaredUncovered: UncoveredDeclaration[];
+  /** Type tags of scenarios dropped in this attempt because their type is excluded (one entry per scenario). */
+  excludedDrops: string[];
 }
 
 interface TagBuckets {
@@ -49,6 +56,11 @@ interface TagBuckets {
   statuses: string[];
   k6: string[];
   unknown: string[];
+}
+
+interface StoryIssues {
+  errors: string[];
+  warnings: string[];
 }
 
 interface ScenarioOutcome {
@@ -129,6 +141,24 @@ function normalizePhrase(text: string): string {
   return ` ${text.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()} `;
 }
 
+/**
+ * Rejects a @positive scenario whose expected results assert a failure outcome (mislabelled negative behaviour).
+ * @param {string} typeTag
+ * @param {ParsedScenario} scenario
+ * @param {ReadonlySet<string>} excludedTypeTags
+ * @returns {string[]}
+ */
+export function checkTypeSemantics(typeTag: string, scenario: ParsedScenario, excludedTypeTags: ReadonlySet<string>): string[] {
+  if (typeTag !== 'positive') return [];
+  const outcomes = scenario.steps.map((step) => step.expectedResult.replace(NEGATED_FAILURE_PHRASE, ' ')).join('\n');
+  const match = outcomes.match(FAILURE_OUTCOME_PATTERN);
+  if (!match) return [];
+  const remedy = excludedTypeTags.has('negative')
+    ? '@negative is EXCLUDED for this run, so do not write it at all; write a @positive scenario with a success or neutral outcome instead'
+    : 're-tag it @negative, or rewrite it with a success or neutral outcome';
+  return [`is tagged @positive but asserts a failure outcome ("${match[0]}") — that is @negative behaviour; ${remedy}`];
+}
+
 function checkOutOfScope(scenario: ParsedScenario, story: NormalizedStory): string[] {
   const haystack = normalizePhrase([scenario.title, ...scenario.steps.flatMap((s) => [s.description, s.expectedResult])].join(' '));
   return story.outOfScope
@@ -203,6 +233,7 @@ function validateScenario(scenario: ParsedScenario, ctx: ScenarioContext): Scena
   if (ctx.excludedTypeTags.has(typeTag)) return { errors: [], excludedTypeTag: typeTag };
 
   errors.push(
+    ...checkTypeSemantics(typeTag, scenario, ctx.excludedTypeTags),
     ...checkRefs(tags.refs, ctx.story),
     ...checkTitle(scenario.title),
     ...checkPlaceholders(scenario),
@@ -221,17 +252,44 @@ function validateScenario(scenario: ParsedScenario, ctx: ScenarioContext): Scena
   };
 }
 
-function checkStoryCoverage(accepted: ValidatedScenario[], ctx: ScenarioContext): string[] {
+function selectedUiTypeTags(ctx: ScenarioContext): string[] {
+  return SELECTABLE_UI_TYPE_TAGS.filter((tag) => !ctx.excludedTypeTags.has(tag));
+}
+
+function uncoveredCriterionIssues(accepted: ValidatedScenario[], ctx: ScenarioContext, declared: UncoveredDeclaration[]): StoryIssues {
   const covered = new Set(accepted.flatMap((s) => s.requirementRefs));
-  const errors = ctx.story.acceptanceCriteria
-    .filter((ac) => !covered.has(ac.id))
-    .map((ac) => `${ac.id} ("${snippet(ac.text)}") is not covered by any valid scenario`);
+  const excluded = SELECTABLE_UI_TYPE_TAGS.filter((tag) => ctx.excludedTypeTags.has(tag));
+  const issues: StoryIssues = { errors: [], warnings: [] };
+  for (const ac of ctx.story.acceptanceCriteria.filter((item) => !covered.has(item.id))) {
+    const declaration = declared.find((d) => d.ref === ac.id && ctx.excludedTypeTags.has(d.typeTag));
+    if (declaration) {
+      issues.warnings.push(`[${ctx.feature.id}/${ctx.story.id}] ${ac.id} ("${snippet(ac.text)}") not covered: `
+        + `requires @${declaration.typeTag} (excluded for this run)`);
+      continue;
+    }
+    const hint = excluded.length === 0 ? ''
+      : ` — cover it with a selected type, or if ONLY an excluded type (@${excluded.join('/@')}) can verify it, write "# UNCOVERED ${ac.id}: @<type>"`;
+    issues.errors.push(`${ac.id} ("${snippet(ac.text)}") is not covered by any valid scenario${hint}`);
+  }
+  return issues;
+}
+
+function typeMinimumErrors(accepted: ValidatedScenario[], ctx: ScenarioContext): string[] {
+  return selectedUiTypeTags(ctx)
+    .filter((tag) => accepted.filter((s) => s.type === TYPE_TAGS[tag]).length < MIN_TC_PER_STORY_PER_TYPE)
+    .map((tag) => `no @${tag} scenario — at least ${MIN_TC_PER_STORY_PER_TYPE} @${tag} scenario is required for every story; `
+      + 'ground it in the closest acceptance criterion or business rule');
+}
+
+function checkStoryCoverage(accepted: ValidatedScenario[], ctx: ScenarioContext, declared: UncoveredDeclaration[]): StoryIssues {
+  const issues = uncoveredCriterionIssues(accepted, ctx, declared);
+  issues.errors.push(...typeMinimumErrors(accepted, ctx));
   const positives = accepted.filter((s) => s.type === TC_TYPE.POSITIVE);
   const needsSmoke = SMOKE_REQUIRED_RISKS.has(ctx.feature.riskLevel) && positives.length > 0;
   if (needsSmoke && !positives.some((s) => s.labels.includes(LABEL_TAGS.smoke))) {
-    errors.push(`${ctx.feature.riskLevel} risk story: tag the primary happy-path @positive scenario with @smoke`);
+    issues.errors.push(`${ctx.feature.riskLevel} risk story: tag the primary happy-path @positive scenario with @smoke`);
   }
-  return errors;
+  return issues;
 }
 
 function uncoveredRuleWarnings(accepted: ValidatedScenario[], ctx: ScenarioContext): string[] {
@@ -272,26 +330,44 @@ function placeScenario(scenario: ValidatedScenario, errors: string[], seen: Set<
   return prior.steps.has(keys.steps) ? { action: 'ignore' } : { action: 'add' };
 }
 
+function mergeDeclarations(prior: UncoveredDeclaration[], next: UncoveredDeclaration[]): UncoveredDeclaration[] {
+  const merged = new Map(prior.map((d) => [`${d.ref}:${d.typeTag}`, d]));
+  next.forEach((d) => merged.set(`${d.ref}:${d.typeTag}`, d));
+  return [...merged.values()];
+}
+
+const typeCount = (accepted: ValidatedScenario[], type: string): number => accepted.filter((s) => s.type === type).length;
+
 /**
- * Validates one story's parsed scenarios against grammar, grounding, gates and coverage rules.
+ * Validates one story's parsed scenarios against grammar, grounding, gates, type selection and coverage rules.
  * Scenarios accepted in earlier self-correction attempts (`prior`) are kept and coverage is judged on the union.
  * @param {GherkinParseResult} parsed
  * @param {ScenarioContext} ctx
  * @param {ValidatedScenario[]} [prior]
+ * @param {UncoveredDeclaration[]} [priorDeclared] - "# UNCOVERED" declarations from earlier attempts
  * @returns {StoryValidationResult} scenarios = prior scenarios (possibly replaced) plus newly accepted ones
  */
-export function validateStoryScenarios(parsed: GherkinParseResult, ctx: ScenarioContext, prior: ValidatedScenario[] = []): StoryValidationResult {
+export function validateStoryScenarios(
+  parsed: GherkinParseResult,
+  ctx: ScenarioContext,
+  prior: ValidatedScenario[] = [],
+  priorDeclared: UncoveredDeclaration[] = [],
+): StoryValidationResult {
   const errors = parsed.errors.map((e) => `Output: ${e}`);
   const warnings: string[] = [];
+  const excludedDrops: string[] = [];
   const accepted: ValidatedScenario[] = [...prior];
   const priorIndex = indexPrior(prior);
   const seen = new Set<string>();
+  const maxPerType = maxTcPerStoryPerType(ctx.story.acceptanceCriteria.length + ctx.story.businessRules.length);
+  const declaredUncovered = mergeDeclarations(priorDeclared, parsed.declaredUncovered || []);
 
   if (parsed.scenarios.length === 0 && prior.length === 0) errors.push('No "Scenario:" blocks were found in the output');
   for (const scenario of parsed.scenarios) {
     const outcome = validateScenario(scenario, ctx);
     const label = `Scenario "${snippet(scenario.title || '(untitled)')}" (line ${scenario.line})`;
     if (outcome.excludedTypeTag) {
+      excludedDrops.push(outcome.excludedTypeTag);
       warnings.push(`[${ctx.story.id}] Dropped ${label}: @${outcome.excludedTypeTag} scenarios are excluded for this run`);
       continue;
     }
@@ -302,12 +378,17 @@ export function validateStoryScenarios(parsed: GherkinParseResult, ctx: Scenario
       accepted[placement.index] = outcome.scenario;
     } else if (placement.action === 'ignore') {
       warnings.push(`[${ctx.story.id}] Ignored ${label}: repeats the steps of a scenario accepted in an earlier attempt`);
+    } else if (typeCount(accepted, outcome.scenario.type) >= maxPerType) {
+      warnings.push(`[${ctx.story.id}] Dropped ${label}: exceeds the limit of ${maxPerType} ${outcome.scenario.type} scenarios per story`);
     } else {
       accepted.push(outcome.scenario);
     }
   }
 
-  errors.push(...checkStoryCoverage(accepted, ctx));
-  warnings.push(...uncoveredRuleWarnings(accepted, ctx));
-  return { scenarios: accepted, errors, warnings };
+  const coverage = checkStoryCoverage(accepted, ctx, declaredUncovered);
+  errors.push(...coverage.errors);
+  warnings.push(...coverage.warnings, ...uncoveredRuleWarnings(accepted, ctx));
+  return {
+    scenarios: accepted, errors, warnings, declaredUncovered, excludedDrops,
+  };
 }

@@ -10,6 +10,7 @@ import {
   chromium, selectors, Browser, BrowserContext, Page, Locator,
 } from '@playwright/test';
 import { DISCOVERY_SETTINGS, DYNAMIC_ID_HEURISTICS } from '../constants';
+import { ExtraLocator } from '../../../core/aut/AutProfile';
 import {
   LocatorStrategy, PageElement, PageState, stateNameForPath, toCamel, uniqueName, locatorSignature,
 } from './pageMap';
@@ -33,6 +34,8 @@ export interface DiscoveryOptions {
   testIdAttribute?: string;
   dynamicIdPatterns: RegExp[];
   headless?: boolean;
+  /** Profile-declared locators for elements discovery cannot identify by itself. */
+  extraLocators?: ExtraLocator[];
 }
 
 /** A candidate locator. */
@@ -106,6 +109,7 @@ export function toLocator(page: Page, candidate: Candidate): Locator {
     case 'label': return page.getByLabel(first, { exact: true });
     case 'placeholder': return page.getByPlaceholder(first, { exact: true });
     case 'text': return page.getByText(first, { exact: true });
+    case 'css': return page.locator(first);
     default: return page.locator(`#${cssEscape(first)}`);
   }
 }
@@ -279,6 +283,7 @@ export class DiscoverySession {
   async captureState(takenStateNames: Set<string>, entryPath?: string, reloadVerify = false): Promise<PageState> {
     const urlPath = this.currentPath();
     let elements = await this._verifyElements(await collectRawElements(this.page, this._options.testIdAttribute));
+    elements = [...elements, ...await this._verifyExtraLocators(elements)];
     if (reloadVerify) {
       await this.page.reload({ waitUntil: 'load' });
       await this.settle();
@@ -299,6 +304,25 @@ export class DiscoverySession {
     } catch {
       return false;
     }
+  }
+
+  /** Profile-declared locators that match exactly one element in the current state (absent ones are skipped). */
+  private async _verifyExtraLocators(found: PageElement[]): Promise<PageElement[]> {
+    const taken = new Set(found.map((element) => element.name));
+    const elements: PageElement[] = [];
+    for (const extra of this._options.extraLocators || []) {
+      const candidate: Candidate = { strategy: 'css', args: [extra.css] };
+      // eslint-disable-next-line no-await-in-loop -- each locator is verified against the live page in turn
+      if (!(await this._isUnique(candidate))) continue;
+      // eslint-disable-next-line no-await-in-loop
+      const tag = await toLocator(this.page, candidate).evaluate((el: any) => el.tagName.toLowerCase()).catch(() => 'element');
+      const name = uniqueName(extra.name, taken);
+      taken.add(name);
+      elements.push({
+        name, strategy: 'css', args: [extra.css], tag, ...(extra.description ? { description: extra.description } : {}),
+      });
+    }
+    return elements;
   }
 
   private async _verifyElements(raws: RawElement[]): Promise<PageElement[]> {

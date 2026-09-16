@@ -31,6 +31,9 @@ export const GENERIC_LEARNINGS_FILES: Readonly<Record<GenerationMode, string>> =
   K6: 'k6-learnings.md',
 });
 
+/** Generic (application-agnostic) learnings for the discovery navigation planner. */
+export const DISCOVERY_LEARNINGS_FILE = 'discovery-learnings.md';
+
 export const PROJECT_LEARNINGS_FILES: Readonly<Record<GenerationMode, string>> = Object.freeze({
   UI: 'agent05-ui.md',
   API: 'agent05-api.md',

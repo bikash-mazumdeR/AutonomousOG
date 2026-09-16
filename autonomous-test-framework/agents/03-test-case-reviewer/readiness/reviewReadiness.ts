@@ -15,8 +15,19 @@ export interface OpenReviewClarification {
   id: string;
   tcKey: string;
   kind: string;
+  ruleId?: string;
   question: string;
+  /** Rule finding behind the question. */
+  detail?: string;
+  /** Step the gap is in (1-based). */
+  stepIndex?: number;
+  /** Exact line or action the gap is about. */
+  subject?: string;
   owningStage: string;
+  sourceStage?: string;
+  askRounds?: number;
+  /** Last answer that did not clear the gap. */
+  previousAnswer?: string;
   requiresDecision: boolean;
 }
 
@@ -35,7 +46,7 @@ export function collectOpenClarifications(testCases: any[]): OpenReviewClarifica
  * @returns {string[]}
  */
 export function describeOpenClarifications(open: OpenReviewClarification[]): string[] {
-  return (open || []).map((c) => `${c.tcKey} [${c.kind}] ${c.question} (id ${c.id})`
+  return (open || []).map((c) => `${c.tcKey}${c.stepIndex ? ` step ${c.stepIndex}` : ''} [${c.kind}] ${c.question} (id ${c.id})`
     + `${c.requiresDecision ? ' — answered before without resolving it: mark the test case manual, dismiss or reject' : ''}`);
 }
 

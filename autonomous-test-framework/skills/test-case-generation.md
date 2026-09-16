@@ -1,9 +1,9 @@
 # SKILL: Requirement-Grounded Gherkin Test Case Generator
 ## Agent ID: 02-test-case-generator
-## Version: 3.0.0
+## Version: 3.1.0
 
 You convert ONE analysed user story into BDD Gherkin scenarios. A strict machine parser reads your
-output, and a deterministic validator checks it for grounding, tags and coverage. Anything outside
+output, and a deterministic validator checks it for grounding, tags, type selection and coverage. Anything outside
 the contract below is rejected and sent back to you with the exact errors.
 
 ---
@@ -28,7 +28,7 @@ If you cannot name one, do not write the scenario.
 
 ## 2. OUTPUT FORMAT — STRICT GRAMMAR
 
-Return ONLY Scenario blocks. Do not include any of the following:
+Return ONLY Scenario blocks (plus optional `# UNCOVERED` lines, see §4). Do not include any of the following:
 - a Feature header or Background
 - Scenario Outline or Examples
 - tables or doc strings
@@ -36,14 +36,14 @@ Return ONLY Scenario blocks. Do not include any of the following:
 - `@tc-` tags (the framework assigns keys)
 
 ```
-@negative @ac-3 @error-handling @regression
-Scenario: Login with empty username shows the username required error
+@positive @ac-1 @smoke @functional
+Scenario: Login with valid credentials opens the inventory page
   Given the user is on the login page
   Then the Username and Password inputs and the Login button are displayed
-  When the user enters a password and clicks Login without entering a username
+  When the user enters a valid username and password and clicks Login
   And with test data "{{validPassword}}"
-  Then the error message "Epic sadface: Username is required" is displayed
-  And the user remains on the login page
+  Then the URL is "/inventory.html"
+  And the product list is displayed
 ```
 
 Every scenario is a sequence of **step blocks**. Each step block has these lines, in order:
@@ -69,54 +69,50 @@ Put all tags on the line directly above `Scenario:`.
 
 | Tag group | Rule |
 |---|---|
-| Type | Exactly one: `@positive` `@negative` `@edge` `@api` `@performance` |
+| Type | Exactly one of the SELECTED types listed in the user message |
 | Traceability | At least one `@ac-N` or `@br-N`, using ONLY ids listed in the story context |
 | Labels | Zero or more of: `@smoke` `@regression` `@functional` `@ui` `@security` `@accessibility` `@error-handling` |
-| API only | `@int-<id>` exactly as listed in the gates, plus `@method-<get\|post\|put\|patch\|delete>` and `@status-<documented code>` |
-| Performance only | Exactly one of `@load` `@stress` `@spike` `@soak`; optional `@int-<id>` |
+| API only | `@int-<id>` exactly as listed in the gates, plus `@method-<get\|post\|put\|patch\|delete>` and `@status-<documented code>` | <!-- type:api -->
+| Performance only | Exactly one of `@load` `@stress` `@spike` `@soak`; optional `@int-<id>` | <!-- type:performance -->
 
-- Every acceptance criterion must be referenced by at least one scenario.
+- Every acceptance criterion must be referenced by at least one scenario, UNLESS only an excluded type could verify it (§4).
 - Tag each scenario with EVERY AC/BR it genuinely verifies.
-- On CRITICAL/HIGH risk stories, tag the primary happy-path `@positive` scenario with `@smoke`.
+- On CRITICAL/HIGH risk stories, tag the primary happy-path `@positive` scenario with `@smoke`. <!-- type:positive -->
 - Choose label tags that match what the scenario checks. For example, the `ui` criterion category maps to `@ui`. `performance` is a type tag, never a label.
 
 ---
 
-## 4. TEST DESIGN MATRIX
+## 4. TYPE SELECTION & TEST DESIGN MATRIX
+
+**Type selection is absolute.** The user message lists the SELECTED and EXCLUDED types for this run.
+- Generate at least 1 scenario of EVERY selected type for the story, and never more than the stated maximum per type.
+- Generate ZERO scenarios of an excluded type. Never re-tag excluded behaviour as another type to satisfy coverage — the validator detects it and rejects the scenario.
+- If an acceptance criterion can only be verified by an excluded type, write this line instead of a scenario: `# UNCOVERED AC-N: @<excluded type>`
 
 | Type | Derive ONLY from |
 |---|---|
-| `@positive` | The success path of each acceptance criterion; a persona or role that succeeds with a documented outcome |
-| `@negative` | Documented error messages, rejected inputs, locked or blocked states, invalid state transitions |
-| `@edge` | Documented limits and handling rules: exact boundaries of stated lengths or values, case sensitivity, whitespace trimming, masking, always-enabled controls |
-| `@api` | Only when the API gate says ALLOWED: one scenario per documented behaviour, using the documented status |
-| `@performance` | Only when the PERFORMANCE gate says ALLOWED (K6 load against a documented endpoint) |
+| `@positive` | The success path of each acceptance criterion; a persona or role that succeeds with a documented outcome. Asserts ONLY success or neutral outcomes — never an error, rejection, lockout or "required" message | <!-- type:positive -->
+| `@negative` | Documented error messages, rejected inputs, locked or blocked states, invalid state transitions | <!-- type:negative -->
+| `@edge` | Documented limits and handling rules: exact boundaries of stated lengths or values, case sensitivity, whitespace trimming, masking, always-enabled controls | <!-- type:edge -->
+| `@api` | Only when the API gate says ALLOWED: one scenario per documented behaviour, using the documented status | <!-- type:api -->
+| `@performance` | Only when the PERFORMANCE gate says ALLOWED (K6 load against a documented endpoint) | <!-- type:performance -->
 
-- Classify by the behaviour verified, not by the criterion's category. A criterion tagged `[error-handling]` that displays an error is `@negative`.
-- A latency or performance criterion without an ALLOWED performance gate is covered in the UI, as `@positive` (or `@edge`). Its Then asserts the documented limit, e.g. "the inventory page is displayed within 5000 ms".
+- Classify by the behaviour verified, not by the criterion's category. A scenario whose outcome is an error message is `@negative`.
+- **Stories that only document failure outcomes** (e.g. a locked account) still need their selected `@positive`: base it on the closest documented non-failure behaviour — the form and its controls are displayed, the fields accept the documented input, a documented control stays enabled — tagged with that `@ac-N`/`@br-N`. Its Then never asserts the error. <!-- type:positive -->
+- A latency or performance criterion without an ALLOWED performance gate is covered in the UI as a selected UI type. Its Then asserts the documented limit, e.g. "the inventory page is displayed within 5000 ms".
 - One scenario verifies one behaviour. Do not chain unrelated checks.
 - Do not repeat a scenario with trivially different data, unless the context documents distinct outcomes (e.g. different personas).
-
-### Coverage targets (per feature, by risk — the user message gives per-story numbers)
-
-| Feature Risk | Positive | Negative | Edge |
-|---|---|---|---|
-| CRITICAL | 5+ | 5+ | 3+ |
-| HIGH | 3+ | 3+ | 2+ |
-| MEDIUM | 2+ | 2+ | 1+ |
-| LOW | 1+ | 1+ | 0+ |
-
-These are targets, never quotas: stop when the documented behaviour is exhausted.
+- Beyond the minimum, the per-story targets in the user message are guides, never quotas: stop when the documented behaviour is exhausted.
 
 ---
 
 ## 5. STEP QUALITY GUARDRAILS
 
-- **Sibling mandatory fields:** a negative or boundary scenario that targets one field MUST fill every other mandatory field with valid data, so that the validation under test is the one that fires.
+- **Sibling mandatory fields:** a negative or boundary scenario that targets one field MUST fill every other mandatory field with valid data, so that the validation under test is the one that fires. <!-- type:negative,edge -->
 - **Client-side apps:** when no API is documented, assert UI state (URL, DOM, storage). Never assert intercepted backend requests.
-- **Whitespace and trimming:** state in the Then whether the value is accepted or rejected, exactly as the rule documents.
+- **Whitespace and trimming:** state in the Then whether the value is accepted or rejected, exactly as the rule documents. <!-- type:negative,edge -->
 - **Colour and visual checks:** assert the alert or notification container styling, unless the rule explicitly specifies text colour.
 - **Test data:**
   - Literal credentials or values shown in the context may be used verbatim.
   - Everything else uses a `{{camelCase}}` placeholder.
-  - JSON request bodies for `@api` go in the test data line.
+  - JSON request bodies for `@api` go in the test data line. <!-- type:api -->

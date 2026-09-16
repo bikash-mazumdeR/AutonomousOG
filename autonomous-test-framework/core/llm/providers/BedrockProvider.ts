@@ -6,12 +6,22 @@
  */
 
 import axios from 'axios';
-import { LLMProvider, LLMChatOptions, LLMResponse } from './LLMProvider';
+import {
+  LLMProvider, LLMChatOptions, LLMResponse, isPromptCacheEnabled,
+} from './LLMProvider';
+import { Logger } from '../../logger/Logger';
+
+const logger = new Logger('BedrockProvider');
 
 /** Output token ceiling; several Bedrock models reject larger values. Override with BEDROCK_MAX_TOKENS. */
 const DEFAULT_MAX_TOKENS = 8192;
 const DEFAULT_TEMPERATURE = 0.7;
 const REQUEST_TIMEOUT_MS = 120000;
+
+/** Bedrock models that accept a Converse cachePoint (other models reject the request). */
+const CACHE_CAPABLE_MODEL = /anthropic\.claude|amazon\.nova/i;
+/** Caches everything before it (the system prompt) — reused across stories and self-correction retries. */
+const CACHE_POINT = Object.freeze({ cachePoint: { type: 'default' } });
 
 function maxTokensLimit(): number {
   const configured = Number(process.env.BEDROCK_MAX_TOKENS);
@@ -43,11 +53,17 @@ export class BedrockProvider implements LLMProvider {
    * @returns {Promise<LLMResponse>}
    */
   async chat(options: LLMChatOptions): Promise<LLMResponse> {
-    const system = options.messages.filter((m) => m.role === 'system').map((m) => ({ text: m.content }));
+    const system: object[] = options.messages.filter((m) => m.role === 'system').map((m) => ({ text: m.content }));
+    if (system.length > 0 && isPromptCacheEnabled() && CACHE_CAPABLE_MODEL.test(options.model)) system.push(CACHE_POINT);
     const messages = options.messages
       .filter((m) => m.role !== 'system')
       .map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: [{ text: m.content }] }));
     const limit = maxTokensLimit();
+    if (options.max_tokens !== undefined && options.max_tokens > limit) {
+      logger.warn(`Requested ${options.max_tokens} output tokens but BEDROCK_MAX_TOKENS caps it at ${limit}; long outputs may be cut off.`, {
+        model: options.model,
+      });
+    }
     const url = `https://bedrock-runtime.${this.region}.amazonaws.com/model/${encodeURIComponent(options.model)}/converse`;
 
     const response = await axios.post(url, {
@@ -68,7 +84,14 @@ export class BedrockProvider implements LLMProvider {
     const completionTokens = usage.outputTokens ?? 0;
     return {
       text: content.find((block) => typeof block?.text === 'string')?.text || '',
-      usage: { promptTokens, completionTokens, totalTokens: usage.totalTokens ?? promptTokens + completionTokens },
+      ...(response.data?.stopReason === 'max_tokens' ? { truncated: true } : {}),
+      usage: {
+        promptTokens,
+        completionTokens,
+        totalTokens: usage.totalTokens ?? promptTokens + completionTokens,
+        cacheReadTokens: usage.cacheReadInputTokens ?? 0,
+        cacheWriteTokens: usage.cacheWriteInputTokens ?? 0,
+      },
     };
   }
 }

@@ -26,12 +26,15 @@ import {
   STAGE_ID, STAGE_NAME, STAGE_NUMBER, NEXT_STAGE, SKILL_PATH, LEARNINGS_PATH, LLM_SETTINGS, SKIP_OPTIONS, TC_TYPE,
 } from './constants';
 import { normalizeAnalysis, NormalizedAnalysis } from './analysis/normalizeAnalysis';
-import { generateStoryScenarios, ChatMessage, StoryGenerationOutcome } from './generation/storyGenerator';
+import {
+  generateStoryScenarios, ChatMessage, ChatReply, StoryGenerationOutcome,
+} from './generation/storyGenerator';
 import {
   buildTestCases, buildCoverageWarnings, computeRequirementCoverage, RequirementCoverage,
 } from './builders/testCaseBuilder';
 import { syncFeatureFiles } from './utils';
 import { buildGenerationMeta, describeInputChanges, formatInputChanges } from './generation/generationMeta';
+import { filterByActiveTypes, resolveActiveTypeTags } from './prompts/systemPrompt';
 
 /** Agent input. */
 export interface TestCaseGeneratorInput {
@@ -149,7 +152,8 @@ export class TestCaseGeneratorAgent {
       memoryRules: memoryContext.improvementRules?.length || 0,
     });
 
-    const outcomes = await this._generateStories(normalized, excludedTypeTags, memoryContext);
+    const systemPrompt = filterByActiveTypes(this._skill, resolveActiveTypeTags(normalized.features, excludedTypeTags));
+    const outcomes = await this._generateStories(normalized, excludedTypeTags, memoryContext, systemPrompt);
     const testCases = buildTestCases(outcomes);
     const meta = buildGenerationMeta({
       analyzedRequirements: input.analyzedRequirements,
@@ -178,6 +182,7 @@ export class TestCaseGeneratorAgent {
     normalized: NormalizedAnalysis,
     excludedTypeTags: ReadonlySet<string>,
     memoryContext: any,
+    systemPrompt: string,
   ): Promise<StoryGenerationOutcome[]> {
     const limit = pLimit(Math.max(1, FRAMEWORK_CONFIG.maxThreads));
     const jobs = normalized.features.flatMap((feature) => feature.userStories.map((story) => limit(async () => {
@@ -187,7 +192,7 @@ export class TestCaseGeneratorAgent {
       const outcome = await generateStoryScenarios({
         feature,
         story,
-        systemPrompt: this._skill,
+        systemPrompt,
         excludedTypeTags,
         openAmbiguities: normalized.openAmbiguities,
         stateTransitions: normalized.stateTransitions,
@@ -201,14 +206,14 @@ export class TestCaseGeneratorAgent {
     return Promise.all(jobs);
   }
 
-  private async _chat(messages: ChatMessage[]): Promise<string> {
+  private async _chat(messages: ChatMessage[]): Promise<ChatReply> {
     const response = await llmClient.chat(STAGE_ID, {
       messages,
       temperature: LLM_SETTINGS.TEMPERATURE,
       seed: LLM_SETTINGS.SEED,
       max_tokens: LLM_SETTINGS.MAX_TOKENS,
     });
-    return response.text || '';
+    return { text: response.text || '', truncated: Boolean(response.truncated) };
   }
 
   // ── Approval & Persistence ───────────────────────────────────────────────

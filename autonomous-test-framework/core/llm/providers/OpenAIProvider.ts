@@ -38,6 +38,7 @@ export class OpenAIProvider implements LLMProvider {
 
     return {
       text: response.data.choices[0].message.content,
+      ...(response.data.choices[0].finish_reason === 'length' ? { truncated: true } : {}),
       usage: {
         promptTokens: response.data.usage?.prompt_tokens ?? 0,
         completionTokens: response.data.usage?.completion_tokens ?? 0,

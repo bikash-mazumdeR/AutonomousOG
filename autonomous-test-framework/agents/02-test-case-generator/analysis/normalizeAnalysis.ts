@@ -30,6 +30,8 @@ export interface IntegrationPoint {
 /** User story with every list field guaranteed. */
 export interface NormalizedStory {
   id: string;
+  /** User story id as written in the requirement document (e.g. "SL-AUTH-001"), when Agent 01 recorded one. */
+  sourceStoryId?: string;
   title: string;
   role: string;
   goal: string;
@@ -139,6 +141,7 @@ function normalizeStory(
   }
   const story: NormalizedStory = {
     id,
+    ...(textOf(raw?.sourceStoryId) ? { sourceStoryId: textOf(raw?.sourceStoryId) } : {}),
     title: textOf(raw?.title) || id,
     role: textOf(raw?.role),
     goal: textOf(raw?.goal),

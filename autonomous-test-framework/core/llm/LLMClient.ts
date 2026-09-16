@@ -28,6 +28,8 @@ const logger = new Logger('LLMClient');
 export interface LLMClientResponse {
   text: string;
   usage: TokenUsage;
+  /** True when the model hit its output token limit, so `text` is incomplete. */
+  truncated?: boolean;
 }
 
 export class LLMClient {
@@ -214,7 +216,10 @@ export class LLMClient {
           logger.info(`✅ Fallback model "${modelName}" succeeded — pinning for future calls.`, { stageId, pinnedIndex: i });
         }
 
-        return { text: response.text, usage };
+        if (response.truncated) {
+          logger.warn('LLM output was cut off at the output token limit.', { stageId, model: modelName, completionTokens: usage.completionTokens });
+        }
+        return { text: response.text, usage, ...(response.truncated ? { truncated: true } : {}) };
       } catch (err: any) {
         lastError = err;
         // Detect capacity/quota errors from both raw axios responses AND our CapacityError sentinel

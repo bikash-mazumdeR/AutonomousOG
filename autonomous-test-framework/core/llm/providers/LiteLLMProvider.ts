@@ -53,6 +53,7 @@ export class LiteLLMProvider implements LLMProvider {
 
     return {
       text: response.choices[0]?.message?.content ?? '',
+      ...(response.choices[0]?.finish_reason === 'length' ? { truncated: true } : {}),
       usage: {
         promptTokens: response.usage?.prompt_tokens ?? 0,
         completionTokens: response.usage?.completion_tokens ?? 0,

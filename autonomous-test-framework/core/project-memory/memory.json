@@ -1,8 +1,8 @@
 {
   "version": "1.0.0",
   "projectId": "ARIA Project",
-  "createdAt": "2026-09-16T10:21:20.394Z",
-  "updatedAt": "2026-09-16T10:42:07.420Z",
+  "createdAt": "2026-09-16T12:21:03.645Z",
+  "updatedAt": "2026-09-16T14:17:58.023Z",
   "cycles": [],
   "globalLearnings": {
     "selectorPatterns": {},
@@ -12,92 +12,222 @@
     "failurePatterns": [],
     "approvalFeedback": [
       {
-        "id": "fb_1789554679445",
+        "id": "fb_1789563245598",
         "stageId": "01-requirement-analyzer",
         "status": "APPROVED",
         "comment": "Approved via ARIA UI",
         "content": "",
-        "timestamp": "2026-09-16T10:31:19.445Z"
+        "timestamp": "2026-09-16T12:54:05.598Z"
       },
       {
-        "id": "fb_1789554679505",
+        "id": "fb_1789563245655",
         "stageId": "01-requirement-analyzer",
         "status": "APPROVED",
         "comment": "Approved via ARIA UI",
-        "content": "Features: 1, Stories: 5",
-        "timestamp": "2026-09-16T10:31:19.505Z"
+        "content": "Features: 1, Stories: 1",
+        "timestamp": "2026-09-16T12:54:05.655Z"
       },
       {
-        "id": "fb_1789555040967",
+        "id": "fb_1789563345328",
         "stageId": "02-test-case-generator",
         "status": "APPROVED",
         "comment": "Approved via ARIA UI",
         "content": "",
-        "timestamp": "2026-09-16T10:37:20.967Z"
+        "timestamp": "2026-09-16T12:55:45.329Z"
       },
       {
-        "id": "fb_1789555041021",
+        "id": "fb_1789563345390",
         "stageId": "02-test-case-generator",
         "status": "APPROVED",
         "comment": "Approved via ARIA UI",
-        "content": "TCs: 29",
-        "timestamp": "2026-09-16T10:37:21.021Z"
+        "content": "TCs: 13",
+        "timestamp": "2026-09-16T12:55:45.390Z"
       },
       {
-        "id": "fb_1789555306207",
+        "id": "fb_1789563590051",
         "stageId": "03-test-case-reviewer",
         "status": "APPROVED",
         "comment": "Approved Agent 03 review",
         "content": "",
-        "timestamp": "2026-09-16T10:41:46.207Z"
+        "timestamp": "2026-09-16T12:59:50.051Z"
       },
       {
-        "id": "fb_1789555306258",
+        "id": "fb_1789563590115",
         "stageId": "03-test-case-reviewer",
         "status": "APPROVED",
         "comment": "Approved Agent 03 review",
-        "content": "Grade: B, Score: 84",
-        "timestamp": "2026-09-16T10:41:46.258Z"
+        "content": "Grade: A, Score: 94",
+        "timestamp": "2026-09-16T12:59:50.115Z"
       },
       {
-        "id": "fb_1789555327395",
+        "id": "fb_1789563629097",
         "stageId": "04-test-data-generator",
         "status": "APPROVED",
         "comment": "Approved test data synthesis and centralized fixtures.",
         "content": "",
-        "timestamp": "2026-09-16T10:42:07.395Z"
+        "timestamp": "2026-09-16T13:00:29.097Z"
       },
       {
-        "id": "fb_1789555327420",
+        "id": "fb_1789563629121",
         "stageId": "04-test-data-generator",
         "status": "APPROVED",
         "comment": "Approved test data synthesis and centralized fixtures.",
-        "content": "Resolved: 4, Unresolved: 2, Pending clarifications: 2",
-        "timestamp": "2026-09-16T10:42:07.420Z"
+        "content": "Resolved: 4, Unresolved: 0, Pending clarifications: 0",
+        "timestamp": "2026-09-16T13:00:29.121Z"
+      },
+      {
+        "id": "fb_1789567808653",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "",
+        "timestamp": "2026-09-16T14:10:08.653Z"
+      },
+      {
+        "id": "fb_1789567832333",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "Approved Agent 03 review",
+        "content": "",
+        "timestamp": "2026-09-16T14:10:32.333Z"
+      },
+      {
+        "id": "fb_1789567856360",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "Approved test data synthesis and centralized fixtures.",
+        "content": "",
+        "timestamp": "2026-09-16T14:10:56.360Z"
+      },
+      {
+        "id": "fb_1789568278023",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "Approved Playwright automation test scripts and Page Object Models.",
+        "content": "",
+        "timestamp": "2026-09-16T14:17:58.023Z"
       }
     ],
     "performanceBaselines": {},
     "resolvedClarifications": [
       {
-        "id": "clq_1789554651038",
-        "question": "What is the exact error message text displayed when the user submits the login form with an empty Username field?",
+        "id": "clq_1789561364094",
+        "question": "What is the exact text of the error message displayed when the user submits the form with an empty Username field?",
         "answer": "Epic sadface: Username is required",
         "stageId": "01-requirement-analyzer",
-        "resolvedAt": "2026-09-16T10:30:51.038Z"
+        "resolvedAt": "2026-09-16T12:22:44.094Z"
       },
       {
-        "id": "clq_1789554651042",
-        "question": "What is the exact error message text displayed when the user submits the login form with an empty Password field?",
+        "id": "clq_1789561364098",
+        "question": "What is the exact text of the error message displayed when the user submits the form with an empty Password field?",
         "answer": "Epic sadface: Password is required",
         "stageId": "01-requirement-analyzer",
-        "resolvedAt": "2026-09-16T10:30:51.042Z"
+        "resolvedAt": "2026-09-16T12:22:44.098Z"
       },
       {
-        "id": "clq_1789554651045",
-        "question": "Is the instruction to contact support part of the same error message string as 'Epic sadface: Sorry, this user has been locked out.' or is it a separate text element, and if so what is its exact wording?",
-        "answer": "In case the user uses the credentials: Username - locked_out_user and Password - secret_sauce and then clicks on Login button. Just show the error message  'Epic sadface: Sorry, this user has been locked out.' in the login page.",
+        "id": "clq_1789561381967",
+        "question": "The requirement uses the word 'recommended' for the",
+        "answer": "Skip",
         "stageId": "01-requirement-analyzer",
-        "resolvedAt": "2026-09-16T10:30:51.045Z"
+        "resolvedAt": "2026-09-16T12:23:01.967Z"
+      },
+      {
+        "id": "clq_1789563238141",
+        "question": "Should the Login button be enabled at all times regardless of form state, or should it only become active/enabled once both the Username and Password fields are populated?",
+        "answer": "Yes",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-16T12:53:58.141Z"
+      },
+      {
+        "id": "clq_1789563238145",
+        "question": "Is the login page required to be functional and tested on mobile viewports (e.g. 375px), or is the scope limited to desktop devices only?",
+        "answer": "Desktop devices only",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-16T12:53:58.146Z"
+      },
+      {
+        "id": "clq_1789563238149",
+        "question": "What is the exact visible text of the 'contact support' instruction shown to the locked-out user — is it part of the error message string itself, or a separate element on the page?",
+        "answer": "Epic sadface: Sorry, this user has been locked out.",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-16T12:53:58.149Z"
+      },
+      {
+        "id": "clq_1789563238153",
+        "question": "What is the measurable latency threshold (in milliseconds or seconds) that defines the expected slow-load behaviour for performance_glitch_user — i.e. what value distinguishes a pass from a fail?",
+        "answer": "Ignore this latest value.",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-16T12:53:58.153Z"
+      },
+      {
+        "id": "clq_1789563238157",
+        "question": "Under what conditions is the error icon displayed (always with every error, or only for specific error types)? What is the visible or accessible label/alt text of the error icon?",
+        "answer": "Skip this question",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-16T12:53:58.157Z"
+      },
+      {
+        "id": "clq_1789563238161",
+        "question": "Is #E2453C the required (mandatory) colour for error message text, or is it merely a suggestion that allows other red shades?",
+        "answer": "Yes",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-16T12:53:58.161Z"
+      },
+      {
+        "id": "clq_1789563238165",
+        "question": "If the Username field contains only whitespace characters (e.g. spaces) and is submitted after trimming, which error message is displayed — 'Epic sadface: Username is required' or a different message?",
+        "answer": "Epic sadface: Username is required",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-16T12:53:58.165Z"
+      },
+      {
+        "id": "clq_1789563238169",
+        "question": "What is the URL path of the login page (e.g. '/', '/login', '/index.html') that tests should navigate to as a precondition?",
+        "answer": "https://www.saucedemo.com/",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-16T12:53:58.169Z"
+      },
+      {
+        "id": "clq_1789567744521",
+        "question": "Given that scope is confirmed as desktop only, should the '320px to 2560px viewport width' range in Section 3.2 and the '375px mobile' reference in Section 2.5.1 be treated as out of scope entirely, or is there a minimum desktop viewport width that must be tested?",
+        "answer": "No . Ignore the viewport condition.",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-16T14:09:04.521Z"
+      },
+      {
+        "id": "clq_1789567744523",
+        "question": "What is the exact visible text content of the Credentials Info Box on the login page (e.g. the full string listing usernames and the password hint)?",
+        "answer": "Accepted usernames are:\nstandard_user\nlocked_out_user\nproblem_user\nperformance_glitch_user\nerror_user\nvisual_user\nPassword for all users:\nsecret_sauce",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-16T14:09:04.523Z"
+      },
+      {
+        "id": "clq_1789567744525",
+        "question": "Is there a separate visible UI element (e.g. a link, a second line of text) instructing the locked-out user to contact support, distinct from the error message string 'Epic sadface: Sorry, this user has been locked out.'? If so, what is its exact visible text?",
+        "answer": "No. This is the exact error message - \"Epic sadface: Sorry, this user has been locked out\" which get displayed when user tries to login in",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-16T14:09:04.525Z"
+      },
+      {
+        "id": "clq_1789567744527",
+        "question": "Confirmed via resolved clarification that #E2453C is mandatory — no further action needed. Raised only to document the textual contradiction between 'recommended' in the spec and the resolved answer.",
+        "answer": "No it is not mandatory.",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-16T14:09:04.527Z"
+      },
+      {
+        "id": "clq_1789567744530",
+        "question": "Resolved clarification states to ignore the latency threshold. This scenario can only be verified as a functional login (redirect to /inventory.html occurs) without a performance assertion. Is that the intended test scope for performance_glitch_user?",
+        "answer": "skip this test case.",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-16T14:09:04.530Z"
+      },
+      {
+        "id": "clq_1789567744532",
+        "question": "Are error messages displayed as an in-page styled element (part of the DOM) or as a browser-native alert() dialog? And are they positioned below the form fields or below the Login button?",
+        "answer": "part of the DOM. Position is over the password text box.",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-16T14:09:04.532Z"
       }
     ],
     "stableTestIds": [],
@@ -110,11 +240,11 @@
       "appliesTo": "04-test-data-generator",
       "action": "REUSE_DATA_PATTERNS",
       "data": {
-        "invalidUsername": "aria_unknown_user_08e5a9a1",
-        "invalidPassword": "Aria_Wrong_08e5a9a1!"
+        "invalidUsername": "aria_unknown_user_faa53236"
       },
-      "addedAt": "2026-09-16T10:41:51.282Z",
-      "activeCount": 0
+      "addedAt": "2026-09-16T14:10:38.520Z",
+      "activeCount": 0,
+      "updatedAt": "2026-09-16T14:10:38.522Z"
     }
   ],
   "metrics": {

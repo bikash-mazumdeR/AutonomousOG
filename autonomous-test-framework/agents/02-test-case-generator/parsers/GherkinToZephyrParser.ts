@@ -17,7 +17,7 @@
  * @version 2.0.0
  */
 
-import { TEST_DATA_LINE } from '../constants';
+import { TEST_DATA_LINE, UNCOVERED_DECLARATION } from '../constants';
 
 export type ActionKeyword = 'Given' | 'When';
 
@@ -40,11 +40,21 @@ export interface ParsedScenario {
   errors: string[];
 }
 
+/** A criterion the model declared uncoverable because only an excluded type could verify it. */
+export interface UncoveredDeclaration {
+  /** Requirement id, e.g. "AC-3". */
+  ref: string;
+  /** Lower-cased type tag without "@", e.g. "negative". */
+  typeTag: string;
+}
+
 /** Parser output. */
 export interface GherkinParseResult {
   scenarios: ParsedScenario[];
   /** Errors not attributable to a scenario. */
   errors: string[];
+  /** "# UNCOVERED AC-N: @type" declarations. */
+  declaredUncovered: UncoveredDeclaration[];
 }
 
 interface StepDraft {
@@ -156,6 +166,11 @@ function processStep(state: ParserState, keyword: string, text: string, lineNo: 
 }
 
 function processLine(state: ParserState, line: string, lineNo: number): void {
+  const declaration = line.match(UNCOVERED_DECLARATION);
+  if (declaration) {
+    state.result.declaredUncovered.push({ ref: declaration[1].toUpperCase(), typeTag: declaration[2].toLowerCase() });
+    return;
+  }
   if (!line || line.startsWith('#') || line.startsWith('```')) return;
   if (line.startsWith('@')) {
     state.pendingTags.push(...line.split(/\s+/).map((tag) => tag.replace(/^@/, '').replace(/,$/, '').toLowerCase()).filter(Boolean));
@@ -190,7 +205,7 @@ function processLine(state: ParserState, line: string, lineNo: number): void {
  */
 export function parseGherkinScenarios(content: string): GherkinParseResult {
   const state: ParserState = {
-    result: { scenarios: [], errors: [] }, pendingTags: [], scenario: null, draft: null,
+    result: { scenarios: [], errors: [], declaredUncovered: [] }, pendingTags: [], scenario: null, draft: null,
   };
   String(content || '').split(/\r?\n/).forEach((raw, idx) => processLine(state, raw.trim(), idx + 1));
   closeScenario(state);

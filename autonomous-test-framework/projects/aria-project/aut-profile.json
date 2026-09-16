@@ -8,7 +8,24 @@
     "entryPaths": ["/"],
     "maxDepth": 3,
     "dynamicIdPatterns": [],
-    "executeTestSteps": true
+    "executeTestSteps": true,
+    "extraLocators": [
+      {
+        "name": "errorMessageContainer",
+        "css": ".error-message-container",
+        "description": "container of the login error message that carries its background colour"
+      },
+      {
+        "name": "usernameErrorIcon",
+        "css": ".form_group:has([data-test=\"username\"]) svg.error_icon",
+        "description": "error icon inside the Username field"
+      },
+      {
+        "name": "passwordErrorIcon",
+        "css": ".form_group:has([data-test=\"password\"]) svg.error_icon",
+        "description": "error icon inside the Password field"
+      }
+    ]
   },
   "auth": {
     "strategy": "form",

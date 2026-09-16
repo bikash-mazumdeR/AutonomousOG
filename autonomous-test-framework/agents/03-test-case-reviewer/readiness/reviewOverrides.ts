@@ -6,8 +6,10 @@
  */
 
 import { Clarification, ClarificationStore } from '../../../core/clarifications/ClarificationStore';
+import { isNonAnswer, nonAnswerMessage } from '../../../core/clarifications/answerQuality';
 import { REVIEW_STATUS } from '../../../core/types';
 import { ReviewReadinessContext } from './holdReview';
+import { EDITABLE_FIELDS, recordHumanEdit } from './humanEdits';
 import { OpenReviewClarification, collectOpenClarifications, refreshReviewReadiness } from './reviewReadiness';
 
 /** Result of a human decision. */
@@ -42,6 +44,7 @@ export interface ReviewOverride {
   objective?: string;
   precondition?: string;
   testSteps?: any[];
+  labels?: string[];
   reviewNotes?: string[];
   decidedBy?: string;
 }
@@ -71,10 +74,16 @@ export interface ClarifyResult {
   clarification?: Clarification;
 }
 
-function applyFields(tc: any, body: ReviewOverride): void {
+/**
+ * Applies edited fields and returns the ones whose value actually changed.
+ * @returns {string[]}
+ */
+function applyFields(tc: any, body: ReviewOverride): typeof EDITABLE_FIELDS[number][] {
+  const snapshot = Object.fromEntries(EDITABLE_FIELDS.map((field) => [field, JSON.stringify(tc[field])]));
   if (typeof body.name === 'string' && body.name.trim()) tc.name = body.name.trim();
   if (typeof body.objective === 'string') tc.objective = body.objective.trim();
   if (typeof body.precondition === 'string') tc.precondition = body.precondition.trim();
+  if (Array.isArray(body.labels)) tc.labels = body.labels.map((label) => String(label).trim()).filter(Boolean);
   if (Array.isArray(body.reviewNotes)) tc.reviewNotes = body.reviewNotes;
   if (Array.isArray(body.testSteps)) {
     tc.testSteps = body.testSteps.map((step: any) => ({
@@ -84,6 +93,7 @@ function applyFields(tc: any, body: ReviewOverride): void {
       expectedResult: String(step.expectedResult || '').trim(),
     }));
   }
+  return EDITABLE_FIELDS.filter((field) => JSON.stringify(tc[field]) !== snapshot[field]);
 }
 
 /** A manual or rejected test case leaves no open questions behind. */
@@ -111,11 +121,14 @@ export function applyReviewOverride(reviewedOutput: any, body: ReviewOverride, s
   const tc = (draft?.reviewedZephyrExport?.testCases || []).find((candidate: any) => candidate.key === body.key);
   if (!tc) return { outcome: DECISION_OUTCOME.NOT_FOUND, message: `Reviewed test case ${body.key} not found.` };
 
-  applyFields(tc, body);
+  const decidedBy = body.decidedBy?.trim() || DEFAULT_DECIDER;
+  const changedFields = applyFields(tc, body);
+  const statusChanged = Boolean(status) && status !== tc.reviewStatus;
   if (status) {
     tc.reviewStatus = status;
-    settleOpenQuestions(store, tc.key, status, body.decidedBy?.trim() || DEFAULT_DECIDER);
+    settleOpenQuestions(store, tc.key, status, decidedBy);
   }
+  recordHumanEdit(tc, { fields: changedFields, reviewStatus: statusChanged ? status : undefined, editedBy: decidedBy });
   refreshReviewReadiness(draft, store, ctx);
   if (APPROVING_STATUSES.has(status) && !APPROVING_STATUSES.has(tc.reviewStatus)) {
     return {
@@ -145,6 +158,9 @@ export function applyClarificationDecision(store: ClarificationStore, decision: 
   if (action === CLARIFY_ACTION.ANSWER) {
     const answer = decision.answer?.trim();
     if (!answer) return { outcome: DECISION_OUTCOME.INVALID, message: 'An answer is required.' };
+    if (isNonAnswer(answer)) {
+      return { outcome: DECISION_OUTCOME.INVALID, message: nonAnswerMessage(answer, 'dismiss the question if it does not apply, or mark the test case manual') };
+    }
     if (existing.context.requiresDecision) {
       return { outcome: DECISION_OUTCOME.INVALID, message: 'Earlier answers did not resolve this question: mark the test case manual, dismiss the question or reject the test case.' };
     }

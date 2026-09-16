@@ -9,7 +9,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-export type LocatorStrategy = 'testId' | 'role' | 'label' | 'placeholder' | 'text' | 'id';
+/** `css` is used only for locators the AUT profile declares (discovery.extraLocators), never inferred. */
+export type LocatorStrategy = 'testId' | 'role' | 'label' | 'placeholder' | 'text' | 'id' | 'css';
 
 /** A verified element (its locator resolved to exactly one element when discovered). */
 export interface PageElement {
@@ -20,6 +21,8 @@ export interface PageElement {
   role?: string;
   accessibleName?: string;
   inputType?: string;
+  /** What the element is, for profile-declared locators (shown in the page contract). */
+  description?: string;
 }
 
 /** A discovered application state, keyed by URL path. */

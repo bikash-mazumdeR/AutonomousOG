@@ -196,6 +196,7 @@ export async function discoverFeature(params: DiscoverFeatureParams): Promise<Di
       testIdAttribute: profile.testIdAttribute,
       dynamicIdPatterns: (profile.discovery.dynamicIdPatterns || []).map((pattern) => new RegExp(pattern)),
       headless: params.headless,
+      extraLocators: profile.discovery.extraLocators || [],
     });
     for (const entryPath of profile.discovery.entryPaths) {
       // eslint-disable-next-line no-await-in-loop -- one browser page, sequential navigation
@@ -221,7 +222,7 @@ export async function discoverFeature(params: DiscoverFeatureParams): Promise<Di
   }
 
   pageMap.traces = traces;
-  pageMap.flows = extractFlows(pageMap);
+  pageMap.flows = extractFlows(pageMap, params.testCases);
   savePageMap(params.pageMapFile, pageMap);
   return { pageMap, issues };
 }

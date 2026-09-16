@@ -107,13 +107,14 @@ export function locatorExpression(element: Pick<PageElement, 'strategy' | 'args'
     case 'label': return `this.page.getByLabel(${first}, { exact: true })`;
     case 'placeholder': return `this.page.getByPlaceholder(${first}, { exact: true })`;
     case 'text': return `this.page.getByText(${first}, { exact: true })`;
+    case 'css': return `this.page.locator(${first})`;
     default: return `this.page.locator(${JSON.stringify(cssIdSelector(element.args[0]))})`;
   }
 }
 
 function describeElement(element: PageElement, state: PageState): string {
   const kind = element.inputType === 'password' ? 'password input' : (element.role || element.tag);
-  const name = element.accessibleName ? ` "${element.accessibleName}"` : '';
+  const name = element.accessibleName ? ` "${element.accessibleName}"` : (element.description ? ` — ${element.description}` : '');
   return `${kind}${name} (state: ${state.name})`.replace(/\*\//g, '* /');
 }
 

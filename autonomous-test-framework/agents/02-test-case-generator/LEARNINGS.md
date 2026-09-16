@@ -2,6 +2,7 @@
 
 This document records architectural, specification, and scenario design rules learned from real test automation failures. These guardrails prevent generating infeasible, incomplete, or flawed test cases.
 
+<!-- type:negative,edge -->
 ---
 
 ## 1. Negative & Boundary Test Case Step Completeness (Populate Sibling Mandatory Fields)
@@ -11,6 +12,7 @@ This document records architectural, specification, and scenario design rules le
   * **Step 1:** Enter boundary/invalid input into Target Field (e.g. username: -1 or A * 300 or ' OR '1'='1).
   * **Step 2:** Enter valid input into all other required fields (e.g. password: {{validPassword}}).
   * **Step 3:** Submit form and verify expected target validation message (e.g. Username and password do not match).
+<!-- /type -->
 
 ---
 
@@ -20,11 +22,13 @@ This document records architectural, specification, and scenario design rules le
   * For pure UI client apps without documented backend APIs, do not generate test cases that require intercepting network POST calls.
   * Verify frontend security posture (HTTPS protocol, secure cookies, form action targets) rather than phantom backend requests.
 
+<!-- type:negative,edge -->
 ---
 
 ## 3. Specification Realities vs Target AUT Behavior (Whitespace & Field Trimming)
 * **Issue:** PRD specifications often recommend or demand whitespace trimming (e.g., Username field trims leading/trailing spaces). However, public demo sites (like SauceDemo) often evaluate whitespace literally and reject  standard_user  as invalid credentials.
 * **Rule:** In test case definitions involving whitespace, explicitly note whether whitespace is expected to be accepted (trimmed) or rejected by the AUT. If the AUT strictly validates credentials character-by-character without trimming, document the test case accordingly so automated verification expects the actual credential validation response rather than an impossible success redirect.
+<!-- /type -->
 
 ---
 

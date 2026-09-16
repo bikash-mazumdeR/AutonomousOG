@@ -1,6 +1,6 @@
 # SKILL: Requirement Deep Analyzer
 ## Agent ID: 01-requirement-analyzer
-## Version: 1.0.0
+## Version: 1.1.0
 ## Classification: Core — Critical Path
 
 ---
@@ -19,8 +19,13 @@ for all downstream test generation.
 This agent applies the following mental models in sequence:
 
 ### Step 1: Decomposition
-Break every requirement into atomic units:
-- **Feature** → Sub-feature → User Story → Acceptance Criteria
+Break every requirement into atomic acceptance criteria, keeping the document's own structure:
+- **Feature** → User Story → Acceptance Criteria
+- **One analysed user story per user story the document defines** (a story id, or an "As a … I want … so that …"
+  narrative), with the document's story id in `sourceStoryId`. Flows, sections, tables, personas and test accounts
+  are acceptance criteria and business rules of that story — never separate stories.
+- A document without any user story yields one story per feature (`sourceStoryId: null`).
+- Each criterion appears once; never restate it in other words or in another story.
 
 ### Step 2: Business Logic Extraction
 Identify:
@@ -53,6 +58,8 @@ Flag any requirement that is:
 - Contradicting another requirement
 - Missing error/exception flows
 - Incomplete RBAC specification
+- Contradicting another statement in the same document (quote both; never silently pick one)
+- Using a qualitative limit without a number ("slow", "noticeable latency"), or marked "clarify" by the document itself
 - Missing automation prerequisites: exact element or message text, how a stored state is visible to the user, the
   landing URL path, concrete test values and boundaries, preconditions, environment or authentication
 
@@ -97,6 +104,7 @@ Flag any requirement that is:
       "userStories": [
         {
           "id": "US001",
+          "sourceStoryId": "story id exactly as written in the document | null",
           "title": "string",
           "role": "string",
           "goal": "string",
@@ -189,6 +197,9 @@ Flag any requirement that is:
 ✗ Do NOT assume registration/signup flows unless the requirement mentions them
 ✗ Do NOT invent API endpoints, error codes, or integration points
 ✗ Do NOT expand a scoped requirement into a broader system requirement
+✗ Do NOT split one documented user story into several stories
+✗ Do NOT add accessibility labels, attributes or behaviours for elements the document does not describe
+✗ Do NOT turn internal implementation statements (e.g. "parameterized queries") into acceptance criteria — list them as assumptions
 ```
 
 ### Common hallucination patterns to actively avoid:
@@ -213,6 +224,10 @@ An ambiguity is INVALID (must NOT be raised) if:
 ## ✅ QUALITY CHECKLIST (Before Declaring Complete)
 
 - [ ] Every feature has at least one user story
+- [ ] Exactly one user story per story the document defines, each with its `sourceStoryId`
+- [ ] No acceptance criterion is repeated within or across stories
+- [ ] Every contradiction and unquantified limit is raised as an ambiguity
+- [ ] Every test data `sourceRef` points at a criterion or rule containing that value
 - [ ] Every user story has at least one acceptance criterion
 - [ ] All state machines are fully mapped (no dangling states)
 - [ ] All integration points are identified

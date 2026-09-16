@@ -9,7 +9,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import {
   API_TYPES, PERF_TYPES, SKILLS_DIR, GENERIC_LEARNINGS_DIR, SKILL_FILES, GENERIC_LEARNINGS_FILES,
-  PROJECT_LEARNINGS_FILES, GenerationMode,
+  PROJECT_LEARNINGS_FILES, DISCOVERY_LEARNINGS_FILE, GenerationMode,
 } from '../../constants';
 
 const PROJECT_NOTES_HEADING = '# Project notes (lower authority than the approved test case and the page contract)';
@@ -98,6 +98,7 @@ export function loadGenerationPrompt(mode: GenerationMode, projectLearningsDir?:
 export function loadDiscoveryPrompt(projectLearningsDir?: string | null): string {
   return [
     readRequired(path.join(SKILLS_DIR, SKILL_FILES.DISCOVERY)),
+    readOptional(path.join(GENERIC_LEARNINGS_DIR, DISCOVERY_LEARNINGS_FILE)),
     projectNotes(projectLearningsDir, PROJECT_LEARNINGS_FILES.UI),
   ].filter(Boolean).join('\n\n---\n\n');
 }

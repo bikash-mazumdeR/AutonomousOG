@@ -21,11 +21,25 @@ export interface LLMChatOptions {
 
 export interface LLMResponse {
   text: string;
+  /** True when the model stopped because it reached the output token limit (the text is incomplete). */
+  truncated?: boolean;
   usage?: {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
+    /** Input tokens served from the provider's prompt cache (not included in promptTokens). */
+    cacheReadTokens?: number;
+    /** Input tokens written to the provider's prompt cache (not included in promptTokens). */
+    cacheWriteTokens?: number;
   };
+}
+
+/**
+ * Whether prompt caching of the system message is enabled (LLM_PROMPT_CACHE, default on).
+ * @returns {boolean}
+ */
+export function isPromptCacheEnabled(): boolean {
+  return String(process.env.LLM_PROMPT_CACHE ?? 'true').toLowerCase() !== 'false';
 }
 
 export interface LLMProvider {

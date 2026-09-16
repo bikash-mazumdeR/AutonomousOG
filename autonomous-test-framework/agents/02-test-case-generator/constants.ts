@@ -52,6 +52,44 @@ export const MIN_TC_BY_RISK: Readonly<Record<RiskLevel, { positive: number; nega
   LOW: { positive: 1, negative: 1, edge: 0 },
 });
 
+/** UI test types the user selects per run; each selected type needs at least MIN_TC_PER_STORY_PER_TYPE per story. */
+export const SELECTABLE_UI_TYPE_TAGS: readonly string[] = Object.freeze(['positive', 'negative', 'edge']);
+
+/** Every selected UI type is generated at least this many times per user story. */
+export const MIN_TC_PER_STORY_PER_TYPE = 1;
+
+const DEFAULT_MAX_TC_PER_STORY_PER_TYPE = 4;
+
+/**
+ * Upper bound of scenarios per type per story (caps output tokens). Override with AGENT02_MAX_TC_PER_TYPE.
+ * A story is never capped below its number of acceptance criteria and business rules, so a large story (one per
+ * documented user story) can still cover every criterion.
+ * @param {number} [requirementCount] - Acceptance criteria + business rules of the story
+ * @returns {number}
+ */
+export function maxTcPerStoryPerType(requirementCount = 0): number {
+  const configured = Number(process.env.AGENT02_MAX_TC_PER_TYPE);
+  const base = Number.isInteger(configured) && configured >= MIN_TC_PER_STORY_PER_TYPE ? configured : DEFAULT_MAX_TC_PER_STORY_PER_TYPE;
+  return Math.max(base, requirementCount);
+}
+
+/**
+ * App-agnostic wording of a failure outcome. A @positive scenario asserting one of these verifies
+ * @negative behaviour — the classic way an LLM smuggles excluded negatives past the type filter.
+ * Negated forms ("no error", "without an error") are stripped before matching.
+ */
+export const FAILURE_OUTCOME_PATTERN = new RegExp(
+  '\\b(?:error|errors|invalid|locked[ -]?out|denied|rejected|forbidden|unauthori[sz]ed|fails?|failed|failure'
+  + '|is required|are required|do(?:es)? not match|not (?:redirected|allowed|permitted|logged in|authenticated|granted))\\b',
+  'i',
+);
+
+/** Negated failure phrases that describe a success outcome ("no error message is displayed"). */
+export const NEGATED_FAILURE_PHRASE = /\b(?:no|without(?: an?| any)?|not display(?:ing)?(?: an?| any)?)\s+(?:\w+\s+){0,2}?(?:error|errors|failure)s?\b/gi;
+
+/** Output line declaring a criterion that only an excluded type could verify: "# UNCOVERED AC-3: @negative". */
+export const UNCOVERED_DECLARATION = /^#\s*UNCOVERED\s+((?:AC|BR)-\d+)\s*:\s*@?([a-z]+)/i;
+
 /** Risk levels whose stories must tag their primary happy path @smoke. */
 export const SMOKE_REQUIRED_RISKS: ReadonlySet<string> = new Set([RISK_LEVEL.CRITICAL, RISK_LEVEL.HIGH]);
 
@@ -115,6 +153,9 @@ export const LLM_SETTINGS = Object.freeze({
 });
 
 export const MAX_REJECTION_FEEDBACK_IN_PROMPT = 5;
+
+/** Memory improvement rules with this appliesTo value apply to every stage. */
+export const ALL_STAGES = 'ALL';
 
 /** CLI/UI skip option → excluded type tag. */
 export const SKIP_OPTIONS: Readonly<Record<string, string>> = Object.freeze({

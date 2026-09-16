@@ -331,9 +331,13 @@ function stateWords(stateName: string): string[] {
     .filter((word) => word.length >= MIN_STATE_WORD_LENGTH);
 }
 
+/** Expected results stating the user stays where they are. */
+const STAYS_ON_PAGE = /\b(?:remains?|stays?|is still|are still) on\b|\bno (?:redirect|redirection|navigation)\b|\bnot (?:redirected|navigated)\b|\bdoes not (?:redirect|navigate|leave)\b/i;
+
 /**
  * URL path of the state discovery verified after a step. It may be used as a `toHaveURL` value only when the step's
- * expected result names that state (one of the state name's words appears in it).
+ * expected result names that state (one of the state name's words appears in it), or when the step says the user stays
+ * on the page and discovery saw the same URL before and after the step.
  * @param {ValidationContext} ctx
  * @param {number} stepIndex
  * @returns {string|undefined}
@@ -342,6 +346,12 @@ export function verifiedUrlFor(ctx: ValidationContext, stepIndex: number): strin
   const verified = ctx.verifiedStates?.[stepIndex];
   if (!verified) return undefined;
   const expected = (ctx.tc.steps.find((s) => s.index === stepIndex)?.expected.join(' ') || '').toLowerCase();
+  if (STAYS_ON_PAGE.test(expected)) {
+    // "Remains on the page / no redirect": the URL discovery saw before the step, and still saw after it, may be asserted.
+    // The state words are ignored here — "no redirect to the dashboard page" must never allow the dashboard URL.
+    const before = ctx.verifiedStates?.[stepIndex - 1];
+    return before && before.urlPath === verified.urlPath ? verified.urlPath : undefined;
+  }
   return stateWords(verified.state).some((word) => expected.includes(word)) ? verified.urlPath : undefined;
 }
 

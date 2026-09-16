@@ -10,6 +10,7 @@ import { holdUnreadyTestCases } from '../../agents/03-test-case-reviewer/readine
 import { refreshReviewReadiness } from '../../agents/03-test-case-reviewer/readiness/reviewReadiness';
 import { applyClarificationDecision, applyReviewOverride } from '../../agents/03-test-case-reviewer/readiness/reviewOverrides';
 import { TestCaseReviewerAgent } from '../../agents/03-test-case-reviewer/agent';
+import { carryForwardHumanEdits, reapplyHumanStatuses } from '../../agents/03-test-case-reviewer/readiness/humanEdits';
 
 jest.mock('p-retry', () => ({ __esModule: true, default: jest.fn(), AbortError: class extends Error {} }), { virtual: true });
 jest.mock('../../core/llm/LLMClient', () => ({ llmClient: { chat: jest.fn(), getStageUsage: jest.fn() } }));
@@ -204,5 +205,62 @@ describe('Agent 03 human review decisions', () => {
     expect(applyClarificationDecision(store, { id, action: 'mark_manual' })).toMatchObject({ outcome: 'UPDATED', clarification: { status: 'MANUAL' } });
     holdUnreadyTestCases([tc], store);
     expect(tc.reviewStatus).toBe('MANUAL');
+  });
+});
+
+describe('Agent 03 held test cases can be understood, fixed and survive a re-run', () => {
+  const review = (...testCases: any[]): any => ({ reviewedZephyrExport: { testCases } });
+  const fixedSteps = [{ ...givenStep }, { keyword: 'When', description: 'the user submits the form', testData: '{{unknownUsername}}', expectedResult: 'The error "Unknown user" is displayed' }];
+
+  it('explains each hold with the step, the exact line and the finding', () => {
+    const store = new ClarificationStore(`${PROJECT}-i`);
+    const tc = testCase('TC-030');
+    holdUnreadyTestCases([tc], store);
+    expect(tc.openClarifications).toEqual([expect.objectContaining({
+      stepIndex: 2, subject: 'An error message is displayed', ruleId: expect.any(String), detail: expect.any(String), requiresDecision: false,
+    })]);
+  });
+
+  it('records human edits and a changed status on the reviewed test case', () => {
+    const store = new ClarificationStore(`${PROJECT}-j`);
+    const stored = review(testCase('TC-031'));
+    refreshReviewReadiness(stored, store);
+    const fixed = applyReviewOverride(stored, { key: 'TC-031', testSteps: fixedSteps, labels: ['UI'], decidedBy: 'qa-lead' }, store);
+    expect(fixed.outcome).toBe('UPDATED');
+    expect(fixed.testCase).toMatchObject({
+      reviewStatus: 'PASSED', labels: ['UI'], humanEdit: { baseHash: 'hash-TC-031', fields: ['testSteps', 'labels'], editedBy: 'qa-lead' },
+    });
+    expect(fixed.testCase.humanEdit.reviewStatus).toBeUndefined();
+
+    const rejected = applyReviewOverride(fixed.reviewedOutput, { key: 'TC-031', reviewStatus: 'REJECTED' }, store);
+    expect(rejected.testCase.humanEdit).toMatchObject({ fields: ['testSteps', 'labels'], reviewStatus: 'REJECTED' });
+  });
+
+  it('re-runs the review on the fixed steps instead of holding the test case again', () => {
+    const store = new ClarificationStore(`${PROJECT}-k`);
+    const stored = review(testCase('TC-032'));
+    refreshReviewReadiness(stored, store);
+    const { reviewedOutput } = applyReviewOverride(stored, { key: 'TC-032', testSteps: fixedSteps }, store);
+
+    const fromAgent02 = [testCase('TC-032'), testCase('TC-033', { testSteps: [{ ...givenStep }] })];
+    const { testCases, carried, discarded } = carryForwardHumanEdits(fromAgent02, reviewedOutput);
+    expect(carried).toEqual(['TC-032']);
+    expect(discarded).toEqual([]);
+    expect(testCases[0].testSteps).toEqual(fixedSteps);
+    expect(fromAgent02[0].testSteps[1].expectedResult).toBe('An error message is displayed');
+    expect(holdUnreadyTestCases(testCases, store).held).toEqual([]);
+    expect(testCases[0].reviewStatus).toBe('PASSED');
+  });
+
+  it('drops edits made on content Agent 02 has since regenerated, and restores explicit human statuses', () => {
+    const previous = review({ ...testCase('TC-034'), testSteps: fixedSteps, humanEdit: { baseHash: 'hash-TC-034', fields: ['testSteps'], reviewStatus: 'FLAGGED' } });
+    const regenerated = carryForwardHumanEdits([testCase('TC-034', { hash: 'hash-new' })], previous);
+    expect(regenerated).toMatchObject({ carried: [], discarded: ['TC-034'] });
+    expect(regenerated.testCases[0].humanEdit).toBeUndefined();
+
+    const same = carryForwardHumanEdits([testCase('TC-034')], previous).testCases;
+    same[0].reviewStatus = 'PASSED';
+    expect(reapplyHumanStatuses(same)).toEqual(['TC-034']);
+    expect(same[0].reviewStatus).toBe('FLAGGED');
   });
 });

@@ -23,6 +23,7 @@ import { loadAutProfile } from '../../core/aut/AutProfile';
 import { applyClarificationAnswers } from './readiness/applyAnswers';
 import { holdUnreadyTestCases } from './readiness/holdReview';
 import { collectOpenClarifications, describeOpenClarifications } from './readiness/reviewReadiness';
+import { carryForwardHumanEdits, reapplyHumanStatuses } from './readiness/humanEdits';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -170,8 +171,13 @@ class TestCaseReviewerAgent {
         unselectedTCs,
       );
 
+      // ── Phase 0: Carry human edits from the previous review (a re-run starts from Agent 02's unedited test cases) ──
+      const previousReview = await stateManager.getLatestArtifactForProject('reviewedTestCases');
+      const carriedEdits = carryForwardHumanEdits(selectedTCs, previousReview);
+      this._logger.info('Human review edits carried forward', { carried: carriedEdits.carried, discardedContentChanged: carriedEdits.discarded });
+
       // ── Phase 1: Duplicate Detection (on selected TCs only) ─────────────
-      const dedupedTCs = this._removeDuplicates(selectedTCs);
+      const dedupedTCs = this._removeDuplicates(carriedEdits.testCases);
       this._logger.info('Deduplication complete', {
         selected: selectedTCs.length,
         deduped: dedupedTCs.length,
@@ -203,11 +209,12 @@ class TestCaseReviewerAgent {
 
       // ── Phase 7: Apply Improvement Rules from Memory ──────────────────
       this._applyMemoryImprovements(reviewedTCs, memoryContext.improvementRules);
+      const restoredStatuses = reapplyHumanStatuses(reviewedTCs);
 
       // ── Phase 7b: Automation Readiness — hold and ask (after every status change above) ──
       const hold = holdUnreadyTestCases(reviewedTCs, store, { thresholdEnv: this._thresholdEnv() });
       this._logger.info('Automation readiness evaluated', {
-        held: hold.held.length, manual: hold.manual.length, appliedAnswers: appliedAnswers.length,
+        held: hold.held.length, manual: hold.manual.length, appliedAnswers: appliedAnswers.length, restoredStatuses: restoredStatuses.length,
       });
 
       // ── Phase 8: Calculate Quality Score ──────────────────────────────

@@ -81,15 +81,37 @@ function flowName(run: TraceRun, taken: Set<string>): string {
   return name;
 }
 
+/** Operations whose second consecutive use on the same element overwrites the first. */
+const OVERWRITING_OPS: ReadonlySet<string> = new Set(['fill', 'selectOption']);
+
+/**
+ * Whether a run repeats an overwriting action on the same element back to back (e.g. fill username, fill username).
+ * Such a run records a planning mistake — the first action has no effect — and must never become a reusable flow.
+ * @param {TraceRun} run
+ * @returns {boolean}
+ */
+export function hasRedundantActions(run: TraceRun): boolean {
+  return run.actions.some((action, idx) => {
+    const previous = run.actions[idx - 1];
+    return idx > 0 && OVERWRITING_OPS.has(action.op) && previous.op === action.op && !!action.element && previous.element === action.element;
+  });
+}
+
 /**
  * Builds the flows performed identically by at least FLOW_SETTINGS.MIN_USERS test cases. Deterministic for identical traces.
+ * When the test cases are given, only test cases the flow is applicable to count as users (and appear in `usedBy`),
+ * so a flow is never published as "verified by" a test case that is not allowed to call it.
  * @param {PageMap} map
+ * @param {AutomationTestCase[]} [testCases]
  * @returns {VerifiedFlow[]}
  */
-export function extractFlows(map: PageMap): VerifiedFlow[] {
+export function extractFlows(map: PageMap, testCases?: AutomationTestCase[]): VerifiedFlow[] {
+  const tcByKey = new Map((testCases || []).map((tc) => [tc.tcKey, tc]));
   const bySignature = new Map<string, { run: TraceRun; users: Set<string> }>();
   for (const trace of map.traces || []) {
+    const tc = tcByKey.get(trace.tcKey);
     for (const run of trace.runs) {
+      if (hasRedundantActions(run) || (testCases && (!tc || !assertsOnlyAfterLastStep(run, tc)))) continue;
       const signature = run.actions.length >= FLOW_SETTINGS.MIN_ACTIONS ? runSignature(map, run) : null;
       if (!signature) continue;
       const entry = bySignature.get(signature) || { run, users: new Set<string>() };

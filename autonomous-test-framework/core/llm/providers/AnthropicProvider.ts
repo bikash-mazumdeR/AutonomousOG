@@ -1,7 +1,9 @@
 'use strict';
 
 import axios from 'axios';
-import { LLMProvider, LLMChatOptions, LLMResponse } from './LLMProvider';
+import {
+  LLMProvider, LLMChatOptions, LLMResponse, isPromptCacheEnabled,
+} from './LLMProvider';
 
 export class AnthropicProvider implements LLMProvider {
   name = 'anthropic';
@@ -21,9 +23,13 @@ export class AnthropicProvider implements LLMProvider {
         content: m.content
       }));
 
+    const system = systemMessage && isPromptCacheEnabled()
+      ? [{ type: 'text', text: systemMessage, cache_control: { type: 'ephemeral' } }]
+      : systemMessage;
+
     const response = await axios.post(this.baseUrl, {
       model: options.model,
-      system: systemMessage,
+      system,
       messages: messages,
       max_tokens: options.max_tokens ?? 2000,
       temperature: options.temperature ?? 0.7,
@@ -38,10 +44,13 @@ export class AnthropicProvider implements LLMProvider {
 
     return {
       text: response.data.content[0].text,
+      ...(response.data.stop_reason === 'max_tokens' ? { truncated: true } : {}),
       usage: {
         promptTokens: response.data.usage?.input_tokens ?? 0,
         completionTokens: response.data.usage?.output_tokens ?? 0,
         totalTokens: (response.data.usage?.input_tokens ?? 0) + (response.data.usage?.output_tokens ?? 0),
+        cacheReadTokens: response.data.usage?.cache_read_input_tokens ?? 0,
+        cacheWriteTokens: response.data.usage?.cache_creation_input_tokens ?? 0,
       }
     };
   }

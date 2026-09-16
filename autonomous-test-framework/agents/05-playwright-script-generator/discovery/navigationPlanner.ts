@@ -30,8 +30,9 @@ export interface NavigationPlan {
   detail?: string;
 }
 
-function testCaseText(tc: AutomationTestCase): string {
-  return [tc.title, tc.precondition, ...tc.steps.flatMap((step) => [step.action, step.testData, ...step.expected])].join('\n');
+/** Text of one step; a literal value must come from the step it is attributed to, never from another step. */
+function stepText(step: AutomationTestCase['steps'][number] | undefined): string {
+  return step ? [step.action, step.testData, ...step.expected].join('\n') : '';
 }
 
 /**
@@ -72,7 +73,7 @@ export function buildPlannerRequest(
   }, null, 2);
 }
 
-function validateAction(action: any, index: number, currentState: PageState, tc: AutomationTestCase, text: string): string[] {
+function validateAction(action: any, index: number, currentState: PageState, tc: AutomationTestCase): string[] {
   const errors: string[] = [];
   const label = `actions[${index}]`;
   const step = tc.steps.find((s) => s.index === Number(action?.stepIndex));
@@ -85,8 +86,10 @@ function validateAction(action: any, index: number, currentState: PageState, tc:
   if (value?.binding !== undefined && !(step?.data || []).some((b) => b.token === value.binding)) {
     errors.push(`${label}.value.binding "${value.binding}" is not bound in step ${action?.stepIndex}`);
   }
-  if (value?.literal !== undefined && !text.includes(String(value.literal))) {
-    errors.push(`${label}.value.literal "${value.literal}" does not appear in the test case`);
+  if (value?.literal !== undefined && String(value.literal).trim() === '') {
+    errors.push(`${label}.value.literal must not be empty — "fill" replaces the existing content, so "clear X and enter Y" is one fill with Y`);
+  } else if (value?.literal !== undefined && step && !stepText(step).includes(String(value.literal))) {
+    errors.push(`${label}.value.literal "${value.literal}" does not appear in step ${step.index}; attribute each action to the step that describes it`);
   }
   if (['fill', 'selectOption', 'press'].includes(action?.op) && value?.binding === undefined && value?.literal === undefined) {
     errors.push(`${label} (${action?.op}) requires a value`);
@@ -106,8 +109,7 @@ export function validateNavigationPlan(raw: any, currentState: PageState, tc: Au
   if (!raw || !Array.isArray(raw.actions)) errors.push('actions must be an array');
   if (!STOP_REASONS.includes(raw?.stopReason)) errors.push(`stopReason must be one of ${STOP_REASONS.join(', ')}`);
   if (raw?.stopReason === 'NEEDS_NEW_STATE' && !Number.isInteger(raw?.nextStep)) errors.push('nextStep is required when stopReason is NEEDS_NEW_STATE');
-  const text = testCaseText(tc);
-  (raw?.actions || []).forEach((action: any, idx: number) => errors.push(...validateAction(action, idx, currentState, tc, text)));
+  (raw?.actions || []).forEach((action: any, idx: number) => errors.push(...validateAction(action, idx, currentState, tc)));
   if (errors.length > 0) return { errors };
   return {
     errors,

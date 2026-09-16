@@ -111,9 +111,31 @@ function applyHold(tc: any, open: Clarification[]): void {
   }
   if (tc.reviewStatus !== REVIEW_STATUS.HELD) tc.reviewStatusBeforeHold = tc.reviewStatus;
   tc.reviewStatus = REVIEW_STATUS.HELD;
-  tc.openClarifications = open.map((c) => ({
-    id: c.id, kind: c.kind, question: c.question, owningStage: c.owningStage, requiresDecision: Boolean(c.context.requiresDecision),
-  }));
+  tc.openClarifications = open.map(heldReasonFor);
+}
+
+/**
+ * Everything a reviewer needs to understand and resolve one hold reason: the question, the rule that found the gap,
+ * the step and line it is about, and earlier answers that did not clear it.
+ * @param {Clarification} c
+ * @returns {object}
+ */
+export function heldReasonFor(c: Clarification): Record<string, unknown> {
+  const stepIndex = Number(c.context.stepIndex);
+  return {
+    id: c.id,
+    kind: c.kind,
+    ruleId: c.ruleId,
+    question: c.question,
+    detail: typeof c.context.detail === 'string' ? c.context.detail : undefined,
+    stepIndex: Number.isInteger(stepIndex) && stepIndex > 0 ? stepIndex : undefined,
+    subject: typeof c.context.subject === 'string' ? c.context.subject : undefined,
+    owningStage: c.owningStage,
+    sourceStage: c.sourceStage,
+    askRounds: c.askRounds,
+    previousAnswer: typeof c.context.previousAnswer === 'string' ? c.context.previousAnswer : undefined,
+    requiresDecision: Boolean(c.context.requiresDecision),
+  };
 }
 
 function markManual(tc: any): void {

@@ -65,6 +65,31 @@ interface SharedGeneration {
 }
 
 const isApproved = (tc: any) => isAutomationApproved(tc);
+
+const PLACEHOLDER = /\{\{[a-zA-Z][a-zA-Z0-9]*\}\}/;
+
+/**
+ * Attaches Agent 04's resolved test data to the reviewed test cases, one test case at a time. The Agent 03 review stays
+ * the source of truth for status and steps; data is taken from Agent 04 only for the same content (matching hash), so a
+ * test case held or edited after Agent 04 ran never discards the data of the others.
+ * @param {any[]} reviewed - Agent 03 test cases
+ * @param {any[]} enriched - Agent 04 enriched test cases
+ * @returns {{ testCases: any[], missingData: string[] }} missingData: approved test cases with placeholders but no usable data
+ */
+export function attachTestData(reviewed: any[], enriched: any[]): { testCases: any[]; missingData: string[] } {
+  const enrichedByKey = new Map(enriched.map((tc) => [tc.key, tc]));
+  const missingData: string[] = [];
+  const testCases = reviewed.map((tc) => {
+    const data = enrichedByKey.get(tc.key);
+    const sameContent = data && (!tc.hash || !data.hash || data.hash === tc.hash);
+    if (sameContent && data.resolvedData) {
+      return { ...tc, resolvedData: data.resolvedData, ...(data.dataManifestId ? { dataManifestId: data.dataManifestId } : {}) };
+    }
+    if (enriched.length > 0 && isApproved(tc) && PLACEHOLDER.test(JSON.stringify(tc.testSteps || []))) missingData.push(tc.key);
+    return tc;
+  });
+  return { testCases, missingData };
+}
 const byKey = (a: any, b: any) => String(a.key).localeCompare(String(b.key));
 
 /**
@@ -133,19 +158,15 @@ class PlaywrightScriptGeneratorAgent {
   // ── Scope ────────────────────────────────────────────────────────────────
 
   private _resolveScope(input: any): ApprovedScope {
-    const warnings: string[] = [];
     const reviewedRaw: any[] = input.reviewedTestCases?.reviewedZephyrExport?.testCases || [];
     const enrichedRaw: any[] = input.testData?.enrichedZephyrExport?.testCases || [];
-    const reviewedKeys = new Set(reviewedRaw.filter(isApproved).map((tc) => tc.key));
-    const enrichedKeys = new Set(enrichedRaw.filter(isApproved).map((tc) => tc.key));
-    const inSync = enrichedRaw.length > 0 && reviewedKeys.size === enrichedKeys.size && [...reviewedKeys].every((k) => enrichedKeys.has(k));
-    if (enrichedRaw.length > 0 && !inSync) {
-      warnings.push('Agent 04 test data is out of sync with the approved test cases; data placeholders are unresolved until Agent 04 is re-run.');
-    }
-    const source = inSync ? enrichedRaw : reviewedRaw;
+    const { testCases, missingData } = attachTestData(reviewedRaw, enrichedRaw);
+    const warnings = missingData.length > 0
+      ? [`Agent 04 test data is missing or outdated for ${missingData.join(', ')}; their data placeholders stay unresolved until Agent 04 is re-run.`]
+      : [];
     return {
-      approved: source.filter(isApproved).sort(byKey),
-      excluded: source.filter((tc) => !isApproved(tc)).sort(byKey),
+      approved: testCases.filter(isApproved).sort(byKey),
+      excluded: testCases.filter((tc) => !isApproved(tc)).sort(byKey),
       rawByKey: new Map(reviewedRaw.map((tc) => [tc.key, tc])),
       warnings,
     };

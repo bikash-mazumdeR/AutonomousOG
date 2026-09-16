@@ -37,6 +37,7 @@ import { registerAgent08Routes } from './agent08Routes';
 import { registerAgent09Routes } from './agent09Routes';
 import { registerAgent10Routes } from './agent10Routes';
 import { registerAgent11Routes } from './agent11Routes';
+import { isNonAnswer, nonAnswerMessage } from '../core/clarifications/answerQuality';
 
 require('dotenv').config();
 
@@ -370,6 +371,14 @@ app.post('/api/agent01/clarify', async (req: Request, res: Response) => {
 
   if (!Array.isArray(answers) || answers.length === 0) {
     return res.status(400).json({ error: 'answers array is required' });
+  }
+
+  const declined = answers.filter(({ answer }) => answer?.trim() && isNonAnswer(answer));
+  if (declined.length > 0) {
+    return res.status(400).json({
+      error: declined.map(({ answer }) => nonAnswerMessage(answer, 'leave the question unanswered (it stays open) or state the decision, e.g. "Do not verify the colour"')).join(' '),
+      declinedIds: declined.map(({ id }) => id),
+    });
   }
 
   try {
