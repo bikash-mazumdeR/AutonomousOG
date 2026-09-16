@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ARIA — Agent 09: Report Generator &amp; Publisher</title>
+  <link rel="stylesheet" href="/aria.css" />
+  <script src="/pipeline-nav.js"></script>
+</head>
+<body>
+
+  <header class="header">
+    <div class="header-logo">ARIA <span>/</span> Agent 09</div>
+    <div class="header-badge">Report Generator &amp; Publisher</div>
+  </header>
+
+  <div class="pipeline-bar" id="pipelineBar"></div>
+  <div class="toast" id="toastNotification">✓ Saved</div>
+
+  <div class="page-body">
+    <div class="alert alert-success hidden" id="successAlert"></div>
+    <div class="alert alert-danger hidden" id="errorAlert"></div>
+
+    <!-- ── Phase 1: scope & launcher ─────────────────────────────────────── -->
+    <div class="card" id="inputPhase">
+      <div class="card-title">Report Scope</div>
+      <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px; line-height:1.5;">
+        Agent 09 builds an HTML and JSON execution report, then <strong>waits for your approval before
+        emailing it</strong>. Nothing is sent until you approve below, so the preview is the last
+        checkpoint before stakeholders see it.
+      </p>
+
+      <div class="stat-grid">
+        <div class="stat-item">
+          <div class="stat-label">Tests Executed</div>
+          <div class="stat-value" id="inTotal" style="color:#a5b4fc;">—</div>
+          <div class="stat-sub">From Agent 07</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Failures</div>
+          <div class="stat-value" id="inFailed" style="color:#f87171;">—</div>
+          <div class="stat-sub">Drive the failure table</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Bugs Filed</div>
+          <div class="stat-value" id="inBugs" style="color:#fbbf24;">—</div>
+          <div class="stat-sub">From Agent 08 (optional)</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Recipients</div>
+          <div class="stat-value" id="inRecipients" style="color:#22c55e;">—</div>
+          <div class="stat-sub" id="inRecipientList">GMAIL_TO</div>
+        </div>
+      </div>
+
+      <div class="card" style="background:var(--surface2); margin:16px 0;">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+          <div class="card-title" style="margin:0;">Delivery Status</div>
+          <button class="btn btn-secondary btn-sm" id="testSmtpBtn" style="margin-left:auto;">Test SMTP</button>
+        </div>
+        <div id="statusStrip" style="display:flex; flex-wrap:wrap; gap:8px;">
+          <span style="color:var(--text-dim); font-size:12px;">Checking…</span>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:12px; align-items:center; margin-top:8px;">
+        <input type="text" id="projectNameInput" class="text-input" style="flex:1;"
+               placeholder="Project ID (defaults to latest active pipeline run)">
+        <button id="runBtn" class="btn btn-primary" style="min-width:230px; height:38px;">
+          <span>Generate Report</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ── Phase 2: running ──────────────────────────────────────────────── -->
+    <div class="card hidden" id="runningPhase">
+      <div class="card-title">Generating Report…</div>
+      <div class="log-stream" id="logStream"></div>
+    </div>
+
+    <!-- ── Phase 3: results ──────────────────────────────────────────────── -->
+    <div class="hidden" id="resultsPhase">
+
+      <div class="card">
+        <div class="verdict" id="verdictBanner">
+          <div class="verdict-grade" id="verdictRate">—</div>
+          <div class="verdict-main">
+            <div class="verdict-decision" id="verdictHeadline">Report generated</div>
+            <div class="verdict-sub" id="verdictSub">—</div>
+          </div>
+        </div>
+
+        <div class="stat-grid" style="margin-top:16px;">
+          <div class="stat-item">
+            <div class="stat-label">Passed</div>
+            <div class="stat-value" id="resPassed" style="color:#22c55e;">—</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Failed</div>
+            <div class="stat-value" id="resFailed" style="color:#f87171;">—</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Bugs (Critical / High)</div>
+            <div class="stat-value" id="resBugs" style="color:#fbbf24;">—</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Trend vs Last Run</div>
+            <div class="stat-value" id="resTrend" style="color:#a5b4fc;">—</div>
+            <div class="stat-sub" id="resTrendSub">From project memory</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+          <div class="card-title" style="margin:0;">Report Preview</div>
+          <select id="reportSelect" class="select-input" style="margin-left:auto; height:32px;"></select>
+          <a id="downloadReportBtn" class="btn btn-secondary btn-sm" href="#" download>⤓ Download</a>
+        </div>
+
+        <div class="advisory-card" style="margin-bottom:12px;">
+          <div class="advisory-header">
+            <span class="advisory-title">Rendered without scripts</span>
+            <span class="advisory-badge">Email-accurate</span>
+          </div>
+          <div class="advisory-body">
+            The report is sandboxed here because it interpolates raw error text. Its styling comes from the
+            Tailwind CDN, which mail clients strip — so this preview is close to what recipients actually see.
+          </div>
+        </div>
+
+        <iframe id="reportFrame" class="report-frame" sandbox="" title="Execution report preview"></iframe>
+        <div class="report-placeholder" id="reportPlaceholder">No report yet — run Agent 09 to generate one.</div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Failures In This Report</div>
+        <div class="filter-tabs">
+          <input type="text" id="searchInput" class="search-input" placeholder="Search failures…">
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr><th>TC Key</th><th>Scenario</th><th>Status</th><th>Primary Error</th></tr>
+            </thead>
+            <tbody id="failuresBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Action bar ──────────────────────────────────────────────────────── -->
+  <div class="action-bar hidden" id="actionBar">
+    <div style="margin-right:auto; font-size:13px; color:var(--text-muted);">
+      Stage 09: <strong style="color:var(--text);" id="actionBarSummary">Report ready</strong>
+    </div>
+    <button class="btn btn-danger" id="rejectBtn">Reject — Don't Send</button>
+    <button class="btn btn-success" id="approveBtn">Approve &amp; Send Email</button>
+  </div>
+
+  <!-- ── Approval / rejection modals ─────────────────────────────────────── -->
+  <div class="modal" id="approvalModal">
+    <div class="modal-card">
+      <h2>Approve &amp; Send Report</h2>
+      <p id="approvalRecipients">This will email the report to the configured recipients.</p>
+      <textarea id="approvalComment" placeholder="Approval notes (optional)…">Execution report approved for distribution.</textarea>
+      <div class="modal-buttons">
+        <button class="btn btn-secondary" id="cancelApprovalBtn">Cancel</button>
+        <button class="btn btn-success" id="confirmApprovalBtn">Confirm &amp; Send</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="rejectionModal">
+    <div class="modal-card">
+      <h2>Reject Stage 09</h2>
+      <p>The report will <strong>not</strong> be emailed. Give a reason so the run is auditable.</p>
+      <textarea id="rejectionComment" placeholder="Rejection rationale (required)…"></textarea>
+      <div class="modal-buttons">
+        <button class="btn btn-secondary" id="cancelRejectionBtn">Cancel</button>
+        <button class="btn btn-danger" id="confirmRejectionBtn">Reject Stage</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Chat drawer ─────────────────────────────────────────────────────── -->
+  <button class="chat-toggle-btn" id="chatToggleBtn" title="Ask ARIA about this report">💬</button>
+  <div class="chat-drawer" id="chatDrawer">
+    <div class="chat-header">
+      <span>Ask ARIA — Report</span>
+      <button class="chat-close" id="chatCloseBtn">✕</button>
+    </div>
+    <div class="chat-messages" id="chatMessages"></div>
+    <div class="chat-input-area">
+      <input type="text" id="chatInput" class="text-input" placeholder="Why did the pass rate drop?">
+      <button class="btn btn-primary btn-sm" id="chatSendBtn">Send</button>
+    </div>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+
+  var state = null;
+  var sse = null;
+  var poll = null;
+  var chatHistory = [];
+
+  function $(id) { return document.getElementById(id); }
+  function show(el) { el.classList.remove('hidden'); }
+  function hide(el) { el.classList.add('hidden'); }
+
+  function showToast(text) {
+    var toast = $('toastNotification');
+    toast.textContent = text;
+    toast.classList.add('show');
+    setTimeout(function () { toast.classList.remove('show'); }, 2600);
+  }
+
+  function showError(text) {
+    var alert = $('errorAlert');
+    alert.textContent = text;
+    show(alert);
+    setTimeout(function () { hide(alert); }, 8000);
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  // ── Integration status ───────────────────────────────────────────────────
+  function renderStatus(payload) {
+    var strip = $('statusStrip');
+    strip.innerHTML = '';
+    (payload.checks || []).forEach(function (check) {
+      var chip = document.createElement('span');
+      chip.className = 'advisory-chip';
+      var mark = check.status === 'ok' ? '✓' : (check.status === 'warn' ? '!' : '✕');
+      var colour = check.status === 'ok' ? 'var(--success)' : (check.status === 'warn' ? 'var(--warning)' : 'var(--danger)');
+      chip.style.color = colour;
+      chip.textContent = mark + ' ' + check.label + ' — ' + check.detail;
+      strip.appendChild(chip);
+    });
+  }
+
+  function loadStatus(live) {
+    fetch('/api/agent09/status' + (live ? '?live=1' : ''))
+      .then(function (r) { return r.json(); })
+      .then(renderStatus)
+      .catch(function (err) { showError('Status check failed: ' + err.message); });
+  }
+
+  // ── Rendering ────────────────────────────────────────────────────────────
+  function renderInputs(s) {
+    var summary = (s.executionResults && s.executionResults.summary) || {};
+    $('inTotal').textContent = summary.total != null ? summary.total : '—';
+    $('inFailed').textContent = summary.failed != null ? summary.failed : '—';
+    $('inBugs').textContent = (s.bugReports && s.bugReports.bugsCreated != null) ? s.bugReports.bugsCreated : '0';
+
+    var recipients = s.recipients || [];
+    $('inRecipients').textContent = recipients.length;
+    $('inRecipientList').textContent = recipients.length ? recipients.join(', ') : 'GMAIL_TO is empty';
+  }
+
+  function renderReports(s) {
+    var select = $('reportSelect');
+    var files = s.reports || [];
+    select.innerHTML = '';
+    files.forEach(function (file) {
+      var option = document.createElement('option');
+      option.value = file;
+      option.textContent = file === 'latest.html' ? 'latest.html (most recent)' : file;
+      select.appendChild(option);
+    });
+
+    if (!files.length) {
+      hide($('reportFrame'));
+      show($('reportPlaceholder'));
+      return;
+    }
+    hide($('reportPlaceholder'));
+    show($('reportFrame'));
+    loadReport(select.value || files[0]);
+  }
+
+  function loadReport(file) {
+    // Cache-bust so a regenerated report is not served from the iframe cache.
+    $('reportFrame').src = '/api/agent09/report?file=' + encodeURIComponent(file) + '&t=' + Date.now();
+    $('downloadReportBtn').href = '/api/agent09/report?file=' + encodeURIComponent(file) + '&download=1';
+  }
+
+  function renderResults(s) {
+    var published = s.publishedReports;
+    if (!published || !published.jsonReport) { hide($('resultsPhase')); hide($('actionBar')); return; }
+
+    show($('resultsPhase'));
+    var json = published.jsonReport;
+    var summary = json.summary || {};
+    var bugs = json.bugsSummary || {};
+    var trend = json.trend || {};
+
+    var rate = summary.passRate != null ? summary.passRate : 0;
+    $('verdictRate').textContent = rate + '%';
+    var banner = $('verdictBanner');
+    banner.className = 'verdict ' + (rate >= 95 ? 'verdict-approve' : (rate >= 80 ? 'verdict-approve-warnings' : 'verdict-reject'));
+
+    $('verdictHeadline').textContent = published.emailSent ? 'Report published to stakeholders' : 'Report ready to publish';
+    $('verdictSub').textContent = summary.total + ' tests · ' + (summary.browser || 'chromium')
+      + ' · ' + (json.environment || '') + ' · generated ' + new Date(published.generatedAt).toLocaleString();
+
+    $('resPassed').textContent = summary.passed != null ? summary.passed : '—';
+    $('resFailed').textContent = summary.failed != null ? summary.failed : '—';
+    $('resBugs').textContent = (bugs.total || 0) + ' (' + (bugs.critical || 0) + ' / ' + (bugs.high || 0) + ')';
+
+    if (trend.delta == null) {
+      $('resTrend').textContent = 'N/A';
+      $('resTrendSub').textContent = 'No previous cycle to compare';
+    } else {
+      $('resTrend').textContent = (trend.delta >= 0 ? '▲ ' : '▼ ') + Math.abs(trend.delta) + '%';
+      $('resTrend').style.color = trend.delta >= 0 ? 'var(--success)' : 'var(--danger)';
+      $('resTrendSub').textContent = 'Previous run: ' + (trend.previousPassRate != null ? trend.previousPassRate + '%' : 'n/a');
+    }
+
+    renderFailures(json.failedTests || []);
+
+    show($('actionBar'));
+    $('actionBarSummary').textContent = published.emailSent
+      ? 'Email sent to ' + (s.recipients || []).length + ' recipient(s)'
+      : rate + '% pass rate · awaiting your approval to send';
+
+    if (published.emailSent) {
+      $('approveBtn').textContent = '✅ Sent';
+      $('approveBtn').disabled = true;
+    }
+  }
+
+  function renderFailures(failures) {
+    var term = ($('searchInput').value || '').toLowerCase();
+    var body = $('failuresBody');
+    body.innerHTML = '';
+
+    failures
+      .filter(function (t) {
+        return !term || (t.title || '').toLowerCase().indexOf(term) >= 0
+          || (t.tcKey || '').toLowerCase().indexOf(term) >= 0;
+      })
+      .forEach(function (test) {
+        var row = document.createElement('tr');
+        row.className = 'tc-row';
+        row.innerHTML = '<td class="file-name">' + escapeHtml(test.tcKey || '—') + '</td>'
+          + '<td>' + escapeHtml(test.title || '') + '</td>'
+          + '<td><span class="status-badge ' + escapeHtml(test.status) + '">' + escapeHtml(test.status) + '</span></td>'
+          + '<td style="color:var(--text-muted); font-size:12px;">'
+          + escapeHtml((test.error && test.error.message ? test.error.message : '').slice(0, 160)) + '</td>';
+        body.appendChild(row);
+      });
+
+    if (!body.children.length) {
+      body.innerHTML = '<tr><td colspan="4" style="color:var(--text-dim);">No failures in this report.</td></tr>';
+    }
+  }
+
+  function render(s) {
+    state = s;
+    renderInputs(s);
+    renderReports(s);
+    renderResults(s);
+
+    $('runBtn').disabled = !!s.running;
+    if (s.running) { show($('runningPhase')); } else if (!s.publishedReports) { hide($('runningPhase')); }
+  }
+
+  // ── Data ─────────────────────────────────────────────────────────────────
+  function fetchState() {
+    return fetch('/api/agent09/state')
+      .then(function (r) { return r.json(); })
+      .then(function (s) {
+        if (s.error) { showError(s.error); return; }
+        render(s);
+        if (!s.running && poll) { clearInterval(poll); poll = null; }
+      })
+      .catch(function (err) { showError('Could not load state: ' + err.message); });
+  }
+
+  function appendLog(level, message) {
+    var stream = $('logStream');
+    var line = document.createElement('div');
+    line.className = level === 'error' ? 'log-error' : 'log-info';
+    line.textContent = message;
+    stream.appendChild(line);
+    stream.scrollTop = stream.scrollHeight;
+  }
+
+  function openStream() {
+    if (sse) sse.close();
+    sse = new EventSource('/api/agent09/logs');
+    sse.onmessage = function (event) {
+      var payload = JSON.parse(event.data);
+      if (payload.type === 'connected') { $('logStream').innerHTML = ''; }
+      else if (payload.type === 'log') { appendLog(payload.level, payload.message); }
+      else if (payload.type === 'exit') {
+        sse.close(); sse = null;
+        setTimeout(fetchState, 1200);
+      }
+    };
+    sse.onerror = function () { if (sse) { sse.close(); sse = null; } };
+  }
+
+  // ── Actions ──────────────────────────────────────────────────────────────
+  $('runBtn').addEventListener('click', function () {
+    $('runBtn').disabled = true;
+    show($('runningPhase'));
+    $('logStream').innerHTML = '';
+    openStream();
+
+    fetch('/api/agent09/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectName: $('projectNameInput').value.trim() })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.error) { showError(data.error); $('runBtn').disabled = false; return; }
+        showToast('Agent 09 started');
+        // The agent blocks on its gate rather than exiting, so poll for the artifact too.
+        if (poll) clearInterval(poll);
+        poll = setInterval(fetchState, 2500);
+      })
+      .catch(function (err) { showError(err.message); $('runBtn').disabled = false; });
+  });
+
+  $('reportSelect').addEventListener('change', function () { loadReport(this.value); });
+  $('searchInput').addEventListener('input', function () {
+    var json = state && state.publishedReports && state.publishedReports.jsonReport;
+    renderFailures((json && json.failedTests) || []);
+  });
+
+  $('testSmtpBtn').addEventListener('click', function () {
+    $('testSmtpBtn').disabled = true;
+    $('testSmtpBtn').textContent = 'Testing…';
+    fetch('/api/agent09/status?live=1')
+      .then(function (r) { return r.json(); })
+      .then(function (payload) {
+        renderStatus(payload);
+        var smtp = (payload.checks || []).filter(function (c) { return c.id === 'gmail.smtp'; })[0];
+        showToast(smtp && smtp.status === 'ok' ? '✓ SMTP authenticated (nothing sent)' : '✕ SMTP check failed');
+      })
+      .catch(function (err) { showError(err.message); })
+      .finally(function () {
+        $('testSmtpBtn').disabled = false;
+        $('testSmtpBtn').textContent = 'Test SMTP';
+      });
+  });
+
+  // ── Approval ─────────────────────────────────────────────────────────────
+  var approvalModal = $('approvalModal');
+  var rejectionModal = $('rejectionModal');
+
+  $('approveBtn').addEventListener('click', function () {
+    var recipients = (state && state.recipients) || [];
+    $('approvalRecipients').innerHTML = 'This emails the report to <strong>'
+      + escapeHtml(recipients.join(', ') || 'no configured recipients') + '</strong>.';
+    approvalModal.classList.add('open');
+  });
+  $('cancelApprovalBtn').addEventListener('click', function () { approvalModal.classList.remove('open'); });
+
+  $('confirmApprovalBtn').addEventListener('click', function () {
+    var comment = $('approvalComment').value.trim();
+    approvalModal.classList.remove('open');
+    fetch('/api/agent09/approve', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comment: comment })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function () {
+        showToast('✓ Stage 09 approved — sending report…');
+        // The send happens inside the agent after the gate resolves, so wait before re-reading.
+        setTimeout(function () {
+          fetchState().then(function () {
+            var next = window.AriaPipelineNav && window.AriaPipelineNav.pageForStage(10);
+            if (next) setTimeout(function () { window.location.href = next; }, 1500);
+          });
+        }, 2500);
+      })
+      .catch(function (err) { showError('Approval failed: ' + err.message); });
+  });
+
+  $('rejectBtn').addEventListener('click', function () { rejectionModal.classList.add('open'); });
+  $('cancelRejectionBtn').addEventListener('click', function () { rejectionModal.classList.remove('open'); });
+
+  $('confirmRejectionBtn').addEventListener('click', function () {
+    var comment = $('rejectionComment').value.trim();
+    if (!comment) { alert('A rejection reason is required.'); return; }
+    rejectionModal.classList.remove('open');
+    fetch('/api/agent09/reject', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comment: comment })
+    })
+      .then(function () { showToast('Stage 09 rejected — no email sent'); return fetchState(); })
+      .catch(function (err) { showError('Rejection failed: ' + err.message); });
+  });
+
+  // ── Chat ─────────────────────────────────────────────────────────────────
+  $('chatToggleBtn').addEventListener('click', function () { $('chatDrawer').classList.toggle('open'); });
+  $('chatCloseBtn').addEventListener('click', function () { $('chatDrawer').classList.remove('open'); });
+
+  function addBubble(role, text) {
+    var bubble = document.createElement('div');
+    bubble.className = 'chat-bubble ' + (role === 'user' ? 'user' : 'aria');
+    bubble.textContent = text;
+    $('chatMessages').appendChild(bubble);
+    $('chatMessages').scrollTop = $('chatMessages').scrollHeight;
+  }
+
+  function sendChat() {
+    var input = $('chatInput');
+    var message = input.value.trim();
+    if (!message) return;
+    addBubble('user', message);
+    chatHistory.push({ role: 'user', content: message });
+    input.value = '';
+    addBubble('aria', 'Thinking…');
+    var pending = $('chatMessages').lastChild;
+
+    fetch('/api/agent09/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: message, history: chatHistory.slice(0, -1) })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        pending.textContent = data.reply || data.error || 'No response.';
+        if (data.reply) chatHistory.push({ role: 'assistant', content: data.reply });
+      })
+      .catch(function (err) { pending.textContent = 'Chat failed: ' + err.message; });
+  }
+
+  $('chatSendBtn').addEventListener('click', sendChat);
+  $('chatInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') sendChat(); });
+
+  // ── Boot ─────────────────────────────────────────────────────────────────
+  window.AriaPipelineNav.start(9);
+  loadStatus(false);
+  fetchState().then(function () {
+    if (state && state.running) { openStream(); poll = setInterval(fetchState, 2500); }
+  });
+}());
+</script>
+</body>
+</html>

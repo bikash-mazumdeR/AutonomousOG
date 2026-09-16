@@ -7,8 +7,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 const UI_ROOT = path.resolve(__dirname, '../../ui');
-const PAGES: Array<[string, number]> = [['agent01.html', 1], ['agent02.html', 2], ['agent03.html', 3], ['agent04.html', 4], ['agent05.html', 5], ['agent06.html', 6], ['agent07.html', 7]];
-const SERVERS = ['agent01-ui-server.ts', 'agent02-ui-server.ts', 'agent03-ui-server.ts', 'agent04-ui-server.ts', 'agent05-ui-server.ts', 'agent06-ui-server.ts', 'agent07-ui-server.ts'];
+const PAGES: Array<[string, number]> = [['agent01.html', 1], ['agent02.html', 2], ['agent03.html', 3], ['agent04.html', 4], ['agent05.html', 5], ['agent06.html', 6], ['agent07.html', 7], ['agent08.html', 8], ['agent09.html', 9], ['agent10.html', 10], ['agent11.html', 11]];
+const SERVERS = ['agent01-ui-server.ts', 'agent02-ui-server.ts', 'agent03-ui-server.ts', 'agent04-ui-server.ts', 'agent05-ui-server.ts', 'agent06-ui-server.ts', 'agent07-ui-server.ts', 'agent08-ui-server.ts', 'agent09-ui-server.ts', 'agent10-ui-server.ts', 'agent11-ui-server.ts'];
 
 describe('Pipeline navigation', () => {
   it.each(PAGES)('%s renders the shared bar for its own stage', (page, stage) => {

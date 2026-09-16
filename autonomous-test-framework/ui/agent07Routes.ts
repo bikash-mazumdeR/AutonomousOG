@@ -62,10 +62,13 @@ const FORCE_DOWNLOAD = new Set(['.zip']);
 /**
  * Tails the reporter's NDJSON file and republishes each event on the log stream.
  *
+ * Exported because Agent 11 re-runs tests through Agent 07 in-process, writing the same NDJSON file,
+ * so its console tails it with this rather than a second copy of the logic.
+ *
  * Polling rather than fs.watch: the file is truncated at the start of every run and lives on a
  * Windows filesystem, where watch semantics around truncation are unreliable.
  */
-function createProgressTailer(logStream: LogStream, logger: Logger) {
+export function createProgressTailer(logStream: LogStream, logger: Logger) {
   let timer: NodeJS.Timeout | null = null;
   let offset = 0;
   let residual = '';
@@ -117,7 +120,7 @@ function createProgressTailer(logStream: LogStream, logger: Logger) {
  * Reads the progress file into an array so a fresh page load can rebuild the grid without SSE.
  * @returns {any[]}
  */
-function readProgressSnapshot(): any[] {
+export function readProgressSnapshot(): any[] {
   try {
     if (!fs.existsSync(PROGRESS_FILE)) return [];
     return fs.readFileSync(PROGRESS_FILE, 'utf-8')

@@ -32,6 +32,10 @@ import { registerAgent03ReviewRoutes } from './agent03ReviewRoutes';
 import { registerAgent04DataRoutes } from './agent04DataRoutes';
 import { registerAgent06Routes } from './agent06Routes';
 import { registerAgent07Routes } from './agent07Routes';
+import { registerAgent08Routes } from './agent08Routes';
+import { registerAgent09Routes } from './agent09Routes';
+import { registerAgent10Routes } from './agent10Routes';
+import { registerAgent11Routes } from './agent11Routes';
 
 require('dotenv').config();
 
@@ -1158,11 +1162,15 @@ app.post('/api/agent04/chat', async (req: Request, res: Response) => {
 // ── PUT / POST /api/agent04/data (Human Test Data Override) ─────────────────
 registerAgent04DataRoutes(app, logger, FIXTURES_PATH);
 
-// ── Agents 06 & 07 ──────────────────────────────────────────────────────────
+// ── Agents 06-11 ────────────────────────────────────────────────────────────
 // Registrars rather than inline routes: each owns its own runner, SSE stream and approval proxy,
-// so mounting them here costs two lines instead of ~400 copy-pasted ones.
+// so mounting them here costs one line each instead of hundreds of copy-pasted ones.
 registerAgent06Routes(app, logger);
 registerAgent07Routes(app, logger);
+registerAgent08Routes(app, logger);
+registerAgent09Routes(app, logger);
+registerAgent10Routes(app, logger);
+registerAgent11Routes(app, logger);
 
 // ── Agent 05 (Playwright Script Generator) Routes ───────────────────────────
 
@@ -1529,3 +1537,7 @@ function bindAlternatePort(port: number, label: string): void {
 
 bindAlternatePort(parseInt(process.env.AGENT06_UI_PORT || '3005', 10), 'agent06.html');
 bindAlternatePort(parseInt(process.env.AGENT07_UI_PORT || '3006', 10), 'agent07.html');
+bindAlternatePort(parseInt(process.env.AGENT08_UI_PORT || '3007', 10), 'agent08.html');
+bindAlternatePort(parseInt(process.env.AGENT09_UI_PORT || '3008', 10), 'agent09.html');
+bindAlternatePort(parseInt(process.env.AGENT10_UI_PORT || '3009', 10), 'agent10.html');
+bindAlternatePort(parseInt(process.env.AGENT11_UI_PORT || '3010', 10), 'agent11.html');

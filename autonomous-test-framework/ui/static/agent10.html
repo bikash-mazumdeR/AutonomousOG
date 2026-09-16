@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ARIA — Agent 10: Auto Healer</title>
+  <link rel="stylesheet" href="/aria.css" />
+  <script src="/pipeline-nav.js"></script>
+  <style>
+    .diff-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .diff-pane { background:#020817; border:1px solid var(--border); border-radius:var(--radius); overflow:auto; max-height:60vh; }
+    .diff-pane-head { position:sticky; top:0; background:var(--surface2); padding:8px 12px; font-size:12px;
+      font-weight:600; border-bottom:1px solid var(--border); }
+    .diff-line { display:flex; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; line-height:1.55; }
+    .diff-num { width:44px; flex:none; text-align:right; padding-right:10px; color:var(--text-dim); user-select:none; }
+    .diff-text { white-space:pre-wrap; word-break:break-word; padding-right:10px; }
+    .diff-add { background:rgba(34,197,94,0.14); }
+    .diff-del { background:rgba(239,68,68,0.14); }
+    @media (max-width:900px) { .diff-grid { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+
+  <header class="header">
+    <div class="header-logo">ARIA <span>/</span> Agent 10</div>
+    <div class="header-badge">Auto Healer</div>
+  </header>
+
+  <div class="pipeline-bar" id="pipelineBar"></div>
+  <div class="toast" id="toastNotification">✓ Saved</div>
+
+  <div class="page-body">
+    <div class="alert alert-success hidden" id="successAlert"></div>
+    <div class="alert alert-danger hidden" id="errorAlert"></div>
+
+    <!-- ── Phase 1: scope & launcher ─────────────────────────────────────── -->
+    <div class="card" id="inputPhase">
+      <div class="card-title">Healing Scope</div>
+
+      <div class="advisory-card" style="margin-bottom:16px;">
+        <div class="advisory-header">
+          <span class="advisory-title">This agent rewrites your spec files</span>
+          <span class="advisory-badge">Snapshot protected</span>
+        </div>
+        <div class="advisory-body">
+          Agent 10 edits source in place and has no rollback of its own. This console snapshots
+          <code>specs/</code>, <code>pages/</code> and <code>k6/</code> before it runs, so every change is
+          reviewable as a real diff and <strong>Revert All</strong> restores the files byte-for-byte.
+          Nothing is permanent until you choose <strong>Keep</strong>.
+        </div>
+      </div>
+
+      <div class="stat-grid">
+        <div class="stat-item">
+          <div class="stat-label">Failing Tests</div>
+          <div class="stat-value" id="inFailed" style="color:#f87171;">—</div>
+          <div class="stat-sub">Candidates to heal</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Files Snapshotted</div>
+          <div class="stat-value" id="inSnapshot" style="color:#a5b4fc;">—</div>
+          <div class="stat-sub" id="inSnapshotSub">Taken at run start</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Files Changed</div>
+          <div class="stat-value" id="inChanged" style="color:#fbbf24;">—</div>
+          <div class="stat-sub">Pending your decision</div>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:12px; align-items:center; margin-top:8px;">
+        <input type="text" id="projectNameInput" class="text-input" style="flex:1;"
+               placeholder="Project ID (defaults to latest active pipeline run)">
+        <button id="runBtn" class="btn btn-primary" style="min-width:230px; height:38px;">
+          <span>Run Auto Healer</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ── Phase 2: running ──────────────────────────────────────────────── -->
+    <div class="card hidden" id="runningPhase">
+      <div class="card-title">Healing…</div>
+      <div class="log-stream" id="logStream"></div>
+    </div>
+
+    <!-- ── Phase 3: results ──────────────────────────────────────────────── -->
+    <div class="hidden" id="resultsPhase">
+
+      <div class="card">
+        <div class="verdict" id="verdictBanner">
+          <div class="verdict-grade" id="verdictRate">—</div>
+          <div class="verdict-main">
+            <div class="verdict-decision" id="verdictHeadline">Healing complete</div>
+            <div class="verdict-sub" id="verdictSub">—</div>
+          </div>
+        </div>
+
+        <div class="stat-grid" style="margin-top:16px;">
+          <div class="stat-item">
+            <div class="stat-label">Healed</div>
+            <div class="stat-value" id="resHealed" style="color:#22c55e;">—</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Unhealed</div>
+            <div class="stat-value" id="resUnhealed" style="color:#f87171;">—</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Strategies Used</div>
+            <div class="stat-value" id="resStrategies" style="color:#a5b4fc; font-size:16px;">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pending changes -->
+      <div class="card" id="changesCard">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+          <div class="card-title" style="margin:0;">Pending File Changes</div>
+          <span class="advisory-badge" id="pendingBadge" style="margin-left:auto;">—</span>
+        </div>
+        <p style="font-size:13px; color:var(--text-muted); margin-bottom:12px; line-height:1.5;">
+          Computed by diffing the pre-run snapshot against the working tree, so these are the real edits —
+          independent of what each strategy reported.
+        </p>
+        <div class="table-container" style="max-height:260px;">
+          <table>
+            <thead><tr><th>File</th><th>Change</th><th>Size</th><th></th></tr></thead>
+            <tbody id="changesBody"></tbody>
+          </table>
+        </div>
+        <div style="display:flex; gap:10px; margin-top:14px;">
+          <button class="btn btn-danger" id="revertBtn">↺ Revert All</button>
+          <button class="btn btn-success" id="keepBtn">✓ Keep Changes</button>
+        </div>
+      </div>
+
+      <!-- Patch table -->
+      <div class="card">
+        <div class="filter-tabs">
+          <button class="tab-btn active" id="tabPatches">Patches</button>
+          <button class="tab-btn" id="tabUnhealed">Needs Manual Fix</button>
+        </div>
+
+        <div class="table-container" id="patchesPanel">
+          <table>
+            <thead><tr><th>TC Key</th><th>Strategy</th><th>Pattern</th><th>Action Taken</th></tr></thead>
+            <tbody id="patchesBody"></tbody>
+          </table>
+        </div>
+
+        <div class="table-container hidden" id="unhealedPanel">
+          <table>
+            <thead><tr><th>TC Key</th><th>Why It Could Not Be Healed</th></tr></thead>
+            <tbody id="unhealedBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Action bar ──────────────────────────────────────────────────────── -->
+  <div class="action-bar hidden" id="actionBar">
+    <div style="margin-right:auto; font-size:13px; color:var(--text-muted);">
+      Stage 10: <strong style="color:var(--text);" id="actionBarSummary">Healing complete</strong>
+    </div>
+    <button class="btn btn-danger" id="rejectBtn">Reject</button>
+    <button class="btn btn-success" id="approveBtn">Approve &amp; Proceed to Agent 11</button>
+  </div>
+
+  <!-- ── Diff modal ──────────────────────────────────────────────────────── -->
+  <div class="modal" id="diffModal">
+    <div class="code-modal-dialog">
+      <div class="code-modal-head">
+        <div class="code-modal-head-left">
+          <div class="code-modal-title" id="diffTitle">File Diff</div>
+          <div class="code-modal-badge" id="diffBadge">modified</div>
+        </div>
+        <button class="code-modal-close-btn" id="diffCloseTopBtn" title="Close">✕</button>
+      </div>
+      <div class="code-modal-body">
+        <div class="diff-grid">
+          <div class="diff-pane">
+            <div class="diff-pane-head" style="color:var(--danger);">Before — snapshot</div>
+            <div id="diffBefore"></div>
+          </div>
+          <div class="diff-pane">
+            <div class="diff-pane-head" style="color:var(--success);">After — healed</div>
+            <div id="diffAfter"></div>
+          </div>
+        </div>
+      </div>
+      <div class="code-modal-foot">
+        <button class="btn btn-secondary" id="diffCloseBtn">✕ Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Approval / rejection modals ─────────────────────────────────────── -->
+  <div class="modal" id="approvalModal">
+    <div class="modal-card">
+      <h2>Approve Stage 10</h2>
+      <p id="approvalWarning">Confirm the healing patches and proceed to Agent 11 (Re-Test).</p>
+      <textarea id="approvalComment" placeholder="Approval notes (optional)…">Healing patches reviewed and accepted.</textarea>
+      <div class="modal-buttons">
+        <button class="btn btn-secondary" id="cancelApprovalBtn">Cancel</button>
+        <button class="btn btn-success" id="confirmApprovalBtn">Confirm &amp; Advance</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="rejectionModal">
+    <div class="modal-card">
+      <h2>Reject Stage 10</h2>
+      <p>Give a reason. Reverting the files is a separate action — do that first if you want the code back.</p>
+      <textarea id="rejectionComment" placeholder="Rejection rationale (required)…"></textarea>
+      <div class="modal-buttons">
+        <button class="btn btn-secondary" id="cancelRejectionBtn">Cancel</button>
+        <button class="btn btn-danger" id="confirmRejectionBtn">Reject Stage</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Chat drawer ─────────────────────────────────────────────────────── -->
+  <button class="chat-toggle-btn" id="chatToggleBtn" title="Ask ARIA about these patches">💬</button>
+  <div class="chat-drawer" id="chatDrawer">
+    <div class="chat-header">
+      <span>Ask ARIA — Healing</span>
+      <button class="chat-close" id="chatCloseBtn">✕</button>
+    </div>
+    <div class="chat-messages" id="chatMessages"></div>
+    <div class="chat-input-area">
+      <input type="text" id="chatInput" class="text-input" placeholder="Why couldn't TC-040 be healed?">
+      <button class="btn btn-primary btn-sm" id="chatSendBtn">Send</button>
+    </div>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+
+  var state = null;
+  var sse = null;
+  var poll = null;
+  var chatHistory = [];
+
+  function $(id) { return document.getElementById(id); }
+  function show(el) { el.classList.remove('hidden'); }
+  function hide(el) { el.classList.add('hidden'); }
+
+  function showToast(text) {
+    var toast = $('toastNotification');
+    toast.textContent = text;
+    toast.classList.add('show');
+    setTimeout(function () { toast.classList.remove('show'); }, 2600);
+  }
+
+  function showError(text) {
+    var alert = $('errorAlert');
+    alert.textContent = text;
+    show(alert);
+    setTimeout(function () { hide(alert); }, 8000);
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  // ── Diff rendering ───────────────────────────────────────────────────────
+  // A line-level LCS: enough to colour real edits without pulling in a diff library, which the
+  // artifact CSP would not allow anyway.
+  function lcsFlags(a, b) {
+    var n = a.length, m = b.length;
+    var table = [];
+    for (var i = 0; i <= n; i++) table.push(new Array(m + 1).fill(0));
+    for (var i2 = n - 1; i2 >= 0; i2--) {
+      for (var j2 = m - 1; j2 >= 0; j2--) {
+        table[i2][j2] = a[i2] === b[j2] ? table[i2 + 1][j2 + 1] + 1
+          : Math.max(table[i2 + 1][j2], table[i2][j2 + 1]);
+      }
+    }
+    var keepA = new Array(n).fill(false);
+    var keepB = new Array(m).fill(false);
+    var i3 = 0, j3 = 0;
+    while (i3 < n && j3 < m) {
+      if (a[i3] === b[j3]) { keepA[i3] = true; keepB[j3] = true; i3++; j3++; }
+      else if (table[i3 + 1][j3] >= table[i3][j3 + 1]) i3++;
+      else j3++;
+    }
+    return { keepA: keepA, keepB: keepB };
+  }
+
+  function renderPane(container, lines, keep, changedClass) {
+    container.innerHTML = '';
+    lines.forEach(function (line, index) {
+      var row = document.createElement('div');
+      row.className = 'diff-line' + (keep[index] ? '' : ' ' + changedClass);
+      row.innerHTML = '<span class="diff-num">' + (index + 1) + '</span>'
+        + '<span class="diff-text">' + escapeHtml(line) + '</span>';
+      container.appendChild(row);
+    });
+  }
+
+  function openDiff(relPath) {
+    fetch('/api/agent10/diff?path=' + encodeURIComponent(relPath))
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.error) { showError(data.error); return; }
+        $('diffTitle').textContent = relPath;
+        $('diffBadge').textContent = data.status;
+        var before = (data.before || '').split('\n');
+        var after = (data.after || '').split('\n');
+        var flags = lcsFlags(before, after);
+        renderPane($('diffBefore'), before, flags.keepA, 'diff-del');
+        renderPane($('diffAfter'), after, flags.keepB, 'diff-add');
+        $('diffModal').classList.add('open');
+      })
+      .catch(function (err) { showError(err.message); });
+  }
+
+  // ── Rendering ────────────────────────────────────────────────────────────
+  function renderChanges(s) {
+    var changes = s.changes || [];
+    var body = $('changesBody');
+    body.innerHTML = '';
+
+    $('inChanged').textContent = changes.length;
+    $('inSnapshot').textContent = s.snapshot ? s.snapshot.fileCount : '—';
+    $('inSnapshotSub').textContent = s.snapshot
+      ? 'Snapshot ' + s.snapshot.id : 'No snapshot pending';
+
+    if (!s.snapshot) { hide($('changesCard')); return; }
+    show($('changesCard'));
+    $('pendingBadge').textContent = changes.length + ' file(s) awaiting keep/revert';
+
+    if (!changes.length) {
+      body.innerHTML = '<tr><td colspan="4" style="color:var(--text-dim);">'
+        + 'The healer changed no files in this run.</td></tr>';
+      return;
+    }
+
+    changes.forEach(function (change) {
+      var row = document.createElement('tr');
+      row.className = 'tc-row';
+      var colour = change.status === 'added' ? 'var(--success)'
+        : (change.status === 'deleted' ? 'var(--danger)' : 'var(--warning)');
+      row.innerHTML = '<td class="file-name">' + escapeHtml(change.relPath) + '</td>'
+        + '<td style="color:' + colour + '; font-weight:600;">' + escapeHtml(change.status) + '</td>'
+        + '<td style="color:var(--text-muted); font-size:12px;">'
+        + change.beforeBytes + ' → ' + change.afterBytes + ' B</td>'
+        + '<td></td>';
+      var button = document.createElement('button');
+      button.className = 'btn btn-secondary btn-sm';
+      button.textContent = 'View Diff';
+      button.addEventListener('click', function () { openDiff(change.relPath); });
+      row.lastChild.appendChild(button);
+      body.appendChild(row);
+    });
+  }
+
+  function renderResults(s) {
+    var patches = s.healingPatches;
+    if (!patches) { hide($('resultsPhase')); hide($('actionBar')); return; }
+    show($('resultsPhase'));
+
+    var rate = patches.healingRate != null ? patches.healingRate : 0;
+    $('verdictRate').textContent = rate + '%';
+    $('verdictBanner').className = 'verdict ' + (rate >= 75 ? 'verdict-approve'
+      : (rate > 0 ? 'verdict-approve-warnings' : 'verdict-reject'));
+    $('verdictHeadline').textContent = patches.message || 'Healing complete';
+    $('verdictSub').textContent = patches.healed + ' of ' + patches.totalFailed
+      + ' failing test(s) healed · ' + new Date(patches.healedAt).toLocaleString();
+
+    $('resHealed').textContent = patches.healed != null ? patches.healed : '—';
+    $('resUnhealed').textContent = patches.unhealed != null ? patches.unhealed : '—';
+    $('resStrategies').textContent = (patches.strategies || []).join(', ') || '—';
+
+    var patchesBody = $('patchesBody');
+    patchesBody.innerHTML = '';
+    (patches.healingPatches || []).forEach(function (patch) {
+      var row = document.createElement('tr');
+      row.className = 'tc-row';
+      // RETRY_NETWORK reports healed:true but edits nothing — say so rather than implying a patch.
+      var noop = patch.strategyUsed === 'RETRY_NETWORK';
+      row.innerHTML = '<td class="file-name">' + escapeHtml(patch.tcKey || '—') + '</td>'
+        + '<td><span class="badge badge-spec">' + escapeHtml(patch.strategyUsed || '—') + '</span></td>'
+        + '<td style="color:var(--text-muted);">' + escapeHtml(patch.errorPattern || '—') + '</td>'
+        + '<td style="font-size:12px; color:' + (noop ? 'var(--warning)' : 'var(--text-muted)') + ';">'
+        + escapeHtml(noop ? 'Queued for retest — no code changed' : (patch.actionTaken || '—')) + '</td>';
+      patchesBody.appendChild(row);
+    });
+    if (!patchesBody.children.length) {
+      patchesBody.innerHTML = '<tr><td colspan="4" style="color:var(--text-dim);">No patches produced.</td></tr>';
+    }
+
+    var unhealedBody = $('unhealedBody');
+    unhealedBody.innerHTML = '';
+    (patches.unhealedTests || []).forEach(function (test) {
+      var row = document.createElement('tr');
+      row.className = 'tc-row';
+      row.innerHTML = '<td class="file-name">' + escapeHtml(test.tcKey || '—') + '</td>'
+        + '<td style="color:var(--text-muted); font-size:12px;">' + escapeHtml(test.reason || '') + '</td>';
+      unhealedBody.appendChild(row);
+    });
+    if (!unhealedBody.children.length) {
+      unhealedBody.innerHTML = '<tr><td colspan="2" style="color:var(--text-dim);">Nothing left unhealed.</td></tr>';
+    }
+
+    show($('actionBar'));
+    $('actionBarSummary').textContent = patches.healed + ' healed · ' + patches.unhealed + ' still failing';
+  }
+
+  function render(s) {
+    state = s;
+    var summary = (s.executionResults && s.executionResults.summary) || {};
+    $('inFailed').textContent = summary.failed != null ? summary.failed : '—';
+
+    renderChanges(s);
+    renderResults(s);
+
+    $('runBtn').disabled = !!s.running || !!s.snapshot;
+    if (s.snapshot && !s.running) {
+      $('runBtn').title = 'Keep or revert the pending heal before running again.';
+    }
+    if (s.running) show($('runningPhase'));
+  }
+
+  // ── Data ─────────────────────────────────────────────────────────────────
+  function fetchState() {
+    return fetch('/api/agent10/state')
+      .then(function (r) { return r.json(); })
+      .then(function (s) {
+        if (s.error) { showError(s.error); return; }
+        render(s);
+        if (!s.running && poll) { clearInterval(poll); poll = null; }
+      })
+      .catch(function (err) { showError('Could not load state: ' + err.message); });
+  }
+
+  function appendLog(level, message) {
+    var stream = $('logStream');
+    var line = document.createElement('div');
+    line.className = level === 'error' ? 'log-error' : 'log-info';
+    line.textContent = message;
+    stream.appendChild(line);
+    stream.scrollTop = stream.scrollHeight;
+  }
+
+  function openStream() {
+    if (sse) sse.close();
+    sse = new EventSource('/api/agent10/logs');
+    sse.onmessage = function (event) {
+      var payload = JSON.parse(event.data);
+      if (payload.type === 'connected') { $('logStream').innerHTML = ''; }
+      else if (payload.type === 'log') { appendLog(payload.level, payload.message); }
+      else if (payload.type === 'exit') {
+        sse.close(); sse = null;
+        // Agent 10 has no approval gate, so it always exits with code 1. That is not a failure —
+        // the artifact and the diff are the real signals.
+        setTimeout(fetchState, 1200);
+      }
+    };
+    sse.onerror = function () { if (sse) { sse.close(); sse = null; } };
+  }
+
+  // ── Actions ──────────────────────────────────────────────────────────────
+  $('runBtn').addEventListener('click', function () {
+    $('runBtn').disabled = true;
+    show($('runningPhase'));
+    $('logStream').innerHTML = '';
+    openStream();
+
+    fetch('/api/agent10/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectName: $('projectNameInput').value.trim() })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.error) { showError(data.error); $('runBtn').disabled = false; return; }
+        showToast('Snapshot taken — healer started');
+        if (poll) clearInterval(poll);
+        poll = setInterval(fetchState, 2500);
+      })
+      .catch(function (err) { showError(err.message); $('runBtn').disabled = false; });
+  });
+
+  $('keepBtn').addEventListener('click', function () {
+    fetch('/api/agent10/keep', { method: 'POST' })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.error) { showError(data.error); return; }
+        showToast('✓ Kept ' + data.kept + ' file change(s)');
+        return fetchState();
+      })
+      .catch(function (err) { showError(err.message); });
+  });
+
+  $('revertBtn').addEventListener('click', function () {
+    if (!confirm('Restore every file to its pre-heal state? The healing patches will be lost.')) return;
+    fetch('/api/agent10/revert', { method: 'POST' })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.error) { showError(data.error); return; }
+        showToast('↺ Reverted ' + data.reverted + ' file(s)');
+        return fetchState();
+      })
+      .catch(function (err) { showError(err.message); });
+  });
+
+  $('tabPatches').addEventListener('click', function () {
+    this.classList.add('active'); $('tabUnhealed').classList.remove('active');
+    show($('patchesPanel')); hide($('unhealedPanel'));
+  });
+  $('tabUnhealed').addEventListener('click', function () {
+    this.classList.add('active'); $('tabPatches').classList.remove('active');
+    show($('unhealedPanel')); hide($('patchesPanel'));
+  });
+
+  $('diffCloseBtn').addEventListener('click', function () { $('diffModal').classList.remove('open'); });
+  $('diffCloseTopBtn').addEventListener('click', function () { $('diffModal').classList.remove('open'); });
+
+  // ── Approval ─────────────────────────────────────────────────────────────
+  var approvalModal = $('approvalModal');
+  var rejectionModal = $('rejectionModal');
+
+  $('approveBtn').addEventListener('click', function () {
+    var pending = state && state.snapshot && (state.changes || []).length;
+    $('approvalWarning').innerHTML = pending
+      ? '<strong style="color:var(--warning);">' + pending + ' file change(s) are still un-reviewed.</strong> '
+        + 'Keep or revert them first so the retest runs against the code you intend.'
+      : 'Confirm the healing patches and proceed to Agent 11 (Re-Test).';
+    approvalModal.classList.add('open');
+  });
+  $('cancelApprovalBtn').addEventListener('click', function () { approvalModal.classList.remove('open'); });
+
+  $('confirmApprovalBtn').addEventListener('click', function () {
+    var comment = $('approvalComment').value.trim();
+    approvalModal.classList.remove('open');
+    fetch('/api/agent10/approve', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comment: comment })
+    })
+      .then(function () {
+        showToast('✓ Stage 10 approved — proceeding to Agent 11…');
+        var next = window.AriaPipelineNav && window.AriaPipelineNav.pageForStage(11);
+        if (next) setTimeout(function () { window.location.href = next; }, 1500);
+        else fetchState();
+      })
+      .catch(function (err) { showError('Approval failed: ' + err.message); });
+  });
+
+  $('rejectBtn').addEventListener('click', function () { rejectionModal.classList.add('open'); });
+  $('cancelRejectionBtn').addEventListener('click', function () { rejectionModal.classList.remove('open'); });
+
+  $('confirmRejectionBtn').addEventListener('click', function () {
+    var comment = $('rejectionComment').value.trim();
+    if (!comment) { alert('A rejection reason is required.'); return; }
+    rejectionModal.classList.remove('open');
+    fetch('/api/agent10/reject', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comment: comment })
+    })
+      .then(function () { showToast('Stage 10 rejected'); return fetchState(); })
+      .catch(function (err) { showError('Rejection failed: ' + err.message); });
+  });
+
+  // ── Chat ─────────────────────────────────────────────────────────────────
+  $('chatToggleBtn').addEventListener('click', function () { $('chatDrawer').classList.toggle('open'); });
+  $('chatCloseBtn').addEventListener('click', function () { $('chatDrawer').classList.remove('open'); });
+
+  function addBubble(role, text) {
+    var bubble = document.createElement('div');
+    bubble.className = 'chat-bubble ' + (role === 'user' ? 'user' : 'aria');
+    bubble.textContent = text;
+    $('chatMessages').appendChild(bubble);
+    $('chatMessages').scrollTop = $('chatMessages').scrollHeight;
+  }
+
+  function sendChat() {
+    var input = $('chatInput');
+    var message = input.value.trim();
+    if (!message) return;
+    addBubble('user', message);
+    chatHistory.push({ role: 'user', content: message });
+    input.value = '';
+    addBubble('aria', 'Thinking…');
+    var pending = $('chatMessages').lastChild;
+
+    fetch('/api/agent10/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: message, history: chatHistory.slice(0, -1) })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        pending.textContent = data.reply || data.error || 'No response.';
+        if (data.reply) chatHistory.push({ role: 'assistant', content: data.reply });
+      })
+      .catch(function (err) { pending.textContent = 'Chat failed: ' + err.message; });
+  }
+
+  $('chatSendBtn').addEventListener('click', sendChat);
+  $('chatInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') sendChat(); });
+
+  // ── Boot ─────────────────────────────────────────────────────────────────
+  window.AriaPipelineNav.start(10);
+  fetchState().then(function () {
+    if (state && state.running) { openStream(); poll = setInterval(fetchState, 2500); }
+  });
+}());
+</script>
+</body>
+</html>

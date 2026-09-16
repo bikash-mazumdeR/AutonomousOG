@@ -2,8 +2,24 @@
   "version": "1.0.0",
   "projectId": "default",
   "createdAt": "2026-05-12T00:00:00.000Z",
-  "updatedAt": "2026-09-16T07:24:22.069Z",
+  "updatedAt": "2026-09-16T09:10:20.762Z",
   "cycles": [
+    {
+      "id": "cycle_1789545933861",
+      "timestamp": "2026-09-16T08:05:33.861Z",
+      "runId": "run_1789545933846",
+      "passRate": 75,
+      "totalTests": 8,
+      "bugsFound": 2,
+      "autoHeals": 0,
+      "stages": {
+        "07-test-runner": "COMPLETED"
+      },
+      "keyLearnings": [
+        "Flaky: TC-016",
+        "Flaky: TC-040"
+      ]
+    },
     {
       "id": "cycle_1789543461972",
       "timestamp": "2026-09-16T07:24:21.972Z",
@@ -614,6 +630,16 @@
     ],
     "healingStrategies": [
       {
+        "name": "AGENTIC_RAG_LLM",
+        "description": "Healed using semantic RAG and LLM reasoning",
+        "condition": "complex",
+        "action": "LLM-Patched F-01-swag-labs-authentication-portal-api.spec.js",
+        "successRate": 0.8,
+        "successCount": 14,
+        "addedAt": "2026-09-09T16:37:38.104Z",
+        "lastUsed": "2026-09-16T09:10:20.757Z"
+      },
+      {
         "name": "ASSERTION_RELAX",
         "description": "Relaxed strict equality to containment",
         "condition": "assertion",
@@ -622,37 +648,11 @@
         "successCount": 13,
         "addedAt": "2026-09-09T15:48:56.187Z",
         "lastUsed": "2026-09-09T16:40:23.821Z"
-      },
-      {
-        "name": "AGENTIC_RAG_LLM",
-        "description": "Healed using semantic RAG and LLM reasoning",
-        "condition": "complex",
-        "action": "LLM-Patched F-01-swag-labs-authentication-portal-api.spec.js",
-        "successRate": 1,
-        "successCount": 10,
-        "addedAt": "2026-09-09T16:37:38.104Z",
-        "lastUsed": "2026-09-09T16:40:23.816Z"
       }
     ],
     "testDataPatterns": {},
     "failurePatterns": [],
     "approvalFeedback": [
-      {
-        "id": "fb_1788850806486",
-        "stageId": "02-test-case-generator",
-        "status": "APPROVED",
-        "comment": "AUTO-APPROVED",
-        "content": "TCs: 73",
-        "timestamp": "2026-09-08T07:00:06.486Z"
-      },
-      {
-        "id": "fb_1788850806806",
-        "stageId": "03-test-case-reviewer",
-        "status": "APPROVED",
-        "comment": "AUTO-APPROVED",
-        "content": "Grade: B, Score: 87",
-        "timestamp": "2026-09-08T07:00:06.806Z"
-      },
       {
         "id": "fb_1788850807092",
         "stageId": "04-test-data-generator",
@@ -4636,6 +4636,22 @@
         "comment": "AUTO-APPROVED",
         "content": "Pass: 7, Fail: 1",
         "timestamp": "2026-09-16T07:24:22.069Z"
+      },
+      {
+        "id": "fb_1789548955487",
+        "stageId": "09-report-generator",
+        "status": "REJECTED",
+        "comment": "Verification run - confirming no email is sent on rejection.",
+        "content": "",
+        "timestamp": "2026-09-16T08:55:55.487Z"
+      },
+      {
+        "id": "fb_1789549382585",
+        "stageId": "09-report-generator",
+        "status": "APPROVED",
+        "comment": "Verification: approving to confirm the email actually sends.",
+        "content": "",
+        "timestamp": "2026-09-16T09:03:02.585Z"
       }
     ],
     "performanceBaselines": {},
@@ -5276,14 +5292,14 @@
     },
     {
       "id": "RULE-07-FAIL-TC-016",
-      "description": "Test failure pattern: TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('use",
+      "description": "Test failure pattern: Error: expect(locator).toBeEnabled() failed\n\nLocator: getByTestId('login-button')\nExpected: enabled\n",
       "appliesTo": "10-auto-healer",
       "action": "ANALYSE_FAILURE",
       "tcKey": "TC-016",
-      "errorMessage": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('username')\u001b[22m\n",
-      "addedAt": "2026-09-10T14:49:21.304Z",
+      "errorMessage": "Error: expect(locator).toBeEnabled() failed\n\nLocator: getByTestId('login-button')\nExpected: enabled\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeEnabled\" with timeout 5000ms\n  - waiting for getByTestId('login-button')\n",
+      "addedAt": "2026-09-16T08:05:33.848Z",
       "activeCount": 0,
-      "updatedAt": "2026-09-10T14:49:21.306Z"
+      "updatedAt": "2026-09-16T08:05:33.850Z"
     },
     {
       "id": "RULE-07-FAIL-TC-017",
@@ -5444,16 +5460,33 @@
       "action": "ANALYSE_FAILURE",
       "tcKey": "TC-040",
       "errorMessage": "Error: expect(locator).toBeEnabled() failed\n\nLocator: getByTestId('login-button')\nExpected: enabled\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeEnabled\" with timeout 5000ms\n  - waiting for getByTestId('login-button')\n",
-      "addedAt": "2026-09-16T07:24:21.867Z",
+      "addedAt": "2026-09-16T08:05:33.853Z",
+      "activeCount": 0,
+      "updatedAt": "2026-09-16T08:05:33.855Z"
+    },
+    {
+      "id": "RULE-10-1789549703523",
+      "description": "Auto-heal: 2/2 fixed",
+      "appliesTo": "05-playwright-script-generator",
+      "action": "APPLY_HEALING_PATTERNS",
+      "addedAt": "2026-09-16T09:08:23.525Z",
+      "activeCount": 0
+    },
+    {
+      "id": "RULE-10-1789549820759",
+      "description": "Auto-heal: 2/2 fixed",
+      "appliesTo": "05-playwright-script-generator",
+      "action": "APPLY_HEALING_PATTERNS",
+      "addedAt": "2026-09-16T09:10:20.762Z",
       "activeCount": 0
     }
   ],
   "metrics": {
-    "totalRuns": 31,
-    "totalTestsRun": 427,
-    "totalBugsFound": 97,
+    "totalRuns": 32,
+    "totalTestsRun": 435,
+    "totalBugsFound": 99,
     "totalAutoHeals": 8,
-    "avgPassRate": 43.33,
+    "avgPassRate": 44.32,
     "avgHealingRate": 0
   }
 }

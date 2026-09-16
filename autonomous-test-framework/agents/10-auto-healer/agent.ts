@@ -16,6 +16,10 @@ import { Logger } from '../../core/logger/Logger';
 import { FRAMEWORK_CONFIG } from '../../config/framework.config';
 import { llmClient } from '../../core/llm/LLMClient';
 import * as recast from 'recast';
+// Specs are TypeScript; recast's default parser is JavaScript-only and rejects `?.` and type
+// annotations, which made every AST heal and every LLM patch fail validation. Agent 06 already
+// parses these files, so reuse its TypeScript-aware parser rather than adding a second one.
+import { parseTypeScript } from '../../core/automation-reviewer/ReviewRules';
 const b = recast.types.builders;
 
 const STAGE_ID = '10-auto-healer';
@@ -113,33 +117,60 @@ export class AutoHealerAgent {
     }
   }
 
+  /**
+   * Directories that can contain a generated spec, newest layout first.
+   *
+   * Agent 05 writes to tests/projects/<slug>/specs, so resolving only against tests/specs made every
+   * heal fail with "Spec file missing".
+   *
+   * @returns {string[]} Existing absolute directories
+   * @private
+   */
+  _specSearchDirs(): string[] {
+    const testsRoot = path.resolve(__dirname, '../../tests');
+    const projectsRoot = path.join(testsRoot, 'projects');
+    const dirs: string[] = [];
+
+    try {
+      for (const entry of fs.readdirSync(projectsRoot, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        const specsDir = path.join(projectsRoot, entry.name, 'specs');
+        if (fs.existsSync(specsDir)) dirs.push(specsDir);
+      }
+    } catch {
+      // No per-project tests yet — the legacy directory below still applies.
+    }
+
+    const legacy = path.join(testsRoot, 'specs');
+    if (fs.existsSync(legacy)) dirs.push(legacy);
+    return dirs;
+  }
+
   async _healTest(test: any, knownStrategies: any[], knownSelectors: any) {
     this._logger.info(`Healing test: ${test.tcKey}`, { error: test.error?.message });
     const errorMsg = test.error?.message || '';
 
+    // Agent 07 reports location.file as a bare basename, so the spec has to be located by search.
+    // Generated specs live under tests/projects/<slug>/specs; tests/specs is the legacy home and is
+    // kept in the list so a hand-written spec there still resolves.
+    const searchDirs = this._specSearchDirs();
+
     let specFile = test.specFile || test.file || test.location?.file || '';
     if (specFile && !path.isAbsolute(specFile)) {
+      const base = path.basename(specFile);
       const candidates = [
-        path.resolve(process.cwd(), 'tests/specs', specFile),
+        ...searchDirs.map((dir) => path.join(dir, base)),
         path.resolve(process.cwd(), specFile),
-        path.resolve(__dirname, '../../tests/specs', specFile),
       ];
       const found = candidates.find((c) => fs.existsSync(c));
       if (found) specFile = found;
     }
 
     if (!specFile || !fs.existsSync(specFile)) {
-      const specsDir = path.resolve(__dirname, '../../tests/specs');
-      if (fs.existsSync(specsDir)) {
-        const files = fs.readdirSync(specsDir).filter((f) => f.endsWith('.spec.ts') || f.endsWith('.spec.js'));
-        for (const file of files) {
-          const fullPath = path.join(specsDir, file);
-          const content = fs.readFileSync(fullPath, 'utf-8');
-          if (content.includes(test.tcKey)) {
-            specFile = fullPath;
-            break;
-          }
-        }
+      for (const dir of searchDirs) {
+        const files = fs.readdirSync(dir).filter((f) => f.endsWith('.spec.ts') || f.endsWith('.spec.js'));
+        const match = files.find((file) => fs.readFileSync(path.join(dir, file), 'utf-8').includes(test.tcKey));
+        if (match) { specFile = path.join(dir, match); break; }
       }
     }
 
@@ -198,7 +229,7 @@ Return ONLY the raw javascript code, no markdown blocks.
       if (cleanCode && cleanCode.length > 10 && cleanCode !== fileContent) {
         // Validate syntax before writing
         try {
-          recast.parse(cleanCode);
+          parseTypeScript(cleanCode);
         } catch (syntaxErr: any) {
           this._logger.error('LLM generated invalid syntax', { 
             tcKey: test.tcKey, 
@@ -385,7 +416,7 @@ Return ONLY the raw javascript code, no markdown blocks.
     }
     try {
       const src = fs.readFileSync(filePath, 'utf-8');
-      const ast = recast.parse(src);
+      const ast = parseTypeScript(src);
       let modified = false;
 
       recast.visit(ast, {
@@ -394,7 +425,7 @@ Return ONLY the raw javascript code, no markdown blocks.
           if (code === search) {
             // Replace the entire call expression with the replacement code
             // This is a bit simplified, ideally we parse the replacement too
-            const replacementAst = recast.parse(replacement).program.body[0];
+            const replacementAst = parseTypeScript(replacement).program.body[0];
             if (replacementAst.type === 'ExpressionStatement') {
               path.replace(replacementAst.expression);
             } else {
@@ -428,7 +459,7 @@ Return ONLY the raw javascript code, no markdown blocks.
     }
     try {
       const src = fs.readFileSync(filePath, 'utf-8');
-      const ast = recast.parse(src);
+      const ast = parseTypeScript(src);
       let modified = false;
 
       recast.visit(ast, {

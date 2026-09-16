@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ARIA — Agent 11: Re-Test Failed Cases</title>
+  <link rel="stylesheet" href="/aria.css" />
+  <script src="/pipeline-nav.js"></script>
+</head>
+<body>
+
+  <header class="header">
+    <div class="header-logo">ARIA <span>/</span> Agent 11</div>
+    <div class="header-badge">Re-Test Failed Cases</div>
+  </header>
+
+  <div class="pipeline-bar" id="pipelineBar"></div>
+  <div class="toast" id="toastNotification">✓ Saved</div>
+
+  <div class="page-body">
+    <div class="alert alert-success hidden" id="successAlert"></div>
+    <div class="alert alert-danger hidden" id="errorAlert"></div>
+
+    <!-- ── Unverified integration notice ─────────────────────────────────── -->
+    <div class="alert alert-warning" id="unverifiedNotice">
+      <strong>Not verified against a live Jira project.</strong>
+      On every retest Agent 11 also transitions the matching Jira issues (re-open on failure, verify on
+      pass). That path has not been exercised end-to-end, because no Jira project is currently active.
+    </div>
+
+    <!-- ── Phase 1: scope & launcher ─────────────────────────────────────── -->
+    <div class="card" id="inputPhase">
+      <div class="card-title">Re-Test Scope</div>
+
+      <div class="advisory-card" style="margin-bottom:16px;">
+        <div class="advisory-header">
+          <span class="advisory-title">This run behaves like a second Agent 07 run</span>
+          <span class="advisory-badge">Two approval gates</span>
+        </div>
+        <div class="advisory-body">
+          Agent 11 re-runs tests through Agent 07 in-process, so it <strong>replaces the stage 07
+          execution results</strong> and opens <strong>two approval gates</strong> — stage 07's first,
+          then its own. This console saves the original results before starting, so you can restore
+          them afterwards and leave the Agent 07 page intact.
+        </div>
+      </div>
+
+      <div class="stat-grid">
+        <div class="stat-item">
+          <div class="stat-label">Tests To Re-Run</div>
+          <div class="stat-value" id="inTargets" style="color:#a5b4fc;">—</div>
+          <div class="stat-sub" id="inTargetSource">—</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Healed By Agent 10</div>
+          <div class="stat-value" id="inHealed" style="color:#22c55e;">—</div>
+          <div class="stat-sub">Preferred target set</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Original Pass Rate</div>
+          <div class="stat-value" id="inPassRate" style="color:#fbbf24;">—</div>
+          <div class="stat-sub">Before healing</div>
+        </div>
+      </div>
+
+      <div id="targetChips" class="advisory-chips" style="margin:12px 0;"></div>
+
+      <div style="display:flex; gap:12px; align-items:center; margin-top:8px;">
+        <input type="text" id="projectNameInput" class="text-input" style="flex:1;"
+               placeholder="Project ID (defaults to latest active pipeline run)">
+        <button id="restoreBtn" class="btn btn-secondary hidden" style="height:38px;">↺ Restore Original Results</button>
+        <button id="runBtn" class="btn btn-primary" style="min-width:230px; height:38px;">
+          <span>Run Re-Test</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ── Phase 2: running ──────────────────────────────────────────────── -->
+    <div class="card hidden" id="runningPhase">
+      <div class="progress-head">
+        <div class="card-title" style="margin:0;">Re-Testing…</div>
+        <div class="progress-counts" style="margin-left:auto;">
+          <span class="pc-pass" id="livePassed">✓ 0</span>
+          <span class="pc-fail" id="liveFailed">✕ 0</span>
+          <span class="pc-total" id="liveTotal">of 0</span>
+        </div>
+      </div>
+      <div class="progress-track" id="progressTrack">
+        <div class="progress-seg pass" id="segPass" style="width:0%"></div>
+        <div class="progress-seg fail" id="segFail" style="width:0%"></div>
+      </div>
+
+      <div class="table-container" style="max-height:260px; margin-top:12px;">
+        <table>
+          <thead><tr><th>TC Key</th><th>Title</th><th>Status</th><th>Duration</th></tr></thead>
+          <tbody id="liveGridBody"></tbody>
+        </table>
+      </div>
+
+      <div class="log-stream" id="logStream" style="margin-top:12px;"></div>
+    </div>
+
+    <!-- ── Phase 3: results ──────────────────────────────────────────────── -->
+    <div class="hidden" id="resultsPhase">
+      <div class="card">
+        <div class="verdict" id="verdictBanner">
+          <div class="verdict-grade" id="verdictRate">—</div>
+          <div class="verdict-main">
+            <div class="verdict-decision" id="verdictHeadline">Re-test complete</div>
+            <div class="verdict-sub" id="verdictSub">—</div>
+          </div>
+        </div>
+
+        <div class="stat-grid" style="margin-top:16px;">
+          <div class="stat-item">
+            <div class="stat-label">Now Passing</div>
+            <div class="stat-value" id="resNewPasses" style="color:#22c55e;">—</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Still Failing</div>
+            <div class="stat-value" id="resStillFailing" style="color:#f87171;">—</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Improvement</div>
+            <div class="stat-value" id="resImprovement" style="color:#a5b4fc;">—</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Final Pass Rate</div>
+            <div class="stat-value" id="resFinalRate" style="color:#06b6d4;">—</div>
+            <div class="stat-sub">Across the whole suite</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Per-Test Delta</div>
+        <div class="table-container">
+          <table>
+            <thead><tr><th>TC Key</th><th>Was</th><th>Now</th><th>Healed By Agent 10</th></tr></thead>
+            <tbody id="deltaBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Action bar ──────────────────────────────────────────────────────── -->
+  <div class="action-bar hidden" id="actionBar">
+    <div style="margin-right:auto; font-size:13px; color:var(--text-muted);">
+      Stage 11: <strong style="color:var(--text);" id="actionBarSummary">Re-test complete</strong>
+    </div>
+    <button class="btn btn-danger" id="rejectBtn">Reject</button>
+    <button class="btn btn-success" id="approveBtn">Approve &amp; Complete Pipeline</button>
+  </div>
+
+  <!-- ── Approval / rejection modals ─────────────────────────────────────── -->
+  <div class="modal" id="approvalModal">
+    <div class="modal-card">
+      <h2>Complete The Pipeline</h2>
+      <p>Stage 11 is the final stage. Approving closes out this pipeline run.</p>
+      <textarea id="approvalComment" placeholder="Approval notes (optional)…">Re-test delta reviewed — pipeline complete.</textarea>
+      <div class="modal-buttons">
+        <button class="btn btn-secondary" id="cancelApprovalBtn">Cancel</button>
+        <button class="btn btn-success" id="confirmApprovalBtn">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="rejectionModal">
+    <div class="modal-card">
+      <h2>Reject Stage 11</h2>
+      <p>Give a reason — typically that healed tests still fail and need manual work.</p>
+      <textarea id="rejectionComment" placeholder="Rejection rationale (required)…"></textarea>
+      <div class="modal-buttons">
+        <button class="btn btn-secondary" id="cancelRejectionBtn">Cancel</button>
+        <button class="btn btn-danger" id="confirmRejectionBtn">Reject Stage</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Chat drawer ─────────────────────────────────────────────────────── -->
+  <button class="chat-toggle-btn" id="chatToggleBtn" title="Ask ARIA about the retest">💬</button>
+  <div class="chat-drawer" id="chatDrawer">
+    <div class="chat-header">
+      <span>Ask ARIA — Re-Test</span>
+      <button class="chat-close" id="chatCloseBtn">✕</button>
+    </div>
+    <div class="chat-messages" id="chatMessages"></div>
+    <div class="chat-input-area">
+      <input type="text" id="chatInput" class="text-input" placeholder="Which healed tests still fail?">
+      <button class="btn btn-primary btn-sm" id="chatSendBtn">Send</button>
+    </div>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+
+  var state = null;
+  var sse = null;
+  var poll = null;
+  var chatHistory = [];
+  var liveRows = new Map();
+  var liveTotal = 0;
+
+  function $(id) { return document.getElementById(id); }
+  function show(el) { el.classList.remove('hidden'); }
+  function hide(el) { el.classList.add('hidden'); }
+
+  function showToast(text) {
+    var toast = $('toastNotification');
+    toast.textContent = text;
+    toast.classList.add('show');
+    setTimeout(function () { toast.classList.remove('show'); }, 2600);
+  }
+
+  function showError(text) {
+    var alert = $('errorAlert');
+    alert.textContent = text;
+    show(alert);
+    setTimeout(function () { hide(alert); }, 9000);
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  // ── Live grid (same NDJSON stream Agent 07 writes) ───────────────────────
+  function handleProgressEvent(event) {
+    if (!event) return;
+    if (event.t === 'begin') {
+      liveRows.clear();
+      liveTotal = event.total || 0;
+    } else if (event.t === 'start') {
+      liveRows.set(event.testId, {
+        tcKey: event.tcKey, title: event.title, status: 'running', duration: null
+      });
+    } else if (event.t === 'test') {
+      // Keyed on testId so a retry overwrites its earlier attempt rather than adding a row.
+      liveRows.set(event.testId, {
+        tcKey: event.tcKey, title: event.title, status: event.status, duration: event.duration
+      });
+    }
+  }
+
+  function renderLiveGrid() {
+    var body = $('liveGridBody');
+    body.innerHTML = '';
+    var passed = 0;
+    var failed = 0;
+
+    liveRows.forEach(function (row) {
+      if (row.status === 'passed') passed++;
+      else if (row.status === 'failed' || row.status === 'timedOut') failed++;
+
+      var tr = document.createElement('tr');
+      tr.className = 'tc-row';
+      tr.innerHTML = '<td class="file-name">' + escapeHtml(row.tcKey || '—') + '</td>'
+        + '<td>' + escapeHtml(row.title || '') + '</td>'
+        + '<td><span class="run-row-status run-' + escapeHtml(row.status) + '">'
+        + escapeHtml(row.status) + '</span></td>'
+        + '<td style="color:var(--text-muted);">'
+        + (row.duration != null ? Math.round(row.duration) + ' ms' : '—') + '</td>';
+      body.appendChild(tr);
+    });
+
+    $('livePassed').textContent = '✓ ' + passed;
+    $('liveFailed').textContent = '✕ ' + failed;
+    $('liveTotal').textContent = 'of ' + liveTotal;
+
+    var total = liveTotal || liveRows.size || 1;
+    $('segPass').style.width = (passed / total * 100) + '%';
+    $('segFail').style.width = (failed / total * 100) + '%';
+  }
+
+  // ── Rendering ────────────────────────────────────────────────────────────
+  function renderInputs(s) {
+    var targets = s.targetKeys || [];
+    $('inTargets').textContent = targets.length;
+    $('inTargetSource').textContent = s.targetSource === 'healed'
+      ? 'Healed keys from Agent 10' : 'Failing keys from Agent 07';
+    $('inHealed').textContent = (s.healingPatches && s.healingPatches.healed != null)
+      ? s.healingPatches.healed : '0';
+
+    var summary = (s.executionResults && s.executionResults.summary) || {};
+    $('inPassRate').textContent = summary.passRate != null ? summary.passRate + '%' : '—';
+
+    var chips = $('targetChips');
+    chips.innerHTML = '';
+    targets.forEach(function (key) {
+      var chip = document.createElement('span');
+      chip.className = 'advisory-chip';
+      chip.textContent = key;
+      chips.appendChild(chip);
+    });
+    if (!targets.length) {
+      chips.innerHTML = '<span style="color:var(--text-dim); font-size:12px;">'
+        + 'Nothing to re-test — no failing or healed tests.</span>';
+    }
+
+    if (s.canRestoreResults) show($('restoreBtn')); else hide($('restoreBtn'));
+    $('runBtn').disabled = !!s.running || targets.length === 0;
+  }
+
+  function renderResults(s) {
+    var retest = s.retestResults;
+    if (!retest || !retest.delta) { hide($('resultsPhase')); hide($('actionBar')); return; }
+    show($('resultsPhase'));
+
+    var delta = retest.delta;
+    $('verdictRate').textContent = (retest.finalPassRate != null ? retest.finalPassRate : 0) + '%';
+    $('verdictBanner').className = 'verdict ' + (delta.stillFailing === 0 ? 'verdict-approve'
+      : (delta.newPasses > 0 ? 'verdict-approve-warnings' : 'verdict-reject'));
+    $('verdictHeadline').textContent = retest.message || 'Re-test complete';
+    $('verdictSub').textContent = delta.totalRetested + ' test(s) re-run · '
+      + new Date(retest.retestAt).toLocaleString();
+
+    $('resNewPasses').textContent = delta.newPasses;
+    $('resStillFailing').textContent = delta.stillFailing;
+    $('resImprovement').textContent = '+' + delta.improvement + '%';
+    $('resFinalRate').textContent = (retest.finalPassRate != null ? retest.finalPassRate : 0) + '%';
+
+    var body = $('deltaBody');
+    body.innerHTML = '';
+    (delta.details || []).forEach(function (detail) {
+      var row = document.createElement('tr');
+      row.className = 'tc-row';
+      var passed = detail.after === 'PASSED';
+      row.innerHTML = '<td class="file-name">' + escapeHtml(detail.tcKey) + '</td>'
+        // `before` is always the literal 'FAILED' in the artifact — it records that the test was
+        // failing rather than being read back, so it is phrased that way here.
+        + '<td style="color:var(--danger);">was failing</td>'
+        + '<td><span class="status-badge ' + (passed ? 'passed' : 'failed') + '">'
+        + escapeHtml(detail.after) + '</span></td>'
+        + '<td style="color:var(--text-muted);">' + (detail.healed ? 'yes' : 'no') + '</td>';
+      body.appendChild(row);
+    });
+
+    show($('actionBar'));
+    $('actionBarSummary').textContent = delta.newPasses + ' recovered · '
+      + delta.stillFailing + ' still failing · final ' + retest.finalPassRate + '%';
+  }
+
+  function render(s) {
+    state = s;
+    renderInputs(s);
+    renderResults(s);
+
+    if (s.progress && s.progress.length && !liveRows.size) {
+      s.progress.forEach(handleProgressEvent);
+      renderLiveGrid();
+      if (s.running) show($('runningPhase'));
+    }
+    if (s.running) show($('runningPhase'));
+  }
+
+  // ── Data ─────────────────────────────────────────────────────────────────
+  function fetchState() {
+    return fetch('/api/agent11/state')
+      .then(function (r) { return r.json(); })
+      .then(function (s) {
+        if (s.error) { showError(s.error); return; }
+        render(s);
+        if (!s.running && poll) { clearInterval(poll); poll = null; }
+      })
+      .catch(function (err) { showError('Could not load state: ' + err.message); });
+  }
+
+  function appendLog(level, message) {
+    var stream = $('logStream');
+    var line = document.createElement('div');
+    line.className = level === 'error' ? 'log-error' : 'log-info';
+    line.textContent = message;
+    stream.appendChild(line);
+    stream.scrollTop = stream.scrollHeight;
+  }
+
+  function openStream() {
+    if (sse) sse.close();
+    sse = new EventSource('/api/agent11/logs');
+    sse.onmessage = function (event) {
+      var payload = JSON.parse(event.data);
+      if (payload.type === 'connected') {
+        liveRows.clear(); liveTotal = 0; $('logStream').innerHTML = '';
+      } else if (payload.type === 'progress') {
+        handleProgressEvent(payload.event);
+        renderLiveGrid();
+      } else if (payload.type === 'log') {
+        appendLog(payload.level, payload.message);
+      } else if (payload.type === 'exit') {
+        sse.close(); sse = null;
+        setTimeout(fetchState, 1500);
+      }
+    };
+    sse.onerror = function () { if (sse) { sse.close(); sse = null; } };
+  }
+
+  // ── Actions ──────────────────────────────────────────────────────────────
+  $('runBtn').addEventListener('click', function () {
+    $('runBtn').disabled = true;
+    show($('runningPhase'));
+    $('logStream').innerHTML = '';
+    liveRows.clear();
+    renderLiveGrid();
+    openStream();
+
+    fetch('/api/agent11/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectName: $('projectNameInput').value.trim() })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.error) { showError(data.error); $('runBtn').disabled = false; return; }
+        showToast('Re-test started — two approval gates will open');
+        if (poll) clearInterval(poll);
+        poll = setInterval(fetchState, 2500);
+      })
+      .catch(function (err) { showError(err.message); $('runBtn').disabled = false; });
+  });
+
+  $('restoreBtn').addEventListener('click', function () {
+    fetch('/api/agent11/restore-results', { method: 'POST' })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.error) { showError(data.error); return; }
+        showToast('↺ Restored original run ' + data.runId);
+        return fetchState();
+      })
+      .catch(function (err) { showError(err.message); });
+  });
+
+  // ── Approval ─────────────────────────────────────────────────────────────
+  var approvalModal = $('approvalModal');
+  var rejectionModal = $('rejectionModal');
+
+  $('approveBtn').addEventListener('click', function () { approvalModal.classList.add('open'); });
+  $('cancelApprovalBtn').addEventListener('click', function () { approvalModal.classList.remove('open'); });
+
+  $('confirmApprovalBtn').addEventListener('click', function () {
+    var comment = $('approvalComment').value.trim();
+    approvalModal.classList.remove('open');
+    fetch('/api/agent11/approve', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comment: comment })
+    })
+      .then(function () {
+        showToast('✓ Pipeline complete');
+        return fetchState();
+      })
+      .catch(function (err) { showError('Approval failed: ' + err.message); });
+  });
+
+  $('rejectBtn').addEventListener('click', function () { rejectionModal.classList.add('open'); });
+  $('cancelRejectionBtn').addEventListener('click', function () { rejectionModal.classList.remove('open'); });
+
+  $('confirmRejectionBtn').addEventListener('click', function () {
+    var comment = $('rejectionComment').value.trim();
+    if (!comment) { alert('A rejection reason is required.'); return; }
+    rejectionModal.classList.remove('open');
+    fetch('/api/agent11/reject', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comment: comment })
+    })
+      .then(function () { showToast('Stage 11 rejected'); return fetchState(); })
+      .catch(function (err) { showError('Rejection failed: ' + err.message); });
+  });
+
+  // ── Chat ─────────────────────────────────────────────────────────────────
+  $('chatToggleBtn').addEventListener('click', function () { $('chatDrawer').classList.toggle('open'); });
+  $('chatCloseBtn').addEventListener('click', function () { $('chatDrawer').classList.remove('open'); });
+
+  function addBubble(role, text) {
+    var bubble = document.createElement('div');
+    bubble.className = 'chat-bubble ' + (role === 'user' ? 'user' : 'aria');
+    bubble.textContent = text;
+    $('chatMessages').appendChild(bubble);
+    $('chatMessages').scrollTop = $('chatMessages').scrollHeight;
+  }
+
+  function sendChat() {
+    var input = $('chatInput');
+    var message = input.value.trim();
+    if (!message) return;
+    addBubble('user', message);
+    chatHistory.push({ role: 'user', content: message });
+    input.value = '';
+    addBubble('aria', 'Thinking…');
+    var pending = $('chatMessages').lastChild;
+
+    fetch('/api/agent11/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: message, history: chatHistory.slice(0, -1) })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        pending.textContent = data.reply || data.error || 'No response.';
+        if (data.reply) chatHistory.push({ role: 'assistant', content: data.reply });
+      })
+      .catch(function (err) { pending.textContent = 'Chat failed: ' + err.message; });
+  }
+
+  $('chatSendBtn').addEventListener('click', sendChat);
+  $('chatInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') sendChat(); });
+
+  // ── Boot ─────────────────────────────────────────────────────────────────
+  window.AriaPipelineNav.start(11);
+  fetchState().then(function () {
+    if (state && state.running) { openStream(); poll = setInterval(fetchState, 2500); }
+  });
+}());
+</script>
+</body>
+</html>

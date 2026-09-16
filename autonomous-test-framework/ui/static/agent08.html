@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ARIA — Agent 08: Bug Reporter</title>
+  <link rel="stylesheet" href="/aria.css" />
+  <script src="/pipeline-nav.js"></script>
+  <style>
+    .verdict-chip { display:inline-block; padding:2px 8px; border-radius:6px; font-size:11px; font-weight:700; }
+    .verdict-new { background:var(--success-bg); color:var(--success); }
+    .verdict-jira { background:var(--cyan-bg); color:var(--cyan); }
+    .verdict-memory { background:var(--warning-bg); color:var(--warning); }
+    .attach-thumb { width:96px; height:64px; object-fit:cover; border-radius:6px; border:1px solid var(--border); }
+    .attach-item { display:flex; gap:10px; align-items:center; padding:8px; border:1px solid var(--border);
+      border-radius:var(--radius); margin-bottom:8px; background:var(--surface2); }
+  </style>
+</head>
+<body>
+
+  <header class="header">
+    <div class="header-logo">ARIA <span>/</span> Agent 08</div>
+    <div class="header-badge">Bug Reporter</div>
+  </header>
+
+  <div class="pipeline-bar" id="pipelineBar"></div>
+  <div class="toast" id="toastNotification">✓ Saved</div>
+
+  <div class="page-body">
+    <div class="alert alert-success hidden" id="successAlert"></div>
+    <div class="alert alert-danger hidden" id="errorAlert"></div>
+
+    <!-- ── Unverified integration notice ─────────────────────────────────── -->
+    <div class="alert alert-warning" id="unverifiedNotice">
+      <div style="display:flex; align-items:flex-start; gap:12px;">
+        <div style="flex:1;">
+          <strong>Not verified against a live Jira project.</strong>
+          Filing has been built but never exercised end-to-end, because no Jira project is currently
+          active. Previewing is always safe — it only reads. <strong>Committing creates real,
+          permanent Jira issues.</strong>
+          <label style="display:flex; align-items:center; gap:8px; margin-top:10px; cursor:pointer;">
+            <input type="checkbox" id="ackUnverified" />
+            <span>I understand — enable the commit button</span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Phase 1: scope ────────────────────────────────────────────────── -->
+    <div class="card" id="inputPhase">
+      <div class="card-title">Triage Scope</div>
+      <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px; line-height:1.5;">
+        The preview below is built with Agent 08's own bug-building logic, so it is exactly what the
+        pipeline would file — but nothing is written until you commit. Review, edit and deselect first.
+      </p>
+
+      <div class="stat-grid">
+        <div class="stat-item">
+          <div class="stat-label">Failing Tests</div>
+          <div class="stat-value" id="inFailed" style="color:#f87171;">—</div>
+          <div class="stat-sub">One proposed bug each</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">New</div>
+          <div class="stat-value" id="inNew" style="color:#22c55e;">—</div>
+          <div class="stat-sub">Would create an issue</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Duplicates</div>
+          <div class="stat-value" id="inDups" style="color:#fbbf24;">—</div>
+          <div class="stat-sub">Comment or skip</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Jira Project</div>
+          <div class="stat-value" id="inProject" style="color:#a5b4fc; font-size:18px;">—</div>
+          <div class="stat-sub">Target board</div>
+        </div>
+      </div>
+
+      <div class="card" style="background:var(--surface2); margin:16px 0;">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+          <div class="card-title" style="margin:0;">Integration Status</div>
+          <button class="btn btn-secondary btn-sm" id="testJiraBtn" style="margin-left:auto;">Test Connection</button>
+        </div>
+        <div id="statusStrip" style="display:flex; flex-wrap:wrap; gap:8px;">
+          <span style="color:var(--text-dim); font-size:12px;">Checking…</span>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:12px; align-items:center; margin-top:8px;">
+        <input type="text" id="projectNameInput" class="text-input" style="flex:1;"
+               placeholder="Project ID (defaults to latest active pipeline run)">
+        <button id="previewBtn" class="btn btn-primary" style="min-width:230px; height:38px;">
+          <span>Build Preview (read-only)</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ── Phase 2: preview ──────────────────────────────────────────────── -->
+    <div class="card hidden" id="previewPhase">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+        <div class="card-title" style="margin:0;">Proposed Bugs</div>
+        <span class="advisory-badge" id="selectionBadge" style="margin-left:auto;">—</span>
+      </div>
+
+      <div class="filter-tabs">
+        <button class="tab-btn active" id="tabAll">All</button>
+        <button class="tab-btn" id="tabNew">New only</button>
+        <input type="text" id="searchInput" class="search-input" placeholder="Search proposals…">
+      </div>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:36px;"></th>
+              <th>TC Key</th><th>Proposed Title</th><th>Severity</th><th>Verdict</th><th>Evidence</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="proposalsBody"></tbody>
+        </table>
+      </div>
+
+      <div style="display:flex; gap:10px; margin-top:14px; align-items:center;">
+        <span style="font-size:12px; color:var(--text-dim);" id="commitHint">
+          Committing writes to Jira and cannot be undone.
+        </span>
+        <button class="btn btn-success" id="commitBtn" style="margin-left:auto;" disabled>
+          File Selected Bugs
+        </button>
+      </div>
+    </div>
+
+    <!-- ── Phase 3: results ──────────────────────────────────────────────── -->
+    <div class="card hidden" id="resultsPhase">
+      <div class="card-title">Filed Bugs</div>
+      <div class="stat-grid">
+        <div class="stat-item">
+          <div class="stat-label">Created</div>
+          <div class="stat-value" id="resCreated" style="color:#22c55e;">—</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Updated</div>
+          <div class="stat-value" id="resUpdated" style="color:#06b6d4;">—</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Skipped</div>
+          <div class="stat-value" id="resSkipped" style="color:#fbbf24;">—</div>
+        </div>
+      </div>
+      <div class="table-container" style="margin-top:14px;">
+        <table>
+          <thead><tr><th>Jira Key</th><th>TC Key</th><th>Title</th><th>Severity</th></tr></thead>
+          <tbody id="filedBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Action bar ──────────────────────────────────────────────────────── -->
+  <div class="action-bar hidden" id="actionBar">
+    <div style="margin-right:auto; font-size:13px; color:var(--text-muted);">
+      Stage 08: <strong style="color:var(--text);" id="actionBarSummary">Bugs filed</strong>
+    </div>
+    <button class="btn btn-danger" id="rejectBtn">Reject</button>
+    <button class="btn btn-success" id="approveBtn">Approve &amp; Proceed to Agent 09</button>
+  </div>
+
+  <!-- ── Bug editor modal ────────────────────────────────────────────────── -->
+  <div class="modal" id="editModal">
+    <div class="code-modal-dialog" style="max-width:860px; height:auto;">
+      <div class="code-modal-head">
+        <div class="code-modal-head-left">
+          <div class="code-modal-title" id="editTitle">Edit Bug</div>
+          <div class="code-modal-badge" id="editBadge">NEW</div>
+        </div>
+        <button class="code-modal-close-btn" id="editCloseTopBtn" title="Close">✕</button>
+      </div>
+
+      <div style="padding:20px 24px; overflow:auto;">
+        <label style="font-size:12px; color:var(--text-muted);">Summary</label>
+        <input type="text" id="editSummary" class="text-input" style="width:100%; margin:6px 0 14px;">
+
+        <div style="display:flex; gap:12px; margin-bottom:14px;">
+          <div style="flex:1;">
+            <label style="font-size:12px; color:var(--text-muted);">Severity</label>
+            <select id="editSeverity" class="select-input" style="width:100%; margin-top:6px;">
+              <option>Critical</option><option>High</option><option>Medium</option><option>Low</option>
+            </select>
+          </div>
+          <div style="flex:2;">
+            <label style="font-size:12px; color:var(--text-muted);">Labels (comma separated)</label>
+            <input type="text" id="editLabels" class="text-input" style="width:100%; margin-top:6px;">
+          </div>
+        </div>
+
+        <label style="font-size:12px; color:var(--text-muted);">
+          Description — the generated one is a single line; add Steps / Expected / Actual here
+        </label>
+        <textarea id="editDescription" class="code-editor-textarea" style="height:180px; margin:6px 0 14px;"></textarea>
+
+        <label style="font-size:12px; color:var(--text-muted);">Evidence to attach</label>
+        <div id="editAttachments" style="margin-top:8px;"></div>
+      </div>
+
+      <div class="code-modal-foot">
+        <button class="btn btn-secondary" id="editCancelBtn">✕ Cancel</button>
+        <button class="btn btn-primary" id="editSaveBtn">Apply Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Commit confirm modal ────────────────────────────────────────────── -->
+  <div class="modal" id="commitModal">
+    <div class="modal-card">
+      <h2>File bugs in Jira</h2>
+      <p id="commitSummaryText">This creates real Jira issues.</p>
+      <div class="modal-buttons">
+        <button class="btn btn-secondary" id="cancelCommitBtn">Cancel</button>
+        <button class="btn btn-success" id="confirmCommitBtn">Create Issues</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Approval / rejection modals ─────────────────────────────────────── -->
+  <div class="modal" id="approvalModal">
+    <div class="modal-card">
+      <h2>Approve Stage 08</h2>
+      <p>Confirm the filed bugs and proceed to Agent 09 (Report Generator).</p>
+      <textarea id="approvalComment" placeholder="Approval notes (optional)…">Bug reports reviewed and accepted.</textarea>
+      <div class="modal-buttons">
+        <button class="btn btn-secondary" id="cancelApprovalBtn">Cancel</button>
+        <button class="btn btn-success" id="confirmApprovalBtn">Confirm &amp; Advance</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="rejectionModal">
+    <div class="modal-card">
+      <h2>Reject Stage 08</h2>
+      <p>Give a reason. Any Jira issues already created are not removed by rejecting.</p>
+      <textarea id="rejectionComment" placeholder="Rejection rationale (required)…"></textarea>
+      <div class="modal-buttons">
+        <button class="btn btn-secondary" id="cancelRejectionBtn">Cancel</button>
+        <button class="btn btn-danger" id="confirmRejectionBtn">Reject Stage</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Chat drawer ─────────────────────────────────────────────────────── -->
+  <button class="chat-toggle-btn" id="chatToggleBtn" title="Ask ARIA about these failures">💬</button>
+  <div class="chat-drawer" id="chatDrawer">
+    <div class="chat-header">
+      <span>Ask ARIA — Triage</span>
+      <button class="chat-close" id="chatCloseBtn">✕</button>
+    </div>
+    <div class="chat-messages" id="chatMessages"></div>
+    <div class="chat-input-area">
+      <input type="text" id="chatInput" class="text-input" placeholder="Is TC-040 a real defect or flaky?">
+      <button class="btn btn-primary btn-sm" id="chatSendBtn">Send</button>
+    </div>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+
+  var state = null;
+  var proposals = [];
+  var filter = 'all';
+  var editIndex = -1;
+  var chatHistory = [];
+
+  function $(id) { return document.getElementById(id); }
+  function show(el) { el.classList.remove('hidden'); }
+  function hide(el) { el.classList.add('hidden'); }
+
+  function showToast(text) {
+    var toast = $('toastNotification');
+    toast.textContent = text;
+    toast.classList.add('show');
+    setTimeout(function () { toast.classList.remove('show'); }, 2600);
+  }
+
+  function showError(text) {
+    var alert = $('errorAlert');
+    alert.textContent = text;
+    show(alert);
+    setTimeout(function () { hide(alert); }, 9000);
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  // ── Status ───────────────────────────────────────────────────────────────
+  function renderStatus(payload) {
+    var strip = $('statusStrip');
+    strip.innerHTML = '';
+    (payload.checks || []).forEach(function (check) {
+      var chip = document.createElement('span');
+      chip.className = 'advisory-chip';
+      var mark = check.status === 'ok' ? '✓' : (check.status === 'warn' ? '!' : '✕');
+      chip.style.color = check.status === 'ok' ? 'var(--success)'
+        : (check.status === 'warn' ? 'var(--warning)' : 'var(--danger)');
+      chip.textContent = mark + ' ' + check.label + ' — ' + check.detail;
+      strip.appendChild(chip);
+    });
+  }
+
+  function loadStatus(live) {
+    fetch('/api/agent08/status' + (live ? '?live=1' : ''))
+      .then(function (r) { return r.json(); })
+      .then(renderStatus)
+      .catch(function (err) { showError('Status check failed: ' + err.message); });
+  }
+
+  // ── Preview rendering ────────────────────────────────────────────────────
+  function verdictChip(verdict, duplicateOf) {
+    if (verdict === 'MEMORY_DUP') {
+      return '<span class="verdict-chip verdict-memory">MEMORY DUP'
+        + (duplicateOf ? ' · ' + escapeHtml(duplicateOf) : '') + '</span>';
+    }
+    if (verdict === 'JIRA_DUP') {
+      return '<span class="verdict-chip verdict-jira">JIRA DUP'
+        + (duplicateOf ? ' · ' + escapeHtml(duplicateOf) : '') + '</span>';
+    }
+    return '<span class="verdict-chip verdict-new">NEW</span>';
+  }
+
+  function visibleProposals() {
+    var term = ($('searchInput').value || '').toLowerCase();
+    return proposals.filter(function (p) {
+      if (filter === 'new' && p.verdict !== 'NEW') return false;
+      if (!term) return true;
+      return (p.title || '').toLowerCase().indexOf(term) >= 0
+        || (p.tcKey || '').toLowerCase().indexOf(term) >= 0;
+    });
+  }
+
+  function renderProposals() {
+    var body = $('proposalsBody');
+    body.innerHTML = '';
+
+    visibleProposals().forEach(function (proposal) {
+      var index = proposals.indexOf(proposal);
+      var row = document.createElement('tr');
+      row.className = 'tc-row';
+
+      var flakyNote = proposal.flaky
+        ? '<div style="font-size:11px; color:var(--warning); margin-top:3px;">'
+          + '⚠ Retried ' + proposal.retries + '× — may be flaky rather than a defect</div>'
+        : '';
+
+      row.innerHTML = '<td></td>'
+        + '<td class="file-name">' + escapeHtml(proposal.tcKey || proposal.kind) + '</td>'
+        + '<td>' + escapeHtml(proposal.title) + flakyNote + '</td>'
+        + '<td><span class="sev sev-' + escapeHtml(String(proposal.severity).toLowerCase())
+        + '">' + escapeHtml(proposal.severity) + '</span></td>'
+        + '<td>' + verdictChip(proposal.verdict, proposal.duplicateOf) + '</td>'
+        + '<td style="color:var(--text-muted); font-size:12px;">'
+        + (proposal.attachments || []).length + ' file(s)</td>'
+        + '<td></td>';
+
+      var checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = !!proposal.selected;
+      checkbox.addEventListener('change', function () {
+        proposal.selected = checkbox.checked;
+        updateSelectionBadge();
+      });
+      row.firstChild.appendChild(checkbox);
+
+      var editBtn = document.createElement('button');
+      editBtn.className = 'btn btn-secondary btn-sm';
+      editBtn.textContent = 'Edit';
+      editBtn.addEventListener('click', function () { openEditor(index); });
+      row.lastChild.appendChild(editBtn);
+
+      body.appendChild(row);
+    });
+
+    if (!body.children.length) {
+      body.innerHTML = '<tr><td colspan="7" style="color:var(--text-dim);">No proposals match.</td></tr>';
+    }
+    updateSelectionBadge();
+  }
+
+  function updateSelectionBadge() {
+    var selected = proposals.filter(function (p) { return p.selected; });
+    var creates = selected.filter(function (p) { return p.verdict === 'NEW'; }).length;
+    var comments = selected.filter(function (p) { return p.verdict === 'JIRA_DUP'; }).length;
+    $('selectionBadge').textContent = selected.length + ' selected · ' + creates + ' create · ' + comments + ' comment';
+    $('commitBtn').textContent = 'File ' + selected.length + ' Selected Bug(s)';
+    $('commitBtn').disabled = selected.length === 0 || !$('ackUnverified').checked;
+  }
+
+  // ── Editor ───────────────────────────────────────────────────────────────
+  function openEditor(index) {
+    editIndex = index;
+    var proposal = proposals[index];
+    $('editTitle').textContent = proposal.tcKey || 'Performance bug';
+    $('editBadge').textContent = proposal.verdict;
+    $('editSummary').value = proposal.title || '';
+    $('editSeverity').value = proposal.severity || 'Medium';
+    $('editLabels').value = (proposal.labels || []).join(', ');
+    $('editDescription').value = proposal.description || '';
+
+    var container = $('editAttachments');
+    container.innerHTML = '';
+    if (!(proposal.attachments || []).length) {
+      container.innerHTML = '<div style="color:var(--text-dim); font-size:12px;">'
+        + 'No screenshots, video or trace were captured for this test.</div>';
+    }
+    (proposal.attachments || []).forEach(function (attachment) {
+      var item = document.createElement('div');
+      item.className = 'attach-item';
+
+      var checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = attachment.selected !== false;
+      checkbox.addEventListener('change', function () { attachment.selected = checkbox.checked; });
+      item.appendChild(checkbox);
+
+      if (/\.(png|jpe?g)$/i.test(attachment.name)) {
+        var img = document.createElement('img');
+        img.className = 'attach-thumb';
+        img.src = '/api/agent08/artifact?path=' + encodeURIComponent(attachment.path);
+        img.alt = attachment.name;
+        item.appendChild(img);
+      }
+
+      var label = document.createElement('div');
+      label.innerHTML = '<div style="font-size:12px;">' + escapeHtml(attachment.name) + '</div>'
+        + '<div style="font-size:11px; color:var(--text-dim);">' + escapeHtml(attachment.kind) + '</div>';
+      item.appendChild(label);
+      container.appendChild(item);
+    });
+
+    $('editModal').classList.add('open');
+  }
+
+  $('editSaveBtn').addEventListener('click', function () {
+    if (editIndex < 0) return;
+    var proposal = proposals[editIndex];
+    proposal.title = $('editSummary').value.trim();
+    proposal.severity = $('editSeverity').value;
+    proposal.labels = $('editLabels').value.split(',').map(function (l) { return l.trim(); }).filter(Boolean);
+    proposal.description = $('editDescription').value;
+    $('editModal').classList.remove('open');
+    renderProposals();
+    showToast('Proposal updated — not yet filed');
+  });
+
+  $('editCancelBtn').addEventListener('click', function () { $('editModal').classList.remove('open'); });
+  $('editCloseTopBtn').addEventListener('click', function () { $('editModal').classList.remove('open'); });
+
+  // ── Preview / commit ─────────────────────────────────────────────────────
+  $('previewBtn').addEventListener('click', function () {
+    $('previewBtn').disabled = true;
+    fetch('/api/agent08/preview')
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.error) { showError(data.error); return; }
+        proposals = data.proposals || [];
+        proposals.forEach(function (p) {
+          (p.attachments || []).forEach(function (a) { a.selected = true; });
+        });
+
+        $('inFailed').textContent = proposals.length;
+        $('inNew').textContent = proposals.filter(function (p) { return p.verdict === 'NEW'; }).length;
+        $('inDups').textContent = proposals.filter(function (p) { return p.verdict !== 'NEW'; }).length;
+
+        show($('previewPhase'));
+        renderProposals();
+        showToast('Preview built — nothing was written');
+      })
+      .catch(function (err) { showError(err.message); })
+      .finally(function () { $('previewBtn').disabled = false; });
+  });
+
+  $('ackUnverified').addEventListener('change', updateSelectionBadge);
+  $('searchInput').addEventListener('input', renderProposals);
+  $('tabAll').addEventListener('click', function () {
+    filter = 'all'; this.classList.add('active'); $('tabNew').classList.remove('active'); renderProposals();
+  });
+  $('tabNew').addEventListener('click', function () {
+    filter = 'new'; this.classList.add('active'); $('tabAll').classList.remove('active'); renderProposals();
+  });
+
+  $('commitBtn').addEventListener('click', function () {
+    var selected = proposals.filter(function (p) { return p.selected; });
+    $('commitSummaryText').innerHTML = 'This will create <strong>'
+      + selected.filter(function (p) { return p.verdict === 'NEW'; }).length
+      + '</strong> new Jira issue(s) and comment on <strong>'
+      + selected.filter(function (p) { return p.verdict === 'JIRA_DUP'; }).length
+      + '</strong> existing one(s). Jira issues cannot be deleted from here.';
+    $('commitModal').classList.add('open');
+  });
+
+  $('cancelCommitBtn').addEventListener('click', function () { $('commitModal').classList.remove('open'); });
+
+  $('confirmCommitBtn').addEventListener('click', function () {
+    $('commitModal').classList.remove('open');
+    var payload = proposals.filter(function (p) { return p.selected; }).map(function (p) {
+      return {
+        tcKey: p.tcKey, title: p.title, severity: p.severity, labels: p.labels,
+        description: p.description, environment: p.environment, hash: p.hash,
+        verdict: p.verdict, duplicateOf: p.duplicateOf, errorMessage: p.errorMessage,
+        attachments: (p.attachments || []).filter(function (a) { return a.selected !== false; })
+      };
+    });
+
+    $('commitBtn').disabled = true;
+    fetch('/api/agent08/commit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bugs: payload, projectName: $('projectNameInput').value.trim() })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.error) { showError(data.error); return; }
+        (data.warnings || []).forEach(function (w) { showError(w); });
+        showToast('✓ Filed ' + data.output.bugsCreated + ' issue(s)');
+        return fetchState();
+      })
+      .catch(function (err) { showError(err.message); })
+      .finally(function () { $('commitBtn').disabled = false; });
+  });
+
+  // ── State ────────────────────────────────────────────────────────────────
+  function renderFiled(s) {
+    var reports = s.bugReports;
+    if (!reports || !reports.bugReports) { hide($('resultsPhase')); hide($('actionBar')); return; }
+    show($('resultsPhase'));
+
+    $('resCreated').textContent = reports.bugsCreated != null ? reports.bugsCreated : 0;
+    $('resUpdated').textContent = reports.bugsUpdated != null ? reports.bugsUpdated : 0;
+    $('resSkipped').textContent = reports.duplicatesSkipped != null ? reports.duplicatesSkipped : 0;
+
+    var body = $('filedBody');
+    body.innerHTML = '';
+    (reports.bugReports || []).forEach(function (bug) {
+      var row = document.createElement('tr');
+      row.className = 'tc-row';
+      row.innerHTML = '<td class="file-name">' + escapeHtml(bug.jiraKey || '—') + '</td>'
+        + '<td>' + escapeHtml(bug.tcKey || '—') + '</td>'
+        + '<td>' + escapeHtml(bug.title) + '</td>'
+        + '<td>' + escapeHtml(bug.severity) + '</td>';
+      body.appendChild(row);
+    });
+    if (!body.children.length) {
+      body.innerHTML = '<tr><td colspan="4" style="color:var(--text-dim);">No bugs filed.</td></tr>';
+    }
+
+    show($('actionBar'));
+    $('actionBarSummary').textContent = reports.bugsCreated + ' created · '
+      + (reports.bugsUpdated || 0) + ' updated · ' + (reports.duplicatesSkipped || 0) + ' skipped';
+  }
+
+  function fetchState() {
+    return fetch('/api/agent08/state')
+      .then(function (r) { return r.json(); })
+      .then(function (s) {
+        if (s.error) { showError(s.error); return; }
+        state = s;
+        $('inProject').textContent = s.jiraProject || '—';
+        var summary = (s.executionResults && s.executionResults.summary) || {};
+        if (!proposals.length) $('inFailed').textContent = summary.failed != null ? summary.failed : '—';
+        renderFiled(s);
+      })
+      .catch(function (err) { showError('Could not load state: ' + err.message); });
+  }
+
+  $('testJiraBtn').addEventListener('click', function () {
+    $('testJiraBtn').disabled = true;
+    $('testJiraBtn').textContent = 'Testing…';
+    fetch('/api/agent08/status?live=1')
+      .then(function (r) { return r.json(); })
+      .then(function (payload) {
+        renderStatus(payload);
+        var jira = (payload.checks || []).filter(function (c) { return c.id === 'jira.identity'; })[0];
+        showToast(jira && jira.status === 'ok' ? '✓ Jira reachable' : '✕ Jira not reachable');
+      })
+      .catch(function (err) { showError(err.message); })
+      .finally(function () {
+        $('testJiraBtn').disabled = false;
+        $('testJiraBtn').textContent = 'Test Connection';
+      });
+  });
+
+  // ── Approval ─────────────────────────────────────────────────────────────
+  var approvalModal = $('approvalModal');
+  var rejectionModal = $('rejectionModal');
+
+  $('approveBtn').addEventListener('click', function () { approvalModal.classList.add('open'); });
+  $('cancelApprovalBtn').addEventListener('click', function () { approvalModal.classList.remove('open'); });
+
+  $('confirmApprovalBtn').addEventListener('click', function () {
+    var comment = $('approvalComment').value.trim();
+    approvalModal.classList.remove('open');
+    fetch('/api/agent08/approve', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comment: comment })
+    })
+      .then(function () {
+        showToast('✓ Stage 08 approved — proceeding to Agent 09…');
+        var next = window.AriaPipelineNav && window.AriaPipelineNav.pageForStage(9);
+        if (next) setTimeout(function () { window.location.href = next; }, 1500);
+        else fetchState();
+      })
+      .catch(function (err) { showError('Approval failed: ' + err.message); });
+  });
+
+  $('rejectBtn').addEventListener('click', function () { rejectionModal.classList.add('open'); });
+  $('cancelRejectionBtn').addEventListener('click', function () { rejectionModal.classList.remove('open'); });
+
+  $('confirmRejectionBtn').addEventListener('click', function () {
+    var comment = $('rejectionComment').value.trim();
+    if (!comment) { alert('A rejection reason is required.'); return; }
+    rejectionModal.classList.remove('open');
+    fetch('/api/agent08/reject', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comment: comment })
+    })
+      .then(function () { showToast('Stage 08 rejected'); return fetchState(); })
+      .catch(function (err) { showError('Rejection failed: ' + err.message); });
+  });
+
+  // ── Chat ─────────────────────────────────────────────────────────────────
+  $('chatToggleBtn').addEventListener('click', function () { $('chatDrawer').classList.toggle('open'); });
+  $('chatCloseBtn').addEventListener('click', function () { $('chatDrawer').classList.remove('open'); });
+
+  function addBubble(role, text) {
+    var bubble = document.createElement('div');
+    bubble.className = 'chat-bubble ' + (role === 'user' ? 'user' : 'aria');
+    bubble.textContent = text;
+    $('chatMessages').appendChild(bubble);
+    $('chatMessages').scrollTop = $('chatMessages').scrollHeight;
+  }
+
+  function sendChat() {
+    var input = $('chatInput');
+    var message = input.value.trim();
+    if (!message) return;
+    addBubble('user', message);
+    chatHistory.push({ role: 'user', content: message });
+    input.value = '';
+    addBubble('aria', 'Thinking…');
+    var pending = $('chatMessages').lastChild;
+
+    fetch('/api/agent08/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: message, history: chatHistory.slice(0, -1) })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        pending.textContent = data.reply || data.error || 'No response.';
+        if (data.reply) chatHistory.push({ role: 'assistant', content: data.reply });
+      })
+      .catch(function (err) { pending.textContent = 'Chat failed: ' + err.message; });
+  }
+
+  $('chatSendBtn').addEventListener('click', sendChat);
+  $('chatInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') sendChat(); });
+
+  // ── Boot ─────────────────────────────────────────────────────────────────
+  window.AriaPipelineNav.start(8);
+  loadStatus(false);
+  fetchState();
+}());
+</script>
+</body>
+</html>
