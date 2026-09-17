@@ -248,22 +248,52 @@ const FRAMEWORK_CONFIG = {
 
   llm: {
     embedding: 'text-embedding-3-small',
+    /**
+     * USD price per 1,000 tokens, keyed by canonical model id. Verified against each
+     * vendor's published pricing as of 2026-09-17 — re-check periodically, vendors
+     * revise rates without notice (e.g. Gemini 3.6/3.7/3.8 Flash step up on 2027-01-01).
+     * Bedrock inference-profile IDs (e.g. "us.anthropic.claude-sonnet-5") don't match
+     * these keys literally — TokenPriceCalculator.resolvePricing() normalizes them
+     * (strips region/provider prefixes) and pattern-matches to the Anthropic rows below,
+     * since Bedrock on-demand pricing for current-generation Claude models mirrors
+     * Anthropic's first-party list price. Verify against the AWS Bedrock console for
+     * your account/region if this ever looks off.
+     */
     pricing: {
-      'gpt-4o': { input: 0.005, output: 0.015 },
+      // ── Anthropic (first-party API + Bedrock on-demand) ──────────────────
+      'claude-opus-5': { input: 0.005, output: 0.025 },
+      'claude-opus-4-8': { input: 0.005, output: 0.025 },
+      'claude-opus-4-7': { input: 0.005, output: 0.025 },
+      'claude-opus-4-6': { input: 0.005, output: 0.025 },
+      'claude-sonnet-5': { input: 0.002, output: 0.010 },
+      'claude-sonnet-4-6': { input: 0.003, output: 0.015 },
+      'claude-haiku-4-5': { input: 0.001, output: 0.005 },
+      'claude-3-5-sonnet-20240620': { input: 0.003, output: 0.015 }, // legacy — retained for old logs
+      // ── OpenAI ────────────────────────────────────────────────────────────
+      'gpt-4o': { input: 0.0025, output: 0.010 },
       'gpt-4o-mini': { input: 0.00015, output: 0.0006 },
-      'claude-3-5-sonnet-20240620': { input: 0.003, output: 0.015 },
-      'gemini-2.5-pro': { input: 0.0035, output: 0.0105 },
-      'gemini-2.5-flash': { input: 0.000075, output: 0.0003 },
-      'gemini-flash-latest': { input: 0.000075, output: 0.0003 },
-      'gemini-3.5-flash': { input: 0.000075, output: 0.0003 },
-      'gemini-3.5-flash-lite': { input: 0.000075, output: 0.0003 },
-      'gemini-3.6-flash': { input: 0.000075, output: 0.0003 },
-      'gemini-3.7-flash': { input: 0.000075, output: 0.0003 },
-      'gemini-3.8-flash': { input: 0.000075, output: 0.0003 },
-      'gemini-3.1-flash-lite-preview': { input: 0.000075, output: 0.0003 },
-      'gemini-3.1-flash-lite': { input: 0.000075, output: 0.0003 },
-      'gemini-flash-lite-latest': { input: 0.000075, output: 0.0003 },
       'text-embedding-3-small': { input: 0.00002, output: 0.0 },
+      // ── Google Gemini ─────────────────────────────────────────────────────
+      'gemini-2.5-pro': { input: 0.00125, output: 0.010 },
+      'gemini-2.5-flash': { input: 0.0003, output: 0.0025 },
+      'gemini-3.5-flash': { input: 0.0015, output: 0.009 },
+      'gemini-3.5-flash-lite': { input: 0.0003, output: 0.0025 },
+      'gemini-3.6-flash': { input: 0.00075, output: 0.00375 }, // introductory rate through 2026-12-31
+      'gemini-3.7-flash': { input: 0.00075, output: 0.00375 }, // introductory rate through 2026-12-31
+      'gemini-3.8-flash': { input: 0.00075, output: 0.00375 }, // introductory rate through 2026-12-31
+      'gemini-flash-latest': { input: 0.00075, output: 0.00375 }, // aliases the newest Flash — kept in sync with 3.8
+      'gemini-3.1-flash-lite-preview': { input: 0.00025, output: 0.0015 },
+      'gemini-3.1-flash-lite': { input: 0.00025, output: 0.0015 },
+      'gemini-flash-lite-latest': { input: 0.0003, output: 0.0025 }, // aliases the newest Flash-Lite — kept in sync with 3.5 lite
+    },
+    /** USD→INR conversion for cost display. Override with USD_TO_INR_RATE to pin a fixed rate. */
+    exchangeRate: {
+      /** Used only when USD_TO_INR_RATE is unset and the live lookup has never succeeded. */
+      fallbackUsdToInr: parseFloat(process.env.USD_TO_INR_RATE || '') || 96,
+      /** If USD_TO_INR_RATE is set, that rate is pinned and the live lookup below is skipped. */
+      pinnedUsdToInr: process.env.USD_TO_INR_RATE ? parseFloat(process.env.USD_TO_INR_RATE) : null,
+      liveLookupUrl: process.env.FX_RATE_API_URL || 'https://api.frankfurter.dev/v1/latest?from=USD&to=INR',
+      refreshIntervalMs: 6 * 60 * 60 * 1000, // re-fetch at most every 6h; cached to .state/fx-rate-cache.json
     },
     models: {
       default: {

@@ -21,6 +21,8 @@ import { FRAMEWORK_ROOT } from '../../core/aut/projectPaths';
 import { Logger } from '../../core/logger/Logger';
 import { FRAMEWORK_CONFIG } from '../../config/framework.config';
 import { llmClient } from '../../core/llm/LLMClient';
+import { buildStagePromptTrace, TraceRecorder, traceLabel } from '../../core/llm/stagePromptTrace';
+import { savePromptTrace } from '../../core/state-manager/promptTraceStore';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -52,6 +54,15 @@ const LLM_MAX_SEVERITY = FINDING_SEVERITY.MAJOR;
 /** Agent 05 outcome whose tests are expected in a generated spec. */
 const GENERATED_STATUS = 'GENERATED';
 
+const PROMPT_TRACE_FILE = 'automation-review-prompt-trace.json';
+
+/** How Agent 06 uses the LLM, shown in the prompt trace. */
+const LLM_USAGE_NOTES = Object.freeze([
+  'One "Logic review" call per generated spec file: the system prompt is the code-review skill plus reviewer learnings, and the user prompt is the review instructions with the whole spec source inserted, so input tokens grow with the size of the spec.',
+  'Page objects and K6 scripts are reviewed only by the deterministic AST rules (no tokens). There are no retries: a reply that is not a JSON array is logged and treated as no findings.',
+  'LLM findings are advisory — they are capped at MAJOR, so only deterministic rules can block a file.',
+]);
+
 // ─── AutomationReviewerAgent ──────────────────────────────────────────────────
 
 /**
@@ -62,6 +73,7 @@ class AutomationReviewerAgent {
   constructor() {
     this._logger = new Logger(STAGE_ID);
     this._skill = this._loadSkill();
+    this._trace = new TraceRecorder();
   }
 
   // ── Entry Point ──────────────────────────────────────────────────────────
@@ -82,6 +94,8 @@ class AutomationReviewerAgent {
     try {
       const memoryContext = await memoryEngine.getContextForStage(STAGE_ID);
       await stateManager.markStageRunning(STAGE_ID);
+      llmClient.clearCallTraces();
+      this._trace = new TraceRecorder();
 
       const scripts = input.playwrightScripts;
       const allFiles = [
@@ -121,9 +135,11 @@ class AutomationReviewerAgent {
       const output = this._buildOutput(fileReviews, overallScore, reviewDecision, scripts);
 
       // ── 7. Persist ─────────────────────────────────────────────────────
+      const usage = llmClient.getStageUsage(STAGE_ID);
       await stateManager.setPipelineArtifact('reviewedScripts', output);
-      await stateManager.markStageCompleted(STAGE_ID, output);
+      await stateManager.markStageCompleted(STAGE_ID, output, usage);
       this._saveToDisk(output);
+      await this._savePromptTrace('COMPLETED', { output, files: allFiles.length });
 
       const durationMs = Date.now() - startMs;
       this._logger.stage('COMPLETE', STAGE_ID, {
@@ -144,6 +160,7 @@ class AutomationReviewerAgent {
         summary: this._buildApprovalSummary(output),
         fullOutput: output,
         warnings,
+        usage,
       });
 
       agentResult.approvalStatus = gateResult.status;
@@ -159,6 +176,7 @@ class AutomationReviewerAgent {
       return agentResult;
     } catch (error) {
       this._logger.error('Agent execution failed', { error: error.message });
+      await this._savePromptTrace('FAILED', { error: error.message });
       await stateManager.markStageFailed(STAGE_ID, error);
       throw error;
     }
@@ -172,6 +190,8 @@ class AutomationReviewerAgent {
    */
   async _performLogicReview(file) {
     const source = fs.readFileSync(file.path, 'utf-8');
+    const relativePath = path.relative(FRAMEWORK_ROOT, file.path);
+    const group = this._trace.group(`logic ${relativePath}`, 'Logic review', relativePath, { 'Source characters': source.length });
     const prompt = `
 You are a Senior Test Automation Architect. Review the following Playwright test script for LOGICAL and FUNCTIONAL flaws.
 Ignore style and formatting (handled by static analysis).
@@ -205,6 +225,7 @@ Return ONLY the raw JSON array.
         messages: [{ role: 'system', content: this._skill }, { role: 'user', content: prompt }],
         temperature: 0.2,
         json: true,
+        traceLabel: traceLabel(group, 1),
       });
 
       let jsonStr = (response.text || '').replace(/```json\n?|\n?```/g, '').trim();
@@ -214,9 +235,12 @@ Return ONLY the raw JSON array.
       }
       // Remove trailing comma if any
       jsonStr = jsonStr.replace(/,\s*([\]}])/g, '$1');
-      return JSON.parse(jsonStr);
+      const findings = JSON.parse(jsonStr);
+      this._trace.attempt(group, { attempt: 1, summary: `${Array.isArray(findings) ? findings.length : 0} finding(s) returned`, errors: [] });
+      return findings;
     } catch (error) {
       this._logger.error('AI Logic Review failed', { file: file.fileName, error: error.message });
+      this._trace.attempt(group, { attempt: 1, summary: 'no findings used — the review failed', errors: [error.message] });
       return [];
     }
   }
@@ -545,6 +569,27 @@ Return ONLY the raw JSON array.
   }
 
   /** @private */
+  /**
+   * Persists every LLM call of this run with its purpose, token usage and cost, for the UI and reports/json.
+   * @private
+   */
+  async _savePromptTrace(status: 'COMPLETED' | 'FAILED', run: { output?: any; files?: number; error?: string }) {
+    const decision = run.output?.reviewDecision;
+    await savePromptTrace('agent06PromptTrace', PROMPT_TRACE_FILE, () => buildStagePromptTrace({
+      stageId: STAGE_ID,
+      stageName: STAGE_NAME,
+      status,
+      error: run.error,
+      projectName: stateManager.getProjectId(),
+      overview: { 'Files reviewed': run.files ?? '—', ...(decision ? { Decision: decision } : {}) },
+      llmUsageNotes: [...LLM_USAGE_NOTES],
+      sharedInputs: [],
+      groups: this._trace.groups(),
+      calls: llmClient.getCallTraces([STAGE_ID]),
+      warnings: [],
+    }), this._logger);
+  }
+
   _loadSkill() {
     let skill = '';
     try { skill = fs.readFileSync(SKILL_PATH, 'utf-8'); } catch { skill = ''; }

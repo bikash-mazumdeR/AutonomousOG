@@ -24,11 +24,18 @@ import { applyClarificationAnswers } from './readiness/applyAnswers';
 import { holdUnreadyTestCases } from './readiness/holdReview';
 import { collectOpenClarifications, describeOpenClarifications } from './readiness/reviewReadiness';
 import { carryForwardHumanEdits, reapplyHumanStatuses } from './readiness/humanEdits';
+import { llmClient } from '../../core/llm/LLMClient';
+import { buildStagePromptTrace } from '../../core/llm/stagePromptTrace';
+import { savePromptTrace } from '../../core/state-manager/promptTraceStore';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const STAGE_ID = '03-test-case-reviewer';
 const STAGE_NAME = 'Test Case Reviewer';
+const PROMPT_TRACE_FILE = 'test-case-review-prompt-trace.json';
+/** Why this stage has no LLM input to show, displayed by the prompt trace viewer. */
+const NO_LLM_REASON = 'Agent 03 reviews test cases with deterministic rules only: duplicate detection, per-dimension quality checks, '
+  + 'the coverage matrix, traceability, automation readiness and memory improvement rules. It makes no LLM call, so a review run uses 0 tokens.';
 const NEXT_STAGE = '04-test-data-generator';
 
 /** @enum {string} */
@@ -241,8 +248,11 @@ class TestCaseReviewerAgent {
 
       // ── Phase 12: Persist ──────────────────────────────────────────────
       await stateManager.setPipelineArtifact('reviewedTestCases', output);
-      await stateManager.markStageCompleted(STAGE_ID, output);
+      await stateManager.markStageCompleted(STAGE_ID, output, llmClient.getStageUsage(STAGE_ID));
       this._saveToDisk(output);
+      await this._savePromptTrace('COMPLETED', {
+        'Test cases reviewed': dedupedTCs.length, 'Quality grade': qualityScore.grade, Decision: decision,
+      });
 
       const durationMs = Date.now() - startMs;
       this._logger.stage('COMPLETE', STAGE_ID, {
@@ -279,9 +289,21 @@ class TestCaseReviewerAgent {
       return agentResult;
     } catch (error: any) {
       this._logger.error('Agent execution failed', { error: error.message });
+      await this._savePromptTrace('FAILED', {}, error.message);
       await stateManager.markStageFailed(STAGE_ID, error);
       throw error;
     }
+  }
+
+  /**
+   * Records that this run made no LLM call (and its outcome) so the UI's token view explains the 0 tokens.
+   * @private
+   */
+  async _savePromptTrace(status: 'COMPLETED' | 'FAILED', overview: Record<string, string | number>, error?: string) {
+    await savePromptTrace('agent03PromptTrace', PROMPT_TRACE_FILE, () => buildStagePromptTrace({
+      stageId: STAGE_ID, stageName: STAGE_NAME, status, error, projectName: stateManager.getProjectId(), overview,
+      llmUsageNotes: [], noLlmReason: NO_LLM_REASON, sharedInputs: [], groups: [], calls: llmClient.getCallTraces([STAGE_ID]), warnings: [],
+    }), this._logger);
   }
 
   // ── Informational Requirement Mapping & Exclusion Analysis ────────────────

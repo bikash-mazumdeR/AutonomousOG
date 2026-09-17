@@ -83,6 +83,15 @@
       <div class="log-stream" id="logStream"></div>
     </div>
 
+    <!-- Token usage card (visible whenever usage data is available, independent of phase) -->
+    <div class="card hidden" id="tokenCard">
+      <div class="card-title"><span>🪙 Token Usage</span></div>
+      <div class="token-row"><span class="token-label">Prompt tokens</span><span class="token-value" id="tokPrompt">—</span></div>
+      <div class="token-row"><span class="token-label">Completion tokens</span><span class="token-value" id="tokCompletion">—</span></div>
+      <div class="token-row"><span class="token-label">Total tokens</span><span class="token-value" id="tokTotal">—</span></div>
+      <div class="token-row"><span class="token-label">Estimated cost</span><span class="token-value" id="tokCost">—</span></div>
+    </div>
+
     <!-- ── Phase 3: results ──────────────────────────────────────────────── -->
     <div class="hidden" id="resultsPhase">
 
@@ -411,11 +420,24 @@
     $('actionBarSummary').textContent = patches.healed + ' healed · ' + patches.unhealed + ' still failing';
   }
 
+  function updateTokenCard(usage) {
+    var card = $('tokenCard');
+    if (!usage) { hide(card); return; }
+    $('tokPrompt').textContent = (usage.promptTokens || 0).toLocaleString();
+    $('tokCompletion').textContent = (usage.completionTokens || 0).toLocaleString();
+    $('tokTotal').textContent = (usage.totalTokens || 0).toLocaleString();
+    var costUSD = usage.estimatedCostUSD != null ? usage.estimatedCostUSD : (usage.estimatedCost || 0);
+    var costINR = usage.estimatedCostINR != null ? usage.estimatedCostINR : costUSD * (usage.exchangeRate || 96);
+    $('tokCost').textContent = '₹' + costINR.toFixed(2) + ' ($' + costUSD.toFixed(6) + ')';
+    show(card);
+  }
+
   function render(s) {
     state = s;
     var summary = (s.executionResults && s.executionResults.summary) || {};
     $('inFailed').textContent = summary.failed != null ? summary.failed : '—';
 
+    updateTokenCard(s.stage && s.stage.usage);
     renderChanges(s);
     renderResults(s);
 

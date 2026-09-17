@@ -1,5 +1,6 @@
 {
-  "invalidPassword": "Aria_Wrong_dd1f927e!",
-  "invalidUsername": "aria_unknown_user_dd1f927e",
-  "TC013_invalidUsername": "aria_unknown_user_faa53236"
+  "TC010_unregisteredUsername": "aria_unknown_user_7a956deb",
+  "TC010_wrongPassword": "Aria_Wrong_7a956deb!",
+  "unregisteredUsername": "aria_unknown_user_01ef14e0",
+  "wrongPassword": "Aria_Wrong_01ef14e0!"
 }

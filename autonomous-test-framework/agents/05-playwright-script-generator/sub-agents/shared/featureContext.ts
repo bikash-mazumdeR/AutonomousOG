@@ -12,6 +12,7 @@ import { AutomationTestCase } from '../../contracts/automationTestCase';
 import { assessReadiness } from '../../../../core/readiness/readinessRules';
 import { MissingItem, READINESS_PHASE, ReadinessContext } from '../../../../core/readiness/readinessTypes';
 import { TestOutcome } from '../../generation/testBodyGenerator';
+import { TraceRecorder } from '../../../../core/llm/stagePromptTrace';
 
 /** Everything a sub-agent needs to generate one feature. */
 export interface FeatureGenerationContext {
@@ -27,6 +28,8 @@ export interface FeatureGenerationContext {
   concurrency: number;
   headless: boolean;
   logger: any;
+  /** Records LLM work units and validation attempts for the prompt trace (optional). */
+  trace?: TraceRecorder;
 }
 
 /** A file to write. */

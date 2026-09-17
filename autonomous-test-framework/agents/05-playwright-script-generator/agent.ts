@@ -36,7 +36,7 @@ import {
 import {
   LLM_SETTINGS, NEXT_STAGE, STAGE_ID, STAGE_NAME, STAGE_NUMBER, TC_OUTCOME,
 } from './constants';
-import { ChatMessage } from './types';
+import { ChatMessage, ChatOptions } from './types';
 import {
   AutomationTestCase, FixtureAccumulator, buildAutomationTestCase, modeForType,
 } from './contracts/automationTestCase';
@@ -48,6 +48,17 @@ import { APIScriptGenerator } from './sub-agents/api-script-generator';
 import { K6ScriptGenerator } from './sub-agents/k6-script-generator';
 import { FeatureGenerationContext, FeatureGenerationResult } from './sub-agents/shared/featureContext';
 import { writeBackClarifications } from './clarifications/writeBack';
+import { buildStagePromptTrace, TraceRecorder } from '../../core/llm/stagePromptTrace';
+import { savePromptTrace } from '../../core/state-manager/promptTraceStore';
+
+const PROMPT_TRACE_FILE = 'playwright-script-generation-prompt-trace.json';
+
+/** How Agent 05 uses the LLM, shown in the prompt trace. */
+const LLM_USAGE_NOTES: readonly string[] = Object.freeze([
+  'UI features: during live discovery the LLM plans the actions that carry each test case from one verified page state to the next (one "Navigation plan" call per step range; a rejected plan is retried with the validator errors appended).',
+  'Every mode: the LLM writes test bodies as JSON for up to 6 test cases per call. Invalid bodies are retried with their exact validation errors, so a retry re-sends the system prompt and the full request.',
+  'Page objects, spec files, fixtures and K6 wrappers are rendered by code — they use no tokens.',
+]);
 
 interface ApprovedScope {
   approved: any[];
@@ -104,6 +115,8 @@ class PlaywrightScriptGeneratorAgent {
 
   private _k6: K6ScriptGenerator;
 
+  private _trace: TraceRecorder = new TraceRecorder();
+
   constructor() {
     this._logger = new Logger(STAGE_ID);
     this._ui = new UIScriptGenerator();
@@ -122,6 +135,7 @@ class PlaywrightScriptGeneratorAgent {
     try {
       await stateManager.markStageRunning(STAGE_ID);
       llmClient.resetStageFallback(STAGE_ID);
+      llmClient.clearCallTraces();
 
       const projectId = input.projectId || (stateManager as any)._projectId || FRAMEWORK_CONFIG.projectId;
       const profile = loadAutProfile(projectId);
@@ -141,6 +155,7 @@ class PlaywrightScriptGeneratorAgent {
       const output = this._persistOutputs(results, testCases, scope, shared);
       await this._writeBackClarifications(output, testCases);
       writeActiveProject(projectId);
+      await this._savePromptTrace('COMPLETED', { output, approved: testCases.length });
 
       const usage = llmClient.getStageUsage(STAGE_ID);
       await stateManager.setPipelineArtifact('playwrightScripts', output);
@@ -150,6 +165,7 @@ class PlaywrightScriptGeneratorAgent {
       return await this._awaitApproval(output, usage, durationMs);
     } catch (error: any) {
       this._logger.error('Agent execution failed', { error: error.message });
+      await this._savePromptTrace('FAILED', { error: error.message });
       await stateManager.markStageFailed(STAGE_ID, error);
       throw error;
     }
@@ -197,6 +213,7 @@ class PlaywrightScriptGeneratorAgent {
     const byFeature = new Map<string, AutomationTestCase[]>();
     testCases.forEach((tc) => byFeature.set(tc.featureId, [...(byFeature.get(tc.featureId) || []), tc]));
     const results: FeatureGenerationResult[] = [];
+    this._trace = new TraceRecorder();
     for (const [featureId, featureTestCases] of [...byFeature.entries()].sort(([a], [b]) => a.localeCompare(b))) {
       const ctx: FeatureGenerationContext = {
         projectSlug: shared.paths.slug,
@@ -211,6 +228,7 @@ class PlaywrightScriptGeneratorAgent {
         concurrency: Math.max(1, FRAMEWORK_CONFIG.maxThreads),
         headless: FRAMEWORK_CONFIG.playwright.headless,
         logger: this._logger,
+        trace: this._trace,
       };
       const ofMode = (mode: string) => featureTestCases.filter((tc) => modeForType(tc.type) === mode);
       // eslint-disable-next-line no-await-in-loop -- features share one discovery browser budget; keep sequential
@@ -223,11 +241,32 @@ class PlaywrightScriptGeneratorAgent {
     return results;
   }
 
-  private async _chat(messages: ChatMessage[], options?: { json?: boolean }): Promise<string> {
+  private async _chat(messages: ChatMessage[], options?: ChatOptions): Promise<string> {
     const response = await llmClient.chat(STAGE_ID, {
-      messages, temperature: LLM_SETTINGS.TEMPERATURE, max_tokens: LLM_SETTINGS.MAX_TOKENS, json: options?.json,
+      messages, temperature: LLM_SETTINGS.TEMPERATURE, max_tokens: LLM_SETTINGS.MAX_TOKENS, json: options?.json, traceLabel: options?.traceLabel,
     });
     return response.text || '';
+  }
+
+  /** Persists every LLM call of this run with its purpose, validation attempts, token usage and cost, for the UI and reports/json. */
+  private async _savePromptTrace(status: 'COMPLETED' | 'FAILED', run: { output?: PlaywrightScriptsArtifact; approved?: number; error?: string }): Promise<void> {
+    const counts = run.output ? this._counts(run.output) : null;
+    await savePromptTrace('agent05PromptTrace', PROMPT_TRACE_FILE, () => buildStagePromptTrace({
+      stageId: STAGE_ID,
+      stageName: STAGE_NAME,
+      status,
+      error: run.error,
+      projectName: stateManager.getProjectId(),
+      overview: {
+        'Approved test cases': run.approved ?? '—',
+        ...(counts ? { Generated: counts.generated, 'Needs context': counts.needsContext, Blocked: counts.blocked } : {}),
+      },
+      llmUsageNotes: [...LLM_USAGE_NOTES],
+      sharedInputs: [],
+      groups: this._trace.groups(),
+      calls: llmClient.getCallTraces([STAGE_ID]),
+      warnings: run.output?.warnings || [],
+    }), this._logger);
   }
 
   // ── Persistence ──────────────────────────────────────────────────────────

@@ -32,10 +32,17 @@ import {
   EnvironmentIssue, UnresolvedPlaceholder, describeDataClarifications, syncDataClarifications,
 } from './dataClarifications';
 import { injectResolvedData, isBoundToEnvironment, summarizeInputs } from './testDataEdits';
+import { llmClient } from '../../core/llm/LLMClient';
+import { buildStagePromptTrace } from '../../core/llm/stagePromptTrace';
+import { savePromptTrace } from '../../core/state-manager/promptTraceStore';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const STAGE_NAME = 'Test Data Generator';
+const PROMPT_TRACE_FILE = 'test-data-generation-prompt-trace.json';
+/** Why this stage has no LLM input to show, displayed by the prompt trace viewer. */
+const NO_LLM_REASON = 'Agent 04 resolves every {{placeholder}} with a deterministic value policy: human answers, the requirement text, '
+  + 'the AUT profile, environment-variable references for credentials and secrets, and generated synthetic inputs. It makes no LLM call, so a run uses 0 tokens.';
 const NEXT_STAGE = '05-playwright-script-generator';
 
 const SKILL_PATH = path.resolve(__dirname, '../../skills/test-data-generation.md');
@@ -117,10 +124,13 @@ class TestDataGeneratorAgent {
       const patternCount = await this._persistPatternsToMemory(output.manifest.perTCData);
 
       await stateManager.setPipelineArtifact('testData', output);
-      await stateManager.markStageCompleted(STAGE_ID, output);
+      await stateManager.markStageCompleted(STAGE_ID, output, llmClient.getStageUsage(STAGE_ID));
       this._saveToDisk(output.manifest, output.enrichedZephyrExport.testCases);
 
       const { manifest } = output;
+      await this._savePromptTrace('COMPLETED', {
+        'Placeholders resolved': manifest.resolvedCount, Unresolved: manifest.unresolvedCount, 'Pending clarifications': manifest.pendingClarifications.length,
+      });
       const durationMs = Date.now() - startMs;
       this._logger.stage('COMPLETE', STAGE_ID, {
         resolved: manifest.resolvedCount,
@@ -138,9 +148,21 @@ class TestDataGeneratorAgent {
       return await this._awaitApproval(agentResult, manifest, warnings, clarifications);
     } catch (error: any) {
       this._logger.error('Agent execution failed', { error: error.message });
+      await this._savePromptTrace('FAILED', {}, error.message);
       await stateManager.markStageFailed(STAGE_ID, error);
       throw error;
     }
+  }
+
+  /**
+   * Records that this run made no LLM call (and its outcome) so the UI's token view explains the 0 tokens.
+   * @private
+   */
+  async _savePromptTrace(status: 'COMPLETED' | 'FAILED', overview: Record<string, string | number>, error?: string) {
+    await savePromptTrace('agent04PromptTrace', PROMPT_TRACE_FILE, () => buildStagePromptTrace({
+      stageId: STAGE_ID, stageName: STAGE_NAME, status, error, projectName: stateManager.getProjectId(), overview,
+      llmUsageNotes: [], noLlmReason: NO_LLM_REASON, sharedInputs: [], groups: [], calls: llmClient.getCallTraces([STAGE_ID]), warnings: [],
+    }), this._logger);
   }
 
   /**

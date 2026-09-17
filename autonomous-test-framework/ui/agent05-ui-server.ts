@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import { spawn, ChildProcess } from 'child_process';
 import { stateManager } from '../core/state-manager/StateManager';
 import { registerPipelineRoutes } from './pipelineRoutes';
+import { registerPromptTraceRoutes } from './promptTraceRoutes';
 import { llmClient } from '../core/llm/LLMClient';
 import { memoryEngine } from '../core/project-memory/MemoryEngine';
 import { Logger } from '../core/logger/Logger';
@@ -21,6 +22,7 @@ const ALLOWED_FILE_ROOTS = ['specs', 'pages', 'k6', 'helpers', 'projects'].map((
 
 app.use(express.json());
 registerPipelineRoutes(app);
+registerPromptTraceRoutes(app, ['agent05']);
 app.use(express.static(path.join(__dirname, 'static')));
 
 // Redirect root to agent05.html

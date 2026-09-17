@@ -20,6 +20,7 @@ import { ClarificationStore } from '../core/clarifications/ClarificationStore';
 
 import { stateManager } from '../core/state-manager/StateManager';
 import { registerPipelineRoutes } from './pipelineRoutes';
+import { registerPromptTraceRoutes } from './promptTraceRoutes';
 import { memoryEngine } from '../core/project-memory/MemoryEngine';
 import { llmClient } from '../core/llm/LLMClient';
 import { Logger } from '../core/logger/Logger';
@@ -50,6 +51,7 @@ const FRAMEWORK_DIR = path.resolve(__dirname, '..');
 // ── Middleware ────────────────────────────────────────────────────────────────
 app.use(express.json());
 registerPipelineRoutes(app);
+registerPromptTraceRoutes(app);
 app.use(express.static(path.join(__dirname, 'static')));
 
 // ── File upload config ────────────────────────────────────────────────────────
@@ -119,6 +121,24 @@ app.get('/api/agent01/state', async (_req: Request, res: Response) => {
     const stage = await stateManager.get('stages.01-requirement-analyzer');
     const report = await stateManager.getPipelineArtifact('analyzedRequirements');
     res.json({ stage, report, running: !!activeProcess });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/agent01/prompt-trace ─────────────────────────────────────────────
+/**
+ * Returns what Agent 01's LLM was given on its latest run (system prompt, assembled user prompt, memory
+ * inputs), every call it made, and the provider-reported usage behind the token card.
+ */
+app.get('/api/agent01/prompt-trace', async (_req: Request, res: Response) => {
+  try {
+    if (!(stateManager as any)._initialized) {
+      try { await stateManager.initialize(); } catch (_) {}
+    }
+    const trace = await stateManager.getPipelineArtifact('agent01PromptTrace');
+    if (!trace) return res.status(404).json({ error: 'No prompt trace yet — run the analysis to record one.' });
+    res.json(trace);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -595,6 +615,24 @@ app.get('/api/agent02/state', async (req: Request, res: Response) => {
       projectName: (stateManager as any)._projectId,
       running: !!activeAgent02Process
     });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/agent02/prompt-trace ─────────────────────────────────────────────
+/**
+ * Returns what Agent 02's LLM was given on its latest run (system prompt, per-story user prompts), every call and
+ * validation attempt, and the provider-reported usage behind the token card.
+ */
+app.get('/api/agent02/prompt-trace', async (_req: Request, res: Response) => {
+  try {
+    if (!(stateManager as any)._initialized) {
+      try { await stateManager.initialize(); } catch (_) {}
+    }
+    const trace = await stateManager.getPipelineArtifact('agent02PromptTrace');
+    if (!trace) return res.status(404).json({ error: 'No prompt trace yet — generate test cases to record one.' });
+    res.json(trace);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

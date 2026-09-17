@@ -71,6 +71,21 @@ describe('LLMClient — seed, served models and fallback pins', () => {
     expect(fs.existsSync(pinsPath)).toBe(false);
   });
 
+  it('traces the messages sent and the usage the provider reported for each successful call', async () => {
+    const { client } = clientWith(new Set([CANDIDATES[0]]), pinsPath);
+    await client.chat(STAGE_ID, REQUEST);
+    const [trace] = client.getCallTraces([STAGE_ID]);
+    expect(trace).toMatchObject({
+      stageId: STAGE_ID, model: CANDIDATES[1], fallback: true, responseText: `ok from ${CANDIDATES[1]}`,
+      messages: [{ role: 'user', content: 'hi', chars: 2 }],
+      request: { temperature: 0, seed: 42 },
+      reportedUsage: { promptTokens: 1, completionTokens: 1, cacheReadTokens: 0 },
+    });
+    expect(client.getCallTraces(['another-stage'])).toEqual([]);
+    client.clearCallTraces();
+    expect(client.getCallTraces()).toEqual([]);
+  });
+
   it('reports the fallback model that served the stage and persists a pin', async () => {
     const { client } = clientWith(new Set(CANDIDATES.slice(0, 2)), pinsPath);
     await client.chat(STAGE_ID, REQUEST);

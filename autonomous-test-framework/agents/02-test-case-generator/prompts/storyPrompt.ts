@@ -53,6 +53,24 @@ function stateTransitionLines(input: StoryPromptInput): string[] {
   return [...input.story.stateTransitions, ...global].map((line) => `- ${line}`);
 }
 
+/**
+ * The step grammar rules models most often break: they write conventional Gherkin (a Given precondition with no
+ * Then, followed by When → Then), which the strict parser rejects scenario by scenario. Restated in the user prompt
+ * and, when violated, at the top of the retry prompt.
+ */
+export const STEP_GRAMMAR_RULES: readonly string[] = Object.freeze([
+  '- EVERY `Given` line and EVERY `When` line is followed by its OWN `Then` before the next `Given`/`When`. '
+    + 'A setup `Given` is no exception: follow it with a `Then` stating the observable starting state.',
+  '  WRONG:  Given the user opens the <page>  /  When the user submits the form  /  Then <result>',
+  '  RIGHT:  Given the user opens the <page>  /  Then the <page> is displayed  /  When the user submits the form  /  Then <result>',
+  '- EVERY scenario has at least one `Given` block AND at least one `When` block, including scenarios that only verify '
+    + 'what a page shows: add a `When` for the user viewing or interacting with it, followed by its `Then`.',
+  '- Never continue an action with `And <another action>`; start a new `When` block instead.',
+]);
+
+/** Parser/validator messages that mean the step grammar itself was broken. */
+const GRAMMAR_ERROR_PATTERN = /has no Then expected result|has no When action|has no Given setup step|continues an action|has no preceding Given\/When/;
+
 const tagList = (tags: string[]): string => tags.map((tag) => `@${tag}`).join(' ');
 
 /** UI type tags selected for this run, in canonical order. */
@@ -138,7 +156,11 @@ export function buildStoryPrompt(input: StoryPromptInput): string {
     section('TEST TYPE GATES', gateLines(input)),
     section('COVERAGE', coverageLines(input)),
     section('LEARNINGS FROM PAST RUNS', memoryLines(input)),
-    section('OUTPUT', ['Return ONLY Scenario blocks in the strict grammar from the skill. No Feature header, no Background, no prose, no code fences.']),
+    section('OUTPUT', [
+      'Return ONLY Scenario blocks in the strict grammar from the skill. No Feature header, no Background, no prose, no code fences.',
+      'Step grammar (answers that break it are rejected scenario by scenario):',
+      ...STEP_GRAMMAR_RULES,
+    ]),
   ].filter(Boolean).join('\n\n');
 }
 
@@ -181,7 +203,14 @@ export function buildRetryPrompt(errors: string[], options: RetryPromptOptions =
     '(then return it with the EXACT same title):',
     ...acceptedTitles.map((title) => `- ${title}`),
   ];
+  const grammarErrors = errors.filter((error) => GRAMMAR_ERROR_PATTERN.test(error)).length;
+  const grammar = grammarErrors === 0 ? [] : [
+    `${grammarErrors} issue(s) below break the step grammar. Fix these first, in EVERY scenario you return:`,
+    ...STEP_GRAMMAR_RULES,
+    '',
+  ];
   return [
+    ...grammar,
     ...(truncated ? ['Your previous output was cut off at the output token limit; its last scenario was discarded. Continue with the scenarios still needed.'] : []),
     'Your previous output failed deterministic validation. Return ONLY, in the same strict grammar:',
     '(a) a corrected version of each failing scenario, and (b) new scenarios, of SELECTED types only, for any coverage gap below.',

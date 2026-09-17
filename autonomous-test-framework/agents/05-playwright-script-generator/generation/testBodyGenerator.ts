@@ -19,6 +19,7 @@ import {
 } from '../validation/integrityValidator';
 import { FlowUsage } from '../discovery/flowExtractor';
 import { chunkArray, parseJsonObject } from '../sub-agents/shared/generation-utils';
+import { TraceRecorder, traceLabel } from '../../../core/llm/stagePromptTrace';
 
 /** Inputs for body generation. */
 export interface BodyGenerationRequest {
@@ -37,6 +38,8 @@ export interface BodyGenerationRequest {
   flowsByTcKey?: Map<string, FlowUsage[]>;
   /** UI: states discovery verified after each step (by tcKey). */
   verifiedStatesByTcKey?: Map<string, Record<number, { state: string; urlPath: string }>>;
+  /** Records each chunk and its validation attempts for the prompt trace (optional). */
+  trace?: TraceRecorder;
 }
 
 /** Final outcome for one test case. */
@@ -172,9 +175,13 @@ async function generateChunk(req: BodyGenerationRequest, chunk: AutomationTestCa
   const outcomes = new Map<string, TestOutcome>();
   let pending = chunk;
   let feedback: Array<{ tcKey: string; errors: string[] }> = [];
+  const keys = chunk.map((tc) => tc.tcKey);
+  const group = req.trace?.group(`${req.mode} bodies ${req.featureId} ${keys[0]}..${keys[keys.length - 1]}`, `${req.mode} test bodies`,
+    `${req.featureId} — ${keys.join(', ')}`, { 'Test cases': chunk.length, Mode: req.mode }) ?? `${req.mode} bodies ${req.featureId}`;
   for (let attempt = 1; attempt <= req.maxRetries + 1 && pending.length > 0; attempt += 1) {
+    const requested = pending.length;
     // eslint-disable-next-line no-await-in-loop -- each retry depends on the previous validation
-    const { entries, error } = parseResponse(await chat(toMessages(req, pending, feedback), { json: true }));
+    const { entries, error } = parseResponse(await chat(toMessages(req, pending, feedback), { json: true, traceLabel: traceLabel(group, attempt) }));
     const retry: AutomationTestCase[] = [];
     feedback = [];
     for (const tc of pending) {
@@ -194,6 +201,11 @@ async function generateChunk(req: BodyGenerationRequest, chunk: AutomationTestCa
         });
       }
     }
+    req.trace?.attempt(group, {
+      attempt,
+      summary: `${requested - retry.length} of ${requested} test bod${requested === 1 ? 'y' : 'ies'} valid`,
+      errors: feedback.flatMap((item) => item.errors.map((message) => `${item.tcKey}: ${message}`)),
+    });
     pending = retry;
   }
   return chunk.map((tc) => outcomes.get(tc.tcKey) as TestOutcome);

@@ -10,7 +10,7 @@
  */
 
 import { Mutex } from '../thread-manager/Mutex';
-import { stateDb } from './Database';
+import { stateDb, StateDatabase } from './Database';
 import { PipelineState, StageStatus, ApprovalStatus, PipelineArtifacts } from '../types';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -350,6 +350,15 @@ export class StateManager {
    */
   getProjectId(): string {
     return this._projectId;
+  }
+
+  /**
+   * The shared SQLite database, opened on first use. For read-only lookups that span projects, such as the newest run.
+   * @returns {StateDatabase}
+   */
+  getDatabase(): StateDatabase {
+    stateDb.initialize();
+    return stateDb;
   }
 
   /**

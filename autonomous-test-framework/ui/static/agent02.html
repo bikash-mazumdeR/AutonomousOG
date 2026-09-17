@@ -69,6 +69,52 @@
     .card + .card { margin-top: 16px; }
     .card-title { font-size: 13px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 16px; }
 
+    /* ── Token usage card ────────────────────────────────────────────────── */
+    .token-row { display: flex; justify-content: space-between; align-items: center;
+                 padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+    .token-row:last-child { border-bottom: none; }
+    .token-label { color: var(--text-muted); }
+    .token-value { color: var(--text); font-weight: 600; font-family: monospace; }
+
+    /* ── Prompt trace viewer ─────────────────────────────────────────────── */
+    #errorAlert { white-space: pre-wrap; }
+    .trace-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+      width: min(1150px, 96vw); max-height: 92vh; display: flex; flex-direction: column;
+    }
+    .trace-head { padding: 16px 22px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .trace-title { font-size: 16px; font-weight: 700; }
+    .trace-head .actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+    .trace-body { padding: 18px 22px; overflow-y: auto; }
+    .trace-section { margin-bottom: 22px; }
+    .trace-section h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); margin-bottom: 10px; }
+    .trace-note { color: var(--text-muted); font-size: 12px; margin: 6px 0; }
+    .trace-meta { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+    .trace-meta div { background: var(--surface2); border-radius: 6px; padding: 8px 10px; font-size: 12px; overflow-wrap: anywhere; }
+    .trace-meta b { display: block; color: var(--text-dim); font-weight: 500; font-size: 11px; }
+    .trace-table-wrap { overflow-x: auto; }
+    .trace-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .trace-table th, .trace-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; position: static; background: none; }
+    .trace-table th { color: var(--text-dim); font-weight: 600; white-space: nowrap; }
+    .trace-table td.num, .trace-table th.num { text-align: right; font-family: monospace; white-space: nowrap; }
+    .trace-table tr.total td { font-weight: 700; border-top: 2px solid var(--border); }
+    .trace-bar { height: 6px; background: var(--accent); border-radius: 3px; min-width: 2px; }
+    .trace-formula { background: #020817; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+                     font-family: monospace; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 8px; }
+    .trace-body details { background: var(--surface2); border-radius: 8px; margin-bottom: 8px; }
+    .trace-body summary { cursor: pointer; padding: 9px 12px; font-size: 13px; font-weight: 600; }
+    .trace-body summary .dim { color: var(--text-dim); font-weight: 400; margin-left: 6px; }
+    .trace-pre { background: #020817; margin: 0 10px 10px; padding: 10px 12px; border-radius: 6px; max-height: 420px; overflow: auto;
+                 font-family: 'Fira Code', 'JetBrains Mono', monospace; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .trace-body details details { margin: 0 10px 8px; background: var(--surface); }
+    .trace-inner { padding: 0 12px 10px; }
+    .trace-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
+    .trace-badge.ok { background: var(--success-bg); color: var(--success); border: 1px solid var(--success); }
+    .trace-badge.bad { background: var(--danger-bg); color: var(--danger); border: 1px solid var(--danger); }
+    .trace-errors { margin: 0; padding-left: 18px; font-size: 12px; color: #f87171; }
+    .trace-errors li { margin: 2px 0; overflow-wrap: anywhere; }
+    .trace-btn { width: 100%; margin-top: 12px; }
+
     /* ── Checkboxes ──────────────────────────────────────────────────────── */
     .checkbox-group { display: flex; flex-direction: column; gap: 10px; margin: 16px 0; }
     .checkbox-label {
@@ -576,6 +622,15 @@
             <!-- Warnings injected here -->
           </div>
         </div>
+
+        <div class="card hidden" id="tokenCard">
+          <div class="card-title"><span>🪙</span> Token Usage</div>
+          <div class="token-row"><span class="token-label">Prompt tokens</span><span class="token-value" id="tokPrompt">—</span></div>
+          <div class="token-row"><span class="token-label">Completion tokens</span><span class="token-value" id="tokCompletion">—</span></div>
+          <div class="token-row"><span class="token-label">Total tokens</span><span class="token-value" id="tokTotal">—</span></div>
+          <div class="token-row"><span class="token-label">Estimated cost</span><span class="token-value" id="tokCost">—</span></div>
+          <button class="btn btn-ghost trace-btn" id="viewTraceBtn">🔍 View agent input &amp; token math</button>
+        </div>
       </div>
     </div>
   </div>
@@ -739,6 +794,21 @@
     </div>
   </div>
 
+  <!-- Prompt Trace Modal -->
+  <div class="modal" id="traceModal">
+    <div class="trace-card">
+      <div class="trace-head">
+        <div class="trace-title">🔍 Agent 02 — Input Context &amp; Token Usage</div>
+        <span id="traceStatus"></span>
+        <div class="actions">
+          <button class="btn btn-ghost" id="traceDownloadBtn">⬇ Download JSON</button>
+          <button class="btn btn-ghost" id="traceCloseBtn">✕ Close</button>
+        </div>
+      </div>
+      <div class="trace-body" id="traceBody">Loading…</div>
+    </div>
+  </div>
+
   <!-- Chat Drawer -->
   <div id="chatDrawer" class="chat-drawer">
     <div class="chat-header">
@@ -857,6 +927,8 @@
           if (pInput && !pInput.value) pInput.value = data.projectName;
         }
 
+        updateTokenCard(data.stage?.usage);
+
         if (data.running) {
           showPhase('running');
           startLogStream();
@@ -866,7 +938,9 @@
           renderResults(data.testCases);
         } else {
           showPhase('input');
-          if (data.isOutOfDate) {
+          if (data.stage?.status === 'FAILED') {
+            showStageFailure(data.stage);
+          } else if (data.isOutOfDate) {
             DOM.errorAlert.innerHTML = '⚠️ <strong>Requirements Updated:</strong> The requirement specification was updated after test cases were last generated. Click <strong>Generate Test Cases</strong> below to generate fresh test cases matching the latest requirements.';
             DOM.errorAlert.classList.remove('hidden');
           }
@@ -978,6 +1052,7 @@
         try {
           const res = await fetch('/api/agent02/state');
           const data = await res.json();
+          updateTokenCard(data.stage?.usage);
           if (data.stage && data.stage.status === 'COMPLETED' && data.testCases) {
             clearInterval(pollInterval);
             if (eventSource) eventSource.close();
@@ -986,9 +1061,8 @@
           } else if (data.stage && data.stage.status === 'FAILED') {
             clearInterval(pollInterval);
             if (eventSource) eventSource.close();
-            DOM.errorAlert.textContent = 'Agent 02 failed. Check logs.';
-            DOM.errorAlert.classList.remove('hidden');
             showPhase('input');
+            showStageFailure(data.stage);
           }
         } catch (e) { console.error('Poll err:', e); }
       }, 500);
@@ -1086,6 +1160,19 @@
         `  Scenario: [${tc.key}] ${title}`,
         ...convertTestStepsToGherkin(tc).map((s) => `    ${s.keyword} ${s.text}`),
       ].join('\n');
+    }
+
+    // ── Update Token Usage Card ────────────────────────────────────────────────
+    function updateTokenCard(usage) {
+      const card = document.getElementById('tokenCard');
+      if (!usage) { card.classList.add('hidden'); return; }
+      document.getElementById('tokPrompt').textContent     = (usage.promptTokens || 0).toLocaleString();
+      document.getElementById('tokCompletion').textContent = (usage.completionTokens || 0).toLocaleString();
+      document.getElementById('tokTotal').textContent      = (usage.totalTokens || 0).toLocaleString();
+      const costUSD = usage.estimatedCostUSD ?? usage.estimatedCost ?? 0;
+      const costINR = usage.estimatedCostINR ?? (costUSD * (usage.exchangeRate || 96));
+      document.getElementById('tokCost').textContent       = '₹' + costINR.toFixed(2) + ' ($' + costUSD.toFixed(6) + ')';
+      card.classList.remove('hidden');
     }
 
     function renderGherkinPreviewHtml(tc) {
@@ -1618,6 +1705,200 @@
         appendChatBubble('aria', '⚠ Error: ' + e.message);
       }
     }
+
+    // ── Stage failure ─────────────────────────────────────────────────────
+    /** Shows why the last run failed, and the tokens it spent (a failed stage stores no usage; the trace has it). */
+    async function showStageFailure(stage) {
+      DOM.errorAlert.textContent = '❌ Agent 02 failed: ' + (stage?.error?.message || 'see the logs.');
+      DOM.errorAlert.classList.remove('hidden');
+      try {
+        const resp = await fetch('/api/agent02/prompt-trace');
+        if (!resp.ok) return;
+        const trace = await resp.json();
+        if (trace.status !== 'FAILED' || !(trace.calls || []).length) return;
+        const last = trace.calls[trace.calls.length - 1];
+        updateTokenCard({ ...trace.totals.stage, exchangeRate: last.usage.exchangeRate });
+      } catch (_) { /* the failure message is already shown */ }
+    }
+
+    // ── Prompt trace viewer ───────────────────────────────────────────────
+    /** Where each provider's API reports the counts ARIA displays; ARIA never tokenizes text itself. */
+    const USAGE_FIELDS = {
+      bedrock:   'Converse API usage.inputTokens / usage.outputTokens',
+      anthropic: 'Messages API usage.input_tokens / usage.output_tokens',
+      gemini:    'usageMetadata.promptTokenCount / usageMetadata.candidatesTokenCount',
+      openai:    'usage.prompt_tokens / usage.completion_tokens',
+      litellm:   'usage.prompt_tokens / usage.completion_tokens (LiteLLM proxy)',
+    };
+    let currentTrace = null;
+
+    const fmtInt = n => (Number(n) || 0).toLocaleString();
+    const fmtUsd = n => '$' + (Number(n) || 0).toFixed(6);
+    const fmtChars = v => (v === null || v === undefined) ? '' : ` — ${fmtInt(String(v).length)} chars`;
+
+    function traceDetails(title, subtitle, content, open = false) {
+      if (content === null || content === undefined) return '';
+      return `<details${open ? ' open' : ''}><summary>${escapeHtml(title)}<span class="dim">${escapeHtml(subtitle || '')}</span></summary>` +
+        `<pre class="trace-pre">${escapeHtml(content === '' ? '(empty)' : content)}</pre></details>`;
+    }
+
+    function renderTraceOverview(t) {
+      const calls = t.calls || [];
+      const models = [...new Set(calls.map(c => `${c.provider} · ${c.model}`))].join(', ') || '— (no LLM call)';
+      const cells = [
+        ['Recorded', new Date(t.generatedAt).toLocaleString()],
+        ['Project', t.projectName],
+        ['Excluded types', (t.excludedTypes || []).map(x => '@' + x).join(' ') || 'none'],
+        ['Model(s)', models],
+        ['User stories', (t.stories || []).length],
+        ['LLM calls', calls.length],
+        ['Test cases generated', fmtInt(t.testCaseCount)],
+      ];
+      return `<div class="trace-section"><div class="trace-meta">${cells.map(([k, v]) => `<div><b>${k}</b>${escapeHtml(v)}</div>`).join('')}</div>` +
+        (t.error ? `<div class="alert alert-danger" style="margin-top:12px;white-space:pre-wrap">${escapeHtml(t.error)}</div>` : '') + '</div>';
+    }
+
+    function renderTraceTokens(t) {
+      const calls = t.calls || [];
+      if (!calls.length) {
+        return '<div class="trace-section"><h3>How the token card is calculated</h3><p class="trace-note">No LLM call was made on this run, so it consumed no tokens.</p></div>';
+      }
+      const rows = calls.map(c => `<tr>
+          <td>${c.callNumber}</td><td>${escapeHtml(c.purpose)}${c.truncated ? ' <span class="trace-badge bad">truncated</span>' : ''}<br><span class="trace-note">${escapeHtml(c.model)} · ${(c.durationMs / 1000).toFixed(1)}s</span></td>
+          <td class="num">${fmtInt(c.reportedUsage.promptTokens)}</td>
+          <td class="num">${fmtInt(c.reportedUsage.cacheReadTokens)} / ${fmtInt(c.reportedUsage.cacheWriteTokens)}</td>
+          <td class="num">${fmtInt(c.reportedUsage.completionTokens)}</td>
+          <td class="num">$${c.pricingPer1K.input} / $${c.pricingPer1K.output}</td>
+          <td class="num">${fmtUsd(c.usage.estimatedCostUSD)}</td></tr>`).join('');
+      const s = t.totals.stage;
+      const formulas = calls.map(c =>
+        `Call ${c.callNumber}: input  ${fmtInt(c.usage.promptTokens)} / 1000 × $${c.pricingPer1K.input} = ${fmtUsd(c.costBreakdownUSD.input)}\n` +
+        `        output ${fmtInt(c.usage.completionTokens)} / 1000 × $${c.pricingPer1K.output} = ${fmtUsd(c.costBreakdownUSD.output)}`).join('\n');
+      const rate = calls[calls.length - 1].usage.exchangeRate;
+      const providers = [...new Set(calls.map(c => c.provider))];
+      const notes = [
+        `Token counts are <b>not computed by ARIA</b>. They are read from the provider's response: ${providers.map(p => `<b>${escapeHtml(p)}</b> → <code>${escapeHtml(USAGE_FIELDS[p] || 'usage')}</code>`).join('; ')}. ` +
+          'Input tokens include the system prompt, the user prompt and the provider\'s message framing.',
+        'Agent 02 makes one call per user story, plus one self-correction call for each retry (up to SELF_REVIEW_RETRIES). A self-correction call re-sends the whole conversation (system prompt + story prompt + the unaccepted scenarios + the validation errors), so every retry costs more input tokens than the first call.',
+        'Chatbot questions on this page are billed to the same stage but are not part of a generation run, so they are not listed here.',
+        'Cost = input tokens / 1000 × input price + output tokens / 1000 × output price (USD per 1K tokens from <code>config/framework.config.ts → llm.pricing</code>); ₹ = USD × exchange rate. Cached input tokens (cache read / write) are reported separately and are not priced in this estimate.',
+      ];
+      if (calls.some(c => c.truncated)) notes.push('<b>A call hit its output limit</b> (see effective max tokens in the call details) — its last scenario was discarded.');
+      const card = `Token card:  prompt ${fmtInt(s.promptTokens)}  +  completion ${fmtInt(s.completionTokens)}  =  total ${fmtInt(s.totalTokens)}\n` +
+        `Cost:        ${fmtUsd(s.estimatedCostUSD)}  × ${rate} INR/USD  =  ₹${(s.estimatedCostINR || 0).toFixed(2)}`;
+      return `<div class="trace-section"><h3>How the token card is calculated</h3>
+        <div class="trace-table-wrap"><table class="trace-table">
+          <tr><th>#</th><th>Call</th><th class="num">Input tok</th><th class="num">Cache read / write</th><th class="num">Output tok</th><th class="num">$ per 1K in / out</th><th class="num">Cost</th></tr>
+          ${rows}
+          <tr class="total"><td></td><td>Token card total</td><td class="num">${fmtInt(s.promptTokens)}</td><td class="num">${fmtInt(s.cacheReadTokens)} / ${fmtInt(s.cacheWriteTokens)}</td><td class="num">${fmtInt(s.completionTokens)}</td><td></td><td class="num">${fmtUsd(s.estimatedCostUSD)}</td></tr>
+        </table></div>
+        <div class="trace-formula">${escapeHtml(formulas)}\n\n${escapeHtml(card)}</div>
+        ${notes.map(n => `<p class="trace-note">• ${n}</p>`).join('')}</div>`;
+    }
+
+    function renderStoryComposition(story) {
+      const comp = story.composition || {};
+      if (!comp.rows?.length) return '';
+      const totalChars = comp.rows.reduce((sum, r) => sum + r.chars, 0);
+      const method = comp.method === 'proportional-to-reported'
+        ? `Estimated: the ${fmtInt(comp.basisTokens)} input tokens the provider processed on this story's first call (including any prompt-cache reads/writes) are split across sources in proportion to their characters (${(totalChars / comp.basisTokens).toFixed(2)} chars per token). Exact per-section counts would need the provider's tokenizer.`
+        : 'Estimated at ~4 characters per token, because no call was recorded for this story.';
+      const rows = comp.rows.map(r => `<tr><td>${escapeHtml(r.label)}</td><td class="num">${fmtInt(r.chars)}</td>
+          <td class="num">≈ ${fmtInt(r.estimatedTokens)}</td><td class="num">${(r.share * 100).toFixed(1)}%</td>
+          <td style="width:30%"><div class="trace-bar" style="width:${(r.share * 100).toFixed(1)}%"></div></td></tr>`).join('');
+      return `<p class="trace-note"><b>What makes up the input (first call)</b></p>
+        <div class="trace-table-wrap"><table class="trace-table">
+          <tr><th>Source</th><th class="num">Characters</th><th class="num">Tokens</th><th class="num">Share</th><th></th></tr>${rows}
+          <tr class="total"><td>Total</td><td class="num">${fmtInt(totalChars)}</td><td class="num">${comp.basisTokens ? fmtInt(comp.basisTokens) : ''}</td><td></td><td></td></tr>
+        </table></div><p class="trace-note">${method}</p>`;
+    }
+
+    function renderStoryAttempts(story) {
+      const rows = (story.attempts || []).map(a => {
+        const shown = a.errors.length < a.errorCount ? ` (first ${a.errors.length} shown)` : '';
+        const errors = a.errorCount === 0 ? '<span class="trace-badge ok">passed</span>'
+          : `<details><summary>${fmtInt(a.errorCount)} validation error(s)${shown}</summary><ul class="trace-errors trace-inner">${a.errors.map(e => `<li>${escapeHtml(e)}</li>`).join('')}</ul></details>`;
+        return `<tr><td>${a.attempt}</td><td class="num">${fmtInt(a.parsedScenarios)}</td><td class="num">${fmtInt(a.acceptedTotal)}</td>
+          <td>${a.truncated ? '<span class="trace-badge bad">yes</span>' : 'no'}</td><td>${errors}</td></tr>`;
+      }).join('');
+      return `<p class="trace-note"><b>Generate → validate attempts</b> — scenarios with any error are not saved; the errors are sent back to the model on the next attempt.</p>
+        <div class="trace-table-wrap"><table class="trace-table">
+          <tr><th>Attempt</th><th class="num">Scenarios in answer</th><th class="num">Accepted so far</th><th>Truncated</th><th>Validation</th></tr>${rows}
+        </table></div>`;
+    }
+
+    function renderTraceStories(t) {
+      const stories = t.stories || [];
+      if (!stories.length) return '';
+      const blocks = stories.map((s, idx) => {
+        const u = s.usage || {};
+        const badge = s.scenariosAccepted > 0 ? `<span class="trace-badge ok">${s.scenariosAccepted} accepted</span>` : '<span class="trace-badge bad">0 accepted</span>';
+        return `<details${stories.length === 1 || s.scenariosAccepted === 0 ? ' open' : ''}><summary>${escapeHtml(s.key)} — ${escapeHtml(s.title)} ${badge}
+            <span class="dim">${s.acceptanceCriteria} AC · ${s.businessRules} BR · ${(s.attempts || []).length} attempt(s) · in ${fmtInt(u.promptTokens)} / out ${fmtInt(u.completionTokens)} tokens · ${fmtUsd(u.estimatedCostUSD)}</span></summary>
+          <div class="trace-inner">${renderStoryAttempts(s)}${renderStoryComposition(s)}</div>
+          ${traceDetails('Story user prompt (exact text sent on the first call)', fmtChars(s.userPrompt), s.userPrompt)}</details>`;
+      }).join('');
+      return `<div class="trace-section"><h3>Per user story</h3>${blocks}</div>`;
+    }
+
+    function renderTraceInputs(t) {
+      const i = t.inputs || {};
+      return `<div class="trace-section"><h3>Shared agent input</h3>
+        <p class="trace-note">Each story call receives two messages: a <b>system</b> message (the skill file + Agent 02 learnings, reduced to the selected test types) and a <b>user</b> message (the story prompt shown per story above). Memory is inserted into the story prompt's LEARNINGS section.</p>
+        ${traceDetails('System prompt — ' + (i.skillPath || 'skill file'), fmtChars(i.systemPrompt), i.systemPrompt)}
+        ${traceDetails('Memory: improvement rules', fmtChars(i.improvementRules), i.improvementRules)}
+        ${traceDetails('Memory: rejection feedback', fmtChars(i.rejectionFeedback), i.rejectionFeedback)}</div>`;
+    }
+
+    function renderTraceCalls(t) {
+      if (!(t.calls || []).length) return '';
+      const calls = t.calls.map(c => {
+        const req = c.request || {};
+        const params = `temperature ${req.temperature ?? 'default'} · seed ${req.seed ?? '—'} · max tokens requested ${req.maxTokens ?? 'default'} / applied ${c.effectiveMaxTokens ?? 'provider default'}`;
+        const messages = c.messages.map((m, idx) => traceDetails(`Message ${idx + 1} — ${m.role}`, ` ${fmtInt(m.chars)} chars`, m.content)).join('');
+        return `<details><summary>Call ${c.callNumber}: ${escapeHtml(c.purpose)}<span class="dim">${escapeHtml(c.model)} · in ${fmtInt(c.reportedUsage.promptTokens)} / out ${fmtInt(c.reportedUsage.completionTokens)} tokens</span></summary>
+          <p class="trace-note trace-inner">${escapeHtml(params)}</p>${messages}
+          ${traceDetails('Raw LLM response', ` ${fmtInt((c.responseText || '').length)} chars`, c.responseText)}</details>`;
+      }).join('');
+      return `<div class="trace-section"><h3>LLM calls — request &amp; raw response</h3>${calls}</div>`;
+    }
+
+    function renderTraceWarnings(t) {
+      const warnings = t.warnings || [];
+      if (!warnings.length) return '';
+      return `<div class="trace-section"><details><summary>Run warnings<span class="dim">${warnings.length}</span></summary>
+        <ul class="trace-errors trace-inner" style="color:var(--warning)">${warnings.map(w => `<li>${escapeHtml(w)}</li>`).join('')}</ul></details></div>`;
+    }
+
+    async function openTrace() {
+      const body = document.getElementById('traceBody');
+      body.innerHTML = 'Loading…';
+      document.getElementById('traceStatus').innerHTML = '';
+      document.getElementById('traceModal').classList.add('open');
+      try {
+        const resp = await fetch('/api/agent02/prompt-trace');
+        const data = await resp.json();
+        if (!resp.ok) { body.innerHTML = `<p class="trace-note">${escapeHtml(data.error || 'No prompt trace available.')}</p>`; currentTrace = null; return; }
+        currentTrace = data;
+        document.getElementById('traceStatus').innerHTML =
+          `<span class="trace-badge ${data.status === 'FAILED' ? 'bad' : 'ok'}">${escapeHtml(data.status)}</span>`;
+        body.innerHTML = renderTraceOverview(data) + renderTraceTokens(data) + renderTraceStories(data)
+          + renderTraceInputs(data) + renderTraceCalls(data) + renderTraceWarnings(data);
+      } catch (e) {
+        body.innerHTML = `<p class="trace-note">Could not load the prompt trace: ${escapeHtml(e.message)}</p>`;
+      }
+    }
+
+    document.getElementById('viewTraceBtn').addEventListener('click', openTrace);
+    document.getElementById('traceCloseBtn').addEventListener('click', () => document.getElementById('traceModal').classList.remove('open'));
+    document.getElementById('traceModal').addEventListener('click', e => { if (e.target.id === 'traceModal') e.target.classList.remove('open'); });
+    document.getElementById('traceDownloadBtn').addEventListener('click', () => {
+      if (!currentTrace) return;
+      const url = URL.createObjectURL(new Blob([JSON.stringify(currentTrace, null, 2)], { type: 'application/json' }));
+      const a = Object.assign(document.createElement('a'), { href: url, download: 'agent02-prompt-trace.json' });
+      a.click();
+      URL.revokeObjectURL(url);
+    });
 
     init();
   </script>

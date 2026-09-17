@@ -6,6 +6,7 @@
   <title>ARIA — Agent 06: Automation Code Reviewer</title>
   <link rel="stylesheet" href="/aria.css" />
   <script src="/pipeline-nav.js"></script>
+  <script src="/prompt-trace.js"></script>
 </head>
 <body>
 
@@ -426,7 +427,9 @@
       document.getElementById('tokPrompt').textContent = (usage.promptTokens || 0).toLocaleString();
       document.getElementById('tokCompletion').textContent = (usage.completionTokens || 0).toLocaleString();
       document.getElementById('tokTotal').textContent = (usage.totalTokens || 0).toLocaleString();
-      document.getElementById('tokCost').textContent = '$' + (usage.estimatedCost || 0).toFixed(6);
+      const costUSD = usage.estimatedCostUSD ?? usage.estimatedCost ?? 0;
+      const costINR = usage.estimatedCostINR ?? (costUSD * (usage.exchangeRate || 96));
+      document.getElementById('tokCost').textContent = '₹' + costINR.toFixed(2) + ' ($' + costUSD.toFixed(6) + ')';
       card.classList.remove('hidden');
     }
 
@@ -783,5 +786,6 @@
       fetchState();
     });
   </script>
+  <script>AriaPromptTrace.mount({ prefix: 'agent06', title: 'Agent 06' });</script>
 </body>
 </html>

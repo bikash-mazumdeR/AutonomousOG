@@ -138,6 +138,13 @@
       gap: 10px;
     }
 
+    /* ── Token usage card ────────────────────────────────────────────────── */
+    .token-row { display: flex; justify-content: space-between; align-items: center;
+                 padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+    .token-row:last-child { border-bottom: none; }
+    .token-label { color: var(--text-muted); }
+    .token-value { color: var(--text); font-weight: 600; font-family: monospace; }
+
     /* ── Stat Grid ───────────────────────────────────────────────────────── */
     .stat-grid {
       display: grid;
@@ -737,6 +744,7 @@
     .toast.show { opacity: 1; transform: translateY(0); }
   </style>
   <script src="/pipeline-nav.js"></script>
+  <script src="/prompt-trace.js"></script>
 </head>
 <body>
 
@@ -803,6 +811,15 @@
         <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); animation: pulse 1s infinite alternate;"></span>
         Generating fixtures, boundary values, and syncing tests/fixtures/test-data.json...
       </div>
+    </div>
+
+    <!-- Token usage card (visible whenever usage data is available, independent of phase) -->
+    <div class="card hidden" id="tokenCard" style="margin-bottom: 20px;">
+      <div class="card-title"><span>🪙 Token Usage</span></div>
+      <div class="token-row"><span class="token-label">Prompt tokens</span><span class="token-value" id="tokPrompt">—</span></div>
+      <div class="token-row"><span class="token-label">Completion tokens</span><span class="token-value" id="tokCompletion">—</span></div>
+      <div class="token-row"><span class="token-label">Total tokens</span><span class="token-value" id="tokTotal">—</span></div>
+      <div class="token-row"><span class="token-label">Estimated cost</span><span class="token-value" id="tokCost">—</span></div>
     </div>
 
     <!-- Phase 3: Results Workspace -->
@@ -1120,6 +1137,8 @@
     function applyState(data) {
       if (!data) return;
 
+      updateTokenCard(data.stage?.usage);
+
       const reviewedTCs = data.reviewedTestCases?.reviewedZephyrExport?.testCases || 
                           data.reviewedTestCases?.testCases || [];
       
@@ -1162,6 +1181,19 @@
         document.getElementById('resultsPhase').classList.add('hidden');
         document.getElementById('actionBar').classList.add('hidden');
       }
+    }
+
+    // ── Update Token Usage Card ────────────────────────────────────────────────
+    function updateTokenCard(usage) {
+      const card = document.getElementById('tokenCard');
+      if (!usage) { card.classList.add('hidden'); return; }
+      document.getElementById('tokPrompt').textContent     = (usage.promptTokens || 0).toLocaleString();
+      document.getElementById('tokCompletion').textContent = (usage.completionTokens || 0).toLocaleString();
+      document.getElementById('tokTotal').textContent      = (usage.totalTokens || 0).toLocaleString();
+      const costUSD = usage.estimatedCostUSD ?? usage.estimatedCost ?? 0;
+      const costINR = usage.estimatedCostINR ?? (costUSD * (usage.exchangeRate || 96));
+      document.getElementById('tokCost').textContent       = '₹' + costINR.toFixed(2) + ' ($' + costUSD.toFixed(6) + ')';
+      card.classList.remove('hidden');
     }
 
     // ── Render Results View ───────────────────────────────────────────────────
@@ -1776,5 +1808,6 @@
       fetchState();
     });
   </script>
+  <script>AriaPromptTrace.mount({ prefix: 'agent04', title: 'Agent 04' });</script>
 </body>
 </html>

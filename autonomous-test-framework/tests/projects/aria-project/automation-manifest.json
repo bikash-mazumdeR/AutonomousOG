@@ -1,7 +1,7 @@
 {
   "version": 1,
   "projectSlug": "aria-project",
-  "sourceReviewId": "tc_review_1789567816468",
+  "sourceReviewId": "tc_review_1789651410724",
   "files": [
     "tests/projects/aria-project/pages/F01Page.ts",
     "tests/projects/aria-project/specs/F-01.spec.ts"
@@ -9,7 +9,7 @@
   "testCases": [
     {
       "tcKey": "TC-001",
-      "status": "NEEDS_CONTEXT"
+      "status": "EXCLUDED"
     },
     {
       "tcKey": "TC-002",
@@ -28,11 +28,12 @@
     },
     {
       "tcKey": "TC-005",
-      "status": "NEEDS_CONTEXT"
+      "status": "EXCLUDED"
     },
     {
       "tcKey": "TC-006",
-      "status": "NEEDS_CONTEXT"
+      "status": "GENERATED",
+      "file": "tests/projects/aria-project/specs/F-01.spec.ts"
     },
     {
       "tcKey": "TC-007",
@@ -50,25 +51,41 @@
     },
     {
       "tcKey": "TC-010",
-      "status": "NEEDS_CONTEXT"
+      "status": "GENERATED",
+      "file": "tests/projects/aria-project/specs/F-01.spec.ts"
     },
     {
       "tcKey": "TC-011",
-      "status": "GENERATED",
-      "file": "tests/projects/aria-project/specs/F-01.spec.ts"
+      "status": "NEEDS_CONTEXT"
     },
     {
       "tcKey": "TC-012",
-      "status": "NEEDS_CONTEXT"
+      "status": "EXCLUDED"
     },
     {
       "tcKey": "TC-013",
+      "status": "NEEDS_CONTEXT"
+    },
+    {
+      "tcKey": "TC-014",
+      "status": "EXCLUDED"
+    },
+    {
+      "tcKey": "TC-015",
       "status": "GENERATED",
       "file": "tests/projects/aria-project/specs/F-01.spec.ts"
     },
     {
-      "tcKey": "TC-014",
+      "tcKey": "TC-016",
       "status": "NEEDS_CONTEXT"
+    },
+    {
+      "tcKey": "TC-017",
+      "status": "NEEDS_CONTEXT"
+    },
+    {
+      "tcKey": "TC-018",
+      "status": "EXCLUDED"
     }
   ]
 }

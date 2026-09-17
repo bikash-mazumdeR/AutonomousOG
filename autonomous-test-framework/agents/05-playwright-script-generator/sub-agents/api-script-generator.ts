@@ -44,6 +44,7 @@ export class APIScriptGenerator {
       priorReviewFindings: ctx.priorReviewFindings,
       maxRetries: ctx.maxRetries,
       concurrency: ctx.concurrency,
+      trace: ctx.trace,
       renderHarness: (tc, body) => renderApiSpec({ ...specParams, tests: [{ tc, body }] }),
     }, ctx.chat);
 

@@ -17,7 +17,12 @@ export interface TokenUsage {
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
+  /** @deprecated Use estimatedCostUSD. Kept for backward compatibility — same value as estimatedCostUSD. */
   estimatedCost: number;
+  estimatedCostUSD: number;
+  estimatedCostINR: number;
+  /** USD→INR rate applied to produce estimatedCostINR. */
+  exchangeRate: number;
 }
 
 // ─── Pipeline Domain Types ────────────────────────────────────────────────────
@@ -354,6 +359,15 @@ export interface PlaywrightScriptsArtifact {
 export interface PipelineArtifacts {
   requirements: string | Record<string, any> | null;
   analyzedRequirements?: AnalyzedRequirement | null;
+  /** Agent 01's exact LLM input, call-by-call token usage and cost derivation (diagnostic). */
+  agent01PromptTrace?: Record<string, any> | null;
+  /** Agent 02's per-story prompts, validation attempts, call-by-call token usage and cost derivation (diagnostic). */
+  agent02PromptTrace?: Record<string, any> | null;
+  /** Agents 03-06: LLM calls made on the latest run (or why none were), token usage and cost derivation (diagnostic). */
+  agent03PromptTrace?: Record<string, any> | null;
+  agent04PromptTrace?: Record<string, any> | null;
+  agent05PromptTrace?: Record<string, any> | null;
+  agent06PromptTrace?: Record<string, any> | null;
   testCases: TestCasesArtifact | null;
   reviewedTestCases: Record<string, any> | null;
   testData: Record<string, any> | null;

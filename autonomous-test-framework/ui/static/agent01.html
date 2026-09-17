@@ -305,6 +305,37 @@
     }
     .alert-success { background: var(--success-bg); border: 1px solid var(--success); color: var(--success); }
     .alert-danger  { background: var(--danger-bg);  border: 1px solid var(--danger);  color: var(--danger); }
+
+    /* ── Prompt trace viewer ─────────────────────────────────────────────── */
+    .trace-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+      width: min(1150px, 96vw); max-height: 92vh; display: flex; flex-direction: column; box-shadow: var(--shadow);
+    }
+    .trace-head { padding: 16px 22px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .trace-head .modal-title { margin: 0; }
+    .trace-head .actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+    .trace-body { padding: 18px 22px; overflow-y: auto; }
+    .trace-section { margin-bottom: 22px; }
+    .trace-section h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); margin-bottom: 10px; }
+    .trace-note { color: var(--text-muted); font-size: 12px; margin: 6px 0; }
+    .trace-meta { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+    .trace-meta div { background: var(--surface2); border-radius: 6px; padding: 8px 10px; font-size: 12px; overflow-wrap: anywhere; }
+    .trace-meta b { display: block; color: var(--text-dim); font-weight: 500; font-size: 11px; }
+    .trace-table-wrap { overflow-x: auto; }
+    .trace-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .trace-table th, .trace-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+    .trace-table th { color: var(--text-dim); font-weight: 600; white-space: nowrap; }
+    .trace-table td.num, .trace-table th.num { text-align: right; font-family: monospace; white-space: nowrap; }
+    .trace-table tr.total td { font-weight: 700; border-top: 2px solid var(--border); }
+    .trace-bar { height: 6px; background: var(--accent); border-radius: 3px; min-width: 2px; }
+    .trace-formula { background: #020817; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+                     font-family: monospace; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 8px; }
+    .trace-body details { background: var(--surface2); border-radius: 8px; margin-bottom: 8px; }
+    .trace-body summary { cursor: pointer; padding: 9px 12px; font-size: 13px; font-weight: 600; }
+    .trace-body summary .dim { color: var(--text-dim); font-weight: 400; margin-left: 6px; }
+    .trace-pre { background: #020817; margin: 0 10px 10px; padding: 10px 12px; border-radius: 6px; max-height: 420px; overflow: auto;
+                 font-family: 'Fira Code', 'JetBrains Mono', monospace; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .trace-body details details { margin: 0 10px 8px; background: var(--surface); }
   </style>
   <script src="/pipeline-nav.js"></script>
 </head>
@@ -482,6 +513,7 @@
           <span class="token-label">Estimated cost</span>
           <span class="token-value" id="tokCost">—</span>
         </div>
+        <button class="btn btn-outline btn-block mt-12" id="viewTraceBtn">🔍 View agent input &amp; token math</button>
       </div>
 
     </div><!-- /right col -->
@@ -514,6 +546,22 @@
   <div class="chat-input-row">
     <textarea id="chatInput" placeholder="Ask ARIA about the requirements…" rows="1"></textarea>
     <button class="btn btn-primary" id="chatSendBtn">Send</button>
+  </div>
+</div>
+
+<!-- ── Prompt Trace Modal ──────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="traceModal">
+  <div class="trace-card">
+    <div class="trace-head">
+      <div class="modal-title">🔍 Agent 01 — Input Context &amp; Token Usage</div>
+      <span id="traceStatus"></span>
+      <div class="actions">
+        <button class="btn btn-ghost" id="traceCopyPromptBtn">Copy user prompt</button>
+        <button class="btn btn-ghost" id="traceDownloadBtn">⬇ Download JSON</button>
+        <button class="btn btn-ghost" id="traceCloseBtn">✕ Close</button>
+      </div>
+    </div>
+    <div class="trace-body" id="traceBody">Loading…</div>
   </div>
 </div>
 
@@ -758,6 +806,8 @@ function handleSSEEvent(event) {
       break;
     case 'error':
       appendLog('❌ ' + event.message, 'error');
+      appendLog('🔍 Open "View agent input & token math" to inspect what the LLM was sent before the failure.', 'info');
+      document.getElementById('tokenCard').classList.remove('hidden');
       document.getElementById('spinner').classList.add('hidden');
       stopPolling();
       break;
@@ -863,7 +913,9 @@ function updateTokenCard(usage) {
   document.getElementById('tokPrompt').textContent     = (usage.promptTokens || 0).toLocaleString();
   document.getElementById('tokCompletion').textContent = (usage.completionTokens || 0).toLocaleString();
   document.getElementById('tokTotal').textContent      = (usage.totalTokens || 0).toLocaleString();
-  document.getElementById('tokCost').textContent       = '$' + (usage.estimatedCost || 0).toFixed(6);
+  const costUSD = usage.estimatedCostUSD ?? usage.estimatedCost ?? 0;
+  const costINR = usage.estimatedCostINR ?? (costUSD * (usage.exchangeRate || 96));
+  document.getElementById('tokCost').textContent       = '₹' + costINR.toFixed(2) + ' ($' + costUSD.toFixed(6) + ')';
   document.getElementById('tokenCard').classList.remove('hidden');
 }
 
@@ -1169,6 +1221,160 @@ function escHtml(str) {
     .replace(/&/g,'&amp;').replace(/</g,'&lt;')
     .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+
+// ── Prompt trace viewer ────────────────────────────────────────────────────
+/** Where each provider's API reports the counts ARIA displays; ARIA never tokenizes text itself. */
+const USAGE_FIELDS = {
+  bedrock:   'Converse API usage.inputTokens / usage.outputTokens',
+  anthropic: 'Messages API usage.input_tokens / usage.output_tokens',
+  gemini:    'usageMetadata.promptTokenCount / usageMetadata.candidatesTokenCount',
+  openai:    'usage.prompt_tokens / usage.completion_tokens',
+  litellm:   'usage.prompt_tokens / usage.completion_tokens (LiteLLM proxy)',
+};
+let currentTrace = null;
+
+const fmtInt = n => (Number(n) || 0).toLocaleString();
+const fmtUsd = n => '$' + (Number(n) || 0).toFixed(6);
+
+function traceDetails(title, subtitle, content, open = false) {
+  if (content === null || content === undefined) return '';
+  return `<details${open ? ' open' : ''}><summary>${escHtml(title)}<span class="dim">${escHtml(subtitle || '')}</span></summary>` +
+    `<pre class="trace-pre">${escHtml(content === '' ? '(empty)' : content)}</pre></details>`;
+}
+
+function renderTraceOverview(t) {
+  const models = [...new Set((t.calls || []).map(c => `${c.provider} · ${c.model}`))].join(', ') || '— (no LLM call)';
+  const cells = [
+    ['Recorded', new Date(t.generatedAt).toLocaleString()],
+    ['Project', t.projectName], ['Input format', t.format], ['Requirement source', t.requirementSource],
+    ['Analysis', t.llmCalled ? 'Regenerated by LLM' : (t.analysisSource === 'REUSED' ? 'Reused — no LLM call made' : 'No LLM call made')],
+    ['Model(s)', models], ['LLM calls', (t.calls || []).length],
+    ['Input fingerprint', String(t.inputFingerprint || '—').slice(0, 16)],
+  ];
+  return `<div class="trace-section"><div class="trace-meta">${cells.map(([k, v]) => `<div><b>${k}</b>${escHtml(v)}</div>`).join('')}</div>` +
+    (t.error ? `<div class="alert alert-danger mt-12">${escHtml(t.error)}</div>` : '') + '</div>';
+}
+
+function renderTraceTokens(t) {
+  const calls = t.calls || [];
+  if (!calls.length) {
+    return `<div class="trace-section"><h3>How the token card is calculated</h3><p class="trace-note">No LLM call was made on this run, so it consumed no tokens. ` +
+      `The token card may still show the usage stored from the run that produced the reused analysis.</p></div>`;
+  }
+  const rows = calls.map(c => `<tr>
+      <td>${c.callNumber}</td><td>${escHtml(c.purpose)}${c.truncated ? ' <span class="badge badge-danger">truncated</span>' : ''}<br><span class="trace-note">${escHtml(c.model)} · ${(c.durationMs / 1000).toFixed(1)}s</span></td>
+      <td class="num">${fmtInt(c.reportedUsage.promptTokens)}</td>
+      <td class="num">${fmtInt(c.reportedUsage.cacheReadTokens)} / ${fmtInt(c.reportedUsage.cacheWriteTokens)}</td>
+      <td class="num">${fmtInt(c.reportedUsage.completionTokens)}</td>
+      <td class="num">$${c.pricingPer1K.input} / $${c.pricingPer1K.output}</td>
+      <td class="num">${fmtUsd(c.usage.estimatedCostUSD)}</td>
+      <td>${c.countsTowardStageUsage ? '✅ yes' : '— no'}</td></tr>`).join('');
+  const s = t.totals.stage;
+  const formulas = calls.filter(c => c.countsTowardStageUsage).map(c =>
+    `Call ${c.callNumber}: input  ${fmtInt(c.usage.promptTokens)} / 1000 × $${c.pricingPer1K.input} = ${fmtUsd(c.costBreakdownUSD.input)}\n` +
+    `        output ${fmtInt(c.usage.completionTokens)} / 1000 × $${c.pricingPer1K.output} = ${fmtUsd(c.costBreakdownUSD.output)}`).join('\n');
+  const rate = calls[calls.length - 1].usage.exchangeRate;
+  const providers = [...new Set(calls.map(c => c.provider))];
+  const notes = [
+    `Token counts are <b>not computed by ARIA</b>. They are read from the provider's response: ${providers.map(p => `<b>${escHtml(p)}</b> → <code>${escHtml(USAGE_FIELDS[p] || 'usage')}</code>`).join('; ')}. ` +
+      'Input tokens include the system prompt, the user prompt and the provider\'s message framing.',
+    'The token card sums every call billed to stage <code>01-requirement-analyzer</code> in this run. A story-structure correction round re-sends the whole conversation (system prompt + user prompt + the first answer), so it roughly doubles the input tokens.',
+    'Context-squeeze calls (only for requirements over 50,000 characters) are billed to <code>system-utility</code> and are <b>not</b> in the token card.',
+    'Cost = input tokens / 1000 × input price + output tokens / 1000 × output price (USD per 1K tokens from <code>config/framework.config.ts → llm.pricing</code>); ₹ = USD × exchange rate. Cached input tokens (cache read / write) are reported separately and are not priced in this estimate.',
+  ];
+  if (calls.some(c => c.truncated)) notes.push('<b>A call hit its output limit</b> (see effective max tokens below) — its output was incomplete.');
+  const card = `Token card:  prompt ${fmtInt(s.promptTokens)}  +  completion ${fmtInt(s.completionTokens)}  =  total ${fmtInt(s.totalTokens)}\n` +
+    `Cost:        ${fmtUsd(s.estimatedCostUSD)}  × ${rate} INR/USD  =  ₹${(s.estimatedCostINR || 0).toFixed(2)}`;
+  return `<div class="trace-section"><h3>How the token card is calculated</h3>
+    <div class="trace-table-wrap"><table class="trace-table">
+      <tr><th>#</th><th>Call</th><th class="num">Input tok</th><th class="num">Cache read / write</th><th class="num">Output tok</th><th class="num">$ per 1K in / out</th><th class="num">Cost</th><th>In token card</th></tr>
+      ${rows}
+      <tr class="total"><td></td><td>Token card total (stage calls)</td><td class="num">${fmtInt(s.promptTokens)}</td><td class="num">${fmtInt(s.cacheReadTokens)} / ${fmtInt(s.cacheWriteTokens)}</td><td class="num">${fmtInt(s.completionTokens)}</td><td></td><td class="num">${fmtUsd(s.estimatedCostUSD)}</td><td></td></tr>
+    </table></div>
+    <div class="trace-formula">${escHtml(formulas)}\n\n${escHtml(card)}</div>
+    ${notes.map(n => `<p class="trace-note">• ${n}</p>`).join('')}</div>`;
+}
+
+function renderTraceComposition(t) {
+  const comp = t.composition || {};
+  if (!comp.rows?.length) return '';
+  const totalChars = comp.rows.reduce((sum, r) => sum + r.chars, 0);
+  const first = (t.calls || []).find(c => c.countsTowardStageUsage);
+  const method = comp.method === 'proportional-to-reported'
+    ? `Estimated: the ${fmtInt(first.reportedUsage.promptTokens)} input tokens the provider reported for call ${first.callNumber} are split across sources in proportion to their characters (${(totalChars / first.reportedUsage.promptTokens).toFixed(2)} chars per token on this call). Exact per-section counts would need the provider's tokenizer.`
+    : 'Estimated at ~4 characters per token, because no LLM call was made on this run.';
+  const rows = comp.rows.map(r => `<tr><td>${escHtml(r.label)}</td><td class="num">${fmtInt(r.chars)}</td>
+      <td class="num">≈ ${fmtInt(r.estimatedTokens)}</td><td class="num">${(r.share * 100).toFixed(1)}%</td>
+      <td style="width:30%"><div class="trace-bar" style="width:${(r.share * 100).toFixed(1)}%"></div></td></tr>`).join('');
+  return `<div class="trace-section"><h3>What makes up the input (initial analysis call)</h3>
+    <div class="trace-table-wrap"><table class="trace-table">
+      <tr><th>Source</th><th class="num">Characters</th><th class="num">Tokens</th><th class="num">Share</th><th></th></tr>${rows}
+      <tr class="total"><td>Total</td><td class="num">${fmtInt(totalChars)}</td><td class="num">${first ? fmtInt(first.reportedUsage.promptTokens) : ''}</td><td></td><td></td></tr>
+    </table></div><p class="trace-note">${method}</p></div>`;
+}
+
+function renderTraceInputs(t) {
+  const i = t.inputs || {};
+  const chars = v => v === null || v === undefined ? '' : ` — ${fmtInt(String(v).length)} chars`;
+  return `<div class="trace-section"><h3>Agent input, piece by piece</h3>
+    <p class="trace-note">The LLM receives two messages: a <b>system</b> message (the skill file) and a <b>user</b> message (the agent's instructions with the memory and the requirement inserted). Expand the full user prompt to see exactly what was sent.</p>
+    ${traceDetails('System prompt — ' + (i.skillPath || 'skill file'), chars(i.systemPrompt), i.systemPrompt)}
+    ${traceDetails('Requirement text as sent to the LLM', chars(i.requirementsSent) + (i.squeezed ? ' (summarised by the context squeezer)' : ''), i.requirementsSent)}
+    ${i.squeezed ? traceDetails('Original requirement text (before squeezing)', chars(i.originalRequirements), i.originalRequirements) : ''}
+    ${traceDetails('Memory: improvement rules', chars(i.improvementRules), i.improvementRules)}
+    ${traceDetails('Memory: resolved clarifications (Agent 01 answers)', chars(i.resolvedClarifications), i.resolvedClarifications)}
+    ${traceDetails('Full user prompt (exact text sent)', chars(i.userPrompt), i.userPrompt)}</div>`;
+}
+
+function renderTraceCalls(t) {
+  if (!(t.calls || []).length) return '';
+  const calls = t.calls.map(c => {
+    const req = c.request || {};
+    const params = `temperature ${req.temperature ?? 'default'} · seed ${req.seed ?? '—'} · JSON mode ${req.json ? 'on' : 'off'} · max tokens requested ${req.maxTokens ?? 'default'} / applied ${c.effectiveMaxTokens ?? 'provider default'}`;
+    const messages = c.messages.map((m, idx) => traceDetails(`Message ${idx + 1} — ${m.role}`, ` ${fmtInt(m.chars)} chars`, m.content)).join('');
+    return `<details><summary>Call ${c.callNumber}: ${escHtml(c.purpose)}<span class="dim">${escHtml(c.model)} · in ${fmtInt(c.reportedUsage.promptTokens)} / out ${fmtInt(c.reportedUsage.completionTokens)} tokens</span></summary>
+      <p class="trace-note" style="padding:0 12px">${escHtml(params)}</p>${messages}
+      ${traceDetails('Raw LLM response', ` ${fmtInt((c.responseText || '').length)} chars`, c.responseText)}</details>`;
+  }).join('');
+  return `<div class="trace-section"><h3>LLM calls — request &amp; raw response</h3>${calls}</div>`;
+}
+
+async function openTrace() {
+  const modal = document.getElementById('traceModal');
+  const body = document.getElementById('traceBody');
+  body.innerHTML = 'Loading…';
+  document.getElementById('traceStatus').innerHTML = '';
+  modal.classList.add('open');
+  try {
+    const resp = await fetch('/api/agent01/prompt-trace');
+    const data = await resp.json();
+    if (!resp.ok) { body.innerHTML = `<p class="trace-note">${escHtml(data.error || 'No prompt trace available.')}</p>`; currentTrace = null; return; }
+    currentTrace = data;
+    document.getElementById('traceStatus').innerHTML =
+      `<span class="badge ${data.status === 'FAILED' ? 'badge-danger' : 'badge-success'}">${escHtml(data.status)}</span>`;
+    body.innerHTML = renderTraceOverview(data) + renderTraceTokens(data) + renderTraceComposition(data) + renderTraceInputs(data) + renderTraceCalls(data);
+  } catch (e) {
+    body.innerHTML = `<p class="trace-note">Could not load the prompt trace: ${escHtml(e.message)}</p>`;
+  }
+}
+
+document.getElementById('viewTraceBtn').addEventListener('click', openTrace);
+document.getElementById('traceCloseBtn').addEventListener('click', () => document.getElementById('traceModal').classList.remove('open'));
+document.getElementById('traceModal').addEventListener('click', e => { if (e.target.id === 'traceModal') e.target.classList.remove('open'); });
+document.getElementById('traceCopyPromptBtn').addEventListener('click', async () => {
+  const prompt = currentTrace?.inputs?.userPrompt;
+  if (!prompt) return;
+  await navigator.clipboard.writeText(prompt);
+  document.getElementById('traceCopyPromptBtn').textContent = 'Copied ✓';
+  setTimeout(() => { document.getElementById('traceCopyPromptBtn').textContent = 'Copy user prompt'; }, 1500);
+});
+document.getElementById('traceDownloadBtn').addEventListener('click', () => {
+  if (!currentTrace) return;
+  const url = URL.createObjectURL(new Blob([JSON.stringify(currentTrace, null, 2)], { type: 'application/json' }));
+  const a = Object.assign(document.createElement('a'), { href: url, download: 'agent01-prompt-trace.json' });
+  a.click();
+  URL.revokeObjectURL(url);
+});
 
 // Auto-resize chat textarea
 document.getElementById('chatInput').addEventListener('input', function() {

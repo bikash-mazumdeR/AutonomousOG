@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import { spawn, ChildProcess } from 'child_process';
 import { stateManager } from '../core/state-manager/StateManager';
 import { registerPipelineRoutes } from './pipelineRoutes';
+import { registerPromptTraceRoutes } from './promptTraceRoutes';
 import { ensureFixturesFileSynced, syncFixturesFileFromTestData } from '../core/state-manager/FixtureSync';
 import { loadCurrentTestData } from '../core/state-manager/TestDataFreshness';
 import { llmClient } from '../core/llm/LLMClient';
@@ -22,6 +23,7 @@ const FIXTURES_PATH = path.join(FRAMEWORK_DIR, 'tests', 'fixtures', 'test-data.j
 
 app.use(express.json());
 registerPipelineRoutes(app);
+registerPromptTraceRoutes(app, ['agent04']);
 app.use(express.static(path.join(__dirname, 'static')));
 
 // Redirect root to agent04.html

@@ -35,6 +35,10 @@ import {
 import { syncFeatureFiles } from './utils';
 import { buildGenerationMeta, describeInputChanges, formatInputChanges } from './generation/generationMeta';
 import { filterByActiveTypes, resolveActiveTypeTags } from './prompts/systemPrompt';
+import { buildPromptTrace } from './generation/promptTrace';
+import { assertTestCasesGenerated } from './generation/emptyResultGuard';
+
+const PROMPT_TRACE_FILE = 'test-case-generation-prompt-trace.json';
 
 /** Agent input. */
 export interface TestCaseGeneratorInput {
@@ -50,6 +54,16 @@ interface GenerationSummary {
   meta: GenerationMeta;
   /** Inputs changed since the previous generation; null when there is nothing to compare. */
   inputChanges: string[] | null;
+}
+
+/** What the prompt trace records about a run, filled in as the run progresses. */
+interface TraceContext {
+  opts?: Record<string, unknown>;
+  memoryContext?: any;
+  systemPrompt?: string;
+  outcomes?: StoryGenerationOutcome[];
+  warnings?: string[];
+  testCaseCount?: number;
 }
 
 /**
@@ -107,12 +121,17 @@ export class TestCaseGeneratorAgent {
       throw new Error('analyzedRequirements not provided. Ensure Agent 01 completed successfully.');
     }
 
+    llmClient.clearCallTraces();
+    const trace: TraceContext = { opts: input.opts };
+
     try {
       const memoryContext = await memoryEngine.getContextForStage(STAGE_ID);
+      trace.memoryContext = memoryContext;
       await stateManager.markStageRunning(STAGE_ID);
       const previous = (await stateManager.getLatestArtifactForProject('testCases'))?.zephyrExport;
 
-      const generation = await this._generate(input, memoryContext);
+      const generation = await this._generate(input, memoryContext, trace);
+      assertTestCasesGenerated(generation);
       generation.inputChanges = describeInputChanges(previous?.generationMeta, generation.meta);
       if (generation.inputChanges?.length === 0 && previous.totalTestCases !== generation.testCases.length) {
         generation.warnings.push(`Inputs are identical to the previous generation but the test case count changed `
@@ -127,6 +146,7 @@ export class TestCaseGeneratorAgent {
       await stateManager.setPipelineArtifact('testCases', output);
       await stateManager.markStageCompleted(STAGE_ID, output, usage);
       this._saveToDisk(output);
+      await this._savePromptTrace(trace, 'COMPLETED');
 
       const durationMs = Date.now() - startMs;
       this._logger.stage('COMPLETE', STAGE_ID, {
@@ -135,6 +155,7 @@ export class TestCaseGeneratorAgent {
       return await this._awaitApproval(output, generation, featureFilePaths, usage, durationMs);
     } catch (error: any) {
       this._logger.error('Agent execution failed', { error: error.message });
+      await this._savePromptTrace(trace, 'FAILED', error.message);
       await stateManager.markStageFailed(STAGE_ID, error);
       throw error;
     }
@@ -142,7 +163,7 @@ export class TestCaseGeneratorAgent {
 
   // ── Generation ───────────────────────────────────────────────────────────
 
-  private async _generate(input: TestCaseGeneratorInput, memoryContext: any): Promise<GenerationSummary> {
+  private async _generate(input: TestCaseGeneratorInput, memoryContext: any, trace: TraceContext): Promise<GenerationSummary> {
     const normalized = normalizeAnalysis(input.analyzedRequirements);
     const excludedTypeTags = resolveExcludedTypeTags(input.opts);
     this._logger.info('Starting requirement-grounded generation', {
@@ -153,6 +174,7 @@ export class TestCaseGeneratorAgent {
     });
 
     const systemPrompt = filterByActiveTypes(this._skill, resolveActiveTypeTags(normalized.features, excludedTypeTags));
+    trace.systemPrompt = systemPrompt;
     const outcomes = await this._generateStories(normalized, excludedTypeTags, memoryContext, systemPrompt);
     const testCases = buildTestCases(outcomes);
     const meta = buildGenerationMeta({
@@ -164,15 +186,17 @@ export class TestCaseGeneratorAgent {
       outcomes,
       modelsUsed: llmClient.getStageModels(STAGE_ID),
     });
+    const warnings = [
+      ...normalized.warnings,
+      ...outcomes.flatMap((outcome) => outcome.warnings),
+      ...buildCoverageWarnings(normalized.features, testCases, excludedTypeTags),
+    ];
+    Object.assign(trace, { outcomes, warnings, testCaseCount: testCases.length });
     return {
       testCases,
       meta,
       inputChanges: null,
-      warnings: [
-        ...normalized.warnings,
-        ...outcomes.flatMap((outcome) => outcome.warnings),
-        ...buildCoverageWarnings(normalized.features, testCases, excludedTypeTags),
-      ],
+      warnings,
       clarifications: normalized.clarifications,
       coverage: computeRequirementCoverage(normalized.features, testCases),
     };
@@ -186,9 +210,11 @@ export class TestCaseGeneratorAgent {
   ): Promise<StoryGenerationOutcome[]> {
     const limit = pLimit(Math.max(1, FRAMEWORK_CONFIG.maxThreads));
     const jobs = normalized.features.flatMap((feature) => feature.userStories.map((story) => limit(async () => {
-      this._logger.info(`Generating scenarios for ${feature.id}/${story.id}`, {
+      const storyKey = `${feature.id}/${story.id}`;
+      this._logger.info(`Generating scenarios for ${storyKey}`, {
         acceptanceCriteria: story.acceptanceCriteria.length, businessRules: story.businessRules.length,
       });
+      let attempt = 0;
       const outcome = await generateStoryScenarios({
         feature,
         story,
@@ -198,7 +224,10 @@ export class TestCaseGeneratorAgent {
         stateTransitions: normalized.stateTransitions,
         memoryContext,
         maxRetries: FRAMEWORK_CONFIG.selfReviewRetries,
-      }, (messages) => this._chat(messages));
+      }, (messages) => {
+        attempt += 1;
+        return this._chat(messages, `${storyKey} #${attempt}`);
+      });
       this._logger.info(`${feature.id}/${story.id}: ${outcome.scenarios.length} valid scenario(s) in ${outcome.attempts} attempt(s)`);
       return outcome;
     })));
@@ -206,9 +235,11 @@ export class TestCaseGeneratorAgent {
     return Promise.all(jobs);
   }
 
-  private async _chat(messages: ChatMessage[]): Promise<ChatReply> {
+  /** `traceLabel` ("F-01/US-01 #2") attributes the call to its story and attempt in the prompt trace. */
+  private async _chat(messages: ChatMessage[], traceLabel: string): Promise<ChatReply> {
     const response = await llmClient.chat(STAGE_ID, {
       messages,
+      traceLabel,
       temperature: LLM_SETTINGS.TEMPERATURE,
       seed: LLM_SETTINGS.SEED,
       max_tokens: LLM_SETTINGS.MAX_TOKENS,
@@ -271,6 +302,46 @@ export class TestCaseGeneratorAgent {
     const tcPath = path.join(outDir, `test-cases-zephyr-${Date.now()}.json`);
     fs.writeFileSync(tcPath, JSON.stringify(output.zephyrExport, null, 2), 'utf-8');
     this._logger.info('Test cases saved to disk', { tcPath });
+  }
+
+  /**
+   * Persists what the generation LLM was given per story, every call's usage and cost, and each validation attempt,
+   * for the UI's "Agent input" view and reports/json. Diagnostic only: a failure here is logged and never fails the stage.
+   */
+  private async _savePromptTrace(trace: TraceContext, status: 'COMPLETED' | 'FAILED', error?: string): Promise<void> {
+    try {
+      const report = buildPromptTrace({
+        stageId: STAGE_ID,
+        status,
+        error,
+        projectName: stateManager.getProjectId(),
+        excludedTypes: [...resolveExcludedTypeTags(trace.opts)].sort(),
+        skillPath: path.relative(path.resolve(__dirname, '../..'), SKILL_PATH),
+        systemPrompt: trace.systemPrompt ?? this._skill,
+        memory: {
+          improvementRules: trace.memoryContext?.improvementRules || [],
+          rejectionFeedback: trace.memoryContext?.rejectionFeedback || [],
+        },
+        stories: (trace.outcomes || []).map((outcome) => ({
+          key: `${outcome.feature.id}/${outcome.story.id}`,
+          title: outcome.story.title,
+          acceptanceCriteria: outcome.story.acceptanceCriteria.length,
+          businessRules: outcome.story.businessRules.length,
+          userPrompt: outcome.userPrompt,
+          scenariosAccepted: outcome.scenarios.length,
+          attemptLog: outcome.attemptLog,
+        })),
+        testCaseCount: trace.testCaseCount ?? 0,
+        warnings: trace.warnings || [],
+        calls: llmClient.getCallTraces([STAGE_ID]),
+      });
+      await stateManager.setPipelineArtifact('agent02PromptTrace', report);
+      const outDir = path.resolve(__dirname, '../../reports/json');
+      fs.mkdirSync(outDir, { recursive: true });
+      fs.writeFileSync(path.join(outDir, PROMPT_TRACE_FILE), JSON.stringify(report, null, 2), 'utf-8');
+    } catch (traceError: any) {
+      this._logger.warn('Could not save the Agent 02 prompt trace', { error: traceError.message });
+    }
   }
 
   private _loadSkill(): string {

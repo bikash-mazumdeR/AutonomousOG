@@ -78,6 +78,7 @@ export class UIScriptGenerator {
       fixtureValues: ctx.fixtureValues,
       plannerSystemPrompt: loadDiscoveryPrompt(ctx.paths.learningsDir),
       chat: ctx.chat,
+      trace: ctx.trace,
       logger: ctx.logger,
       headless: ctx.headless,
     });
@@ -104,6 +105,7 @@ export class UIScriptGenerator {
       priorReviewFindings: ctx.priorReviewFindings,
       maxRetries: ctx.maxRetries,
       concurrency: ctx.concurrency,
+      trace: ctx.trace,
       ...discoveryBindings(discovery, pom, generatable),
       renderHarness: (tc, body) => renderUiSpec({ ...base, tests: [{ tc, body }] }),
     }, ctx.chat);

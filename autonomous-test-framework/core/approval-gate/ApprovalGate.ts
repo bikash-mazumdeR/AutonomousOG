@@ -17,6 +17,7 @@ import { Logger } from '../logger/Logger';
 import { FRAMEWORK_CONFIG } from '../../config/framework.config';
 import { ApprovalStatus } from '../types';
 import { llmClient } from '../llm/LLMClient';
+import { tokenPriceCalculator } from '../llm/TokenPriceCalculator';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -408,12 +409,15 @@ export class ApprovalGate {
       totalTokens: 0,
       estimatedCost: 0,
     };
+    const costUSD = usage.estimatedCostUSD ?? usage.estimatedCost ?? 0;
+    const rate = usage.exchangeRate || tokenPriceCalculator.getExchangeRate();
+    const costINR = usage.estimatedCostINR ?? (costUSD * rate);
     console.log('\n  🪙  TOKEN USAGE:');
     console.log('  ─────────────────────────────────────────────────────');
     console.log(`    ${'Prompt Tokens'.padEnd(28)}: ${(usage.promptTokens || 0).toLocaleString()}`);
     console.log(`    ${'Completion Tokens'.padEnd(28)}: ${(usage.completionTokens || 0).toLocaleString()}`);
     console.log(`    ${'Total Tokens'.padEnd(28)}: ${(usage.totalTokens || 0).toLocaleString()}`);
-    console.log(`    ${'Estimated Cost'.padEnd(28)}: $${(usage.estimatedCost || 0).toFixed(6)} USD`);
+    console.log(`    ${'Estimated Cost'.padEnd(28)}: ₹${costINR.toFixed(2)} INR ($${costUSD.toFixed(6)} USD @ ₹${rate.toFixed(2)}/$)`);
 
     if (warnings.length > 0) {
       console.log(`\n  ⚠️  WARNINGS (${warnings.length}):`);

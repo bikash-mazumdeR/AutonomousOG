@@ -17,7 +17,7 @@ export class F01Page extends BasePage {
   }
 
   /**
-   * Verified action sequence in state "start": fill usernameInput, fill passwordInput, click loginButton. Performs actions only and asserts nothing (verified by TC-002, TC-003, TC-004, TC-007, TC-008, TC-011).
+   * Verified action sequence in state "start": fill usernameInput, fill passwordInput, click loginButton. Performs actions only and asserts nothing (verified by TC-003, TC-004, TC-006, TC-007, TC-010).
    * @param {{ usernameInput: string, passwordInput: string }} values
    */
   async startClickLoginButtonFlow(values: { usernameInput: string; passwordInput: string }): Promise<void> {
@@ -71,6 +71,11 @@ export class F01Page extends BasePage {
     return this.page.getByRole("heading", { name: "Password for all users:", exact: true });
   }
 
+  /** div — container of the login error message that carries its background colour (state: start) */
+  get errorMessageContainer(): Locator {
+    return this.page.locator(".error-message-container");
+  }
+
   /** alert (state: start) */
   get errorElement(): Locator {
     return this.page.getByTestId("error");
@@ -79,11 +84,6 @@ export class F01Page extends BasePage {
   /** button "Dismiss error" (state: start) */
   get errorButton(): Locator {
     return this.page.getByTestId("error-button");
-  }
-
-  /** div — container of the login error message that carries its background colour (state: start) */
-  get errorMessageContainer(): Locator {
-    return this.page.locator(".error-message-container");
   }
 
   /** svg — error icon inside the Username field (state: start) */

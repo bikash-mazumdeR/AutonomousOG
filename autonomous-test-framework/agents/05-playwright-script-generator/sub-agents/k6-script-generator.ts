@@ -42,6 +42,7 @@ export class K6ScriptGenerator {
       priorReviewFindings: ctx.priorReviewFindings,
       maxRetries: ctx.maxRetries,
       concurrency: ctx.concurrency,
+      trace: ctx.trace,
       renderHarness: (tc, body) => renderK6Script(scriptParams(tc, body)),
     }, ctx.chat);
 

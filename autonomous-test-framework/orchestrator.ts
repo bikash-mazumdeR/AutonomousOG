@@ -238,7 +238,7 @@ class Orchestrator {
         logger.info('Stage completed with usage tracking', { 
           stageId: stageDef.id, 
           tokens: usage.totalTokens,
-          cost: `$${usage.estimatedCost}`
+          cost: `₹${(usage.estimatedCostINR ?? usage.estimatedCost).toFixed(2)}`
         });
       }
 

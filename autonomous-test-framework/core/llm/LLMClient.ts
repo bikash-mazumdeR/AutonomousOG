@@ -10,6 +10,7 @@ import { GeminiProvider } from './providers/GeminiProvider';
 import { LiteLLMProvider } from './providers/LiteLLMProvider';
 import { BedrockProvider } from './providers/BedrockProvider';
 import { TokenUsage } from '../types';
+import { tokenPriceCalculator } from './TokenPriceCalculator';
 import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -32,6 +33,37 @@ export interface LLMClientResponse {
   truncated?: boolean;
 }
 
+/**
+ * Maximum call traces kept per process; long-lived UI servers must not grow without bound. Sized for Agent 02, which
+ * makes up to (1 + SELF_REVIEW_RETRIES) calls per user story.
+ */
+const MAX_CALL_TRACES = 150;
+
+/**
+ * Exactly what one successful chat() call sent and received, kept so a stage can show the human the
+ * agent's real input and how its token counts and cost were derived.
+ */
+export interface LLMCallTrace {
+  stageId: string;
+  /** Caller-supplied `traceLabel` from the chat payload, used to attribute concurrent calls (e.g. "F-01/US-01 #2"). */
+  label?: string;
+  provider: string;
+  model: string;
+  /** True when a fallback model served the call instead of the primary. */
+  fallback: boolean;
+  startedAt: string;
+  durationMs: number;
+  request: { temperature?: number; seed?: number; maxTokens?: number; json?: boolean };
+  messages: Array<{ role: string; content: string; chars: number }>;
+  responseText: string;
+  truncated: boolean;
+  /** Token counts exactly as the provider API reported them — ARIA never counts tokens itself. */
+  reportedUsage: { promptTokens: number; completionTokens: number; totalTokens: number; cacheReadTokens: number; cacheWriteTokens: number };
+  /** USD per 1,000 tokens applied to this call. */
+  pricingPer1K: { input: number; output: number };
+  usage: TokenUsage;
+}
+
 export class LLMClient {
   private _providers: Map<string, LLMProvider> = new Map();
   private _stageUsage: Map<string, TokenUsage> = new Map();
@@ -41,6 +73,7 @@ export class LLMClient {
   /** Models that actually served each stage in this process. */
   private _stageModels: Map<string, Set<string>> = new Map();
   private _pinsPath: string;
+  private _callTraces: LLMCallTrace[] = [];
 
   constructor(options: { fallbackPinsPath?: string } = {}) {
     this._pinsPath = options.fallbackPinsPath || DEFAULT_FALLBACK_PINS_PATH;
@@ -189,6 +222,7 @@ export class LLMClient {
       }
 
       try {
+        const callStartedAt = Date.now();
         const response = await this._withRetry(async () => {
           logger.info('LLM Request', { stageId, provider: providerName, model: modelName });
           return await provider.chat({
@@ -208,6 +242,7 @@ export class LLMClient {
         );
         this._trackUsage(stageId, usage);
         this._recordServedModel(stageId, modelName, i === 0);
+        this._recordCallTrace({ stageId, provider: providerName, model: modelName, fallback: i > 0 }, callStartedAt, payload, response, usage);
 
         if (offset > 0) {
           // Persist the working index so future calls skip the exhausted primary
@@ -307,6 +342,48 @@ export class LLMClient {
   }
 
   /**
+   * Returns the traces of successful calls made in this process, oldest first, optionally limited to some stages.
+   */
+  getCallTraces(stageIds?: string[]): LLMCallTrace[] {
+    return this._callTraces.filter((trace) => !stageIds || stageIds.includes(trace.stageId));
+  }
+
+  /** Forgets recorded call traces (call at the start of a run whose calls are to be reported). */
+  clearCallTraces(): void {
+    this._callTraces = [];
+  }
+
+  private _recordCallTrace(
+    served: Pick<LLMCallTrace, 'stageId' | 'provider' | 'model' | 'fallback'>,
+    startedAtMs: number, payload: any, response: LLMResponse, usage: TokenUsage,
+  ): void {
+    const reported = response.usage;
+    this._callTraces.push({
+      ...served,
+      ...(payload.traceLabel ? { label: String(payload.traceLabel) } : {}),
+      startedAt: new Date(startedAtMs).toISOString(),
+      durationMs: Date.now() - startedAtMs,
+      request: { temperature: payload.temperature, seed: payload.seed, maxTokens: payload.max_tokens, json: payload.json },
+      messages: (payload.messages || []).map((m: any) => {
+        const content = String(m.content ?? '');
+        return { role: m.role, content, chars: content.length };
+      }),
+      responseText: response.text,
+      truncated: Boolean(response.truncated),
+      reportedUsage: {
+        promptTokens: reported?.promptTokens || 0,
+        completionTokens: reported?.completionTokens || 0,
+        totalTokens: reported?.totalTokens || 0,
+        cacheReadTokens: reported?.cacheReadTokens || 0,
+        cacheWriteTokens: reported?.cacheWriteTokens || 0,
+      },
+      pricingPer1K: tokenPriceCalculator.resolvePricing(served.model),
+      usage,
+    });
+    if (this._callTraces.length > MAX_CALL_TRACES) this._callTraces.shift();
+  }
+
+  /**
    * Returns aggregated usage for a specific stage.
    */
   getStageUsage(stageId: string): TokenUsage {
@@ -314,7 +391,10 @@ export class LLMClient {
       promptTokens: 0,
       completionTokens: 0,
       totalTokens: 0,
-      estimatedCost: 0
+      estimatedCost: 0,
+      estimatedCostUSD: 0,
+      estimatedCostINR: 0,
+      exchangeRate: tokenPriceCalculator.getExchangeRate(),
     };
   }
 
@@ -331,20 +411,16 @@ export class LLMClient {
       promptTokens: current.promptTokens + usage.promptTokens,
       completionTokens: current.completionTokens + usage.completionTokens,
       totalTokens: current.totalTokens + usage.totalTokens,
-      estimatedCost: current.estimatedCost + usage.estimatedCost
+      estimatedCost: current.estimatedCost + usage.estimatedCost,
+      estimatedCostUSD: current.estimatedCostUSD + usage.estimatedCostUSD,
+      estimatedCostINR: current.estimatedCostINR + usage.estimatedCostINR,
+      // Not summed — the rate that produced this cumulative INR figure, not a running total.
+      exchangeRate: usage.exchangeRate,
     });
   }
 
   private _calculateCost(model: string, promptTokens: number, completionTokens: number): TokenUsage {
-    const pricing = (FRAMEWORK_CONFIG as any).llm.pricing[model] || { input: 0, output: 0 };
-    const cost = ((promptTokens / 1000) * pricing.input) + ((completionTokens / 1000) * pricing.output);
-
-    return {
-      promptTokens,
-      completionTokens,
-      totalTokens: promptTokens + completionTokens,
-      estimatedCost: parseFloat(cost.toFixed(6))
-    };
+    return tokenPriceCalculator.calculateCost(model, promptTokens, completionTokens);
   }
 
   private async _withRetry<T>(operation: () => Promise<T>, stageId: string, modelName?: string): Promise<T> {

@@ -2,7 +2,7 @@
   "version": "1.0.0",
   "projectId": "ARIA Project",
   "createdAt": "2026-09-16T12:21:03.645Z",
-  "updatedAt": "2026-09-16T14:17:58.023Z",
+  "updatedAt": "2026-09-17T13:32:50.791Z",
   "cycles": [],
   "globalLearnings": {
     "selectorPatterns": {},
@@ -106,6 +106,54 @@
         "comment": "Approved Playwright automation test scripts and Page Object Models.",
         "content": "",
         "timestamp": "2026-09-16T14:17:58.023Z"
+      },
+      {
+        "id": "fb_1789646049492",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "",
+        "timestamp": "2026-09-17T11:54:09.492Z"
+      },
+      {
+        "id": "fb_1789646050763",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "TCs: 0",
+        "timestamp": "2026-09-17T11:54:10.763Z"
+      },
+      {
+        "id": "fb_1789651943148",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "Approved Agent 03 review",
+        "content": "",
+        "timestamp": "2026-09-17T13:32:23.148Z"
+      },
+      {
+        "id": "fb_1789651944243",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "Approved Agent 03 review",
+        "content": "Grade: A, Score: 99",
+        "timestamp": "2026-09-17T13:32:24.243Z"
+      },
+      {
+        "id": "fb_1789651970673",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "Approved test data synthesis and centralized fixtures.",
+        "content": "",
+        "timestamp": "2026-09-17T13:32:50.673Z"
+      },
+      {
+        "id": "fb_1789651970791",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "Approved test data synthesis and centralized fixtures.",
+        "content": "Resolved: 4, Unresolved: 2, Pending clarifications: 2",
+        "timestamp": "2026-09-17T13:32:50.791Z"
       }
     ],
     "performanceBaselines": {},
@@ -228,6 +276,62 @@
         "answer": "part of the DOM. Position is over the password text box.",
         "stageId": "01-requirement-analyzer",
         "resolvedAt": "2026-09-16T14:09:04.532Z"
+      },
+      {
+        "id": "clq_1789645285561",
+        "question": "Confirmed via resolved clarification: the Login button is always enabled. This ambiguity is recorded for traceability only — no further action required.",
+        "answer": "On the Login page, the login button will always remain enabled.",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-17T11:41:25.561Z"
+      },
+      {
+        "id": "clq_1789645285569",
+        "question": "What is the expected mechanism for screen-reader announcement of error messages — e.g. an aria-live region (assertive or polite), role='alert', or another ARIA attribute — and is there a specific attribute value the test should assert?",
+        "answer": "role = generic",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-17T11:41:25.569Z"
+      },
+      {
+        "id": "clq_1789645285578",
+        "question": "Confirmed via resolved clarification: the contact-support instruction is conveyed entirely by the error message 'Epic sadface: Sorry, this user has been locked out.' with no separate element. No further action required.",
+        "answer": "Yes. There is not separate element.",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-17T11:41:25.578Z"
+      },
+      {
+        "id": "clq_1789645285584",
+        "question": "Is the Swag Labs Logo a static image only, or does it have an interactive function (e.g. clicking it navigates somewhere)? If interactive, what is the expected behaviour?",
+        "answer": "It is a plain text.",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-17T11:41:25.584Z"
+      },
+      {
+        "id": "clq_1789645285597",
+        "question": "What are the specific visual inconsistencies expected on the product catalog page after problem_user logs in, and how should they be verified (e.g. specific broken images, wrong text, specific element states)?",
+        "answer": "Same image is displayed on the inventory page for all product. \n<img alt=\"Sauce Labs Backpack\" class=\"inventory_item_img\" src=\"/static/media/sl-404.168b1cce10384b857a6f.jpg\" data-test=\"inventory-item-sauce-labs-backpack-img\">",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-17T11:41:25.597Z"
+      },
+      {
+        "id": "clq_1789645285600",
+        "question": "What are the specific visual glitches expected on the inventory page after visual_user logs in, and how should they be verified?",
+        "answer": "Test keyword is used as prefix in one of the product name.",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-17T11:41:25.600Z"
+      },
+      {
+        "id": "clq_1789645285602",
+        "question": "Should each test precondition ensure the user is fully logged out before navigating to https://www.saucedemo.com/? If so, what is the visible indicator that confirms no active session exists (e.g. the login form is displayed, a specific page title, or a URL check)?",
+        "answer": "Login form is displayed",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-17T11:41:25.602Z"
+      },
+      {
+        "id": "clq_1789645285604",
+        "question": "What is the expected login behaviour for 'error_user' — does it succeed (redirect to /inventory.html), fail with a specific error message, or produce some other observable outcome?",
+        "answer": "Yes login will succeed. But user will not be able to add some product to cart.",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-17T11:41:25.604Z"
       }
     ],
     "stableTestIds": [],
@@ -240,11 +344,12 @@
       "appliesTo": "04-test-data-generator",
       "action": "REUSE_DATA_PATTERNS",
       "data": {
-        "invalidUsername": "aria_unknown_user_faa53236"
+        "unregisteredUsername": "aria_unknown_user_7a956deb",
+        "wrongPassword": "Aria_Wrong_7a956deb!"
       },
-      "addedAt": "2026-09-16T14:10:38.520Z",
+      "addedAt": "2026-09-17T13:32:33.155Z",
       "activeCount": 0,
-      "updatedAt": "2026-09-16T14:10:38.522Z"
+      "updatedAt": "2026-09-17T13:32:33.157Z"
     }
   ],
   "metrics": {

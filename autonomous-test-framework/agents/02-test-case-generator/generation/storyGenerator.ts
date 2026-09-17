@@ -40,10 +40,25 @@ export interface StoryGenerationRequest {
   maxRetries: number;
 }
 
+/** What one generate → validate round produced (diagnostic; recorded in the prompt trace). */
+export interface AttemptRecord {
+  attempt: number;
+  truncated: boolean;
+  /** Scenario blocks the parser found in this answer. */
+  parsedScenarios: number;
+  /** Scenarios accepted so far, including those kept from earlier attempts. */
+  acceptedTotal: number;
+  /** Validation errors fed back to the model (or left unresolved after the last attempt). */
+  errors: string[];
+}
+
 /** Result for one story. */
 export interface StoryGenerationOutcome extends StoryScenarios {
   attempts: number;
   warnings: string[];
+  /** The user prompt of the first attempt, exactly as sent. */
+  userPrompt: string;
+  attemptLog: AttemptRecord[];
 }
 
 const SCENARIO_HEADER = /^\s*Scenario(?: Outline| Template)?:\s*(.*)$/i;
@@ -129,14 +144,19 @@ export async function generateStoryScenarios(request: StoryGenerationRequest, ch
   let errors: string[] = [];
   let warnings: string[] = [];
   let attempts = 0;
+  const attemptLog: AttemptRecord[] = [];
   for (let attempt = 0; attempt <= request.maxRetries; attempt += 1) {
     attempts += 1;
     // eslint-disable-next-line no-await-in-loop -- each retry depends on the previous validation result
     const reply = await chat(messages);
     const { text, truncated = false } = typeof reply === 'string' ? { text: reply } : reply;
-    const result = validateStoryScenarios(parseGherkinScenarios(truncated ? dropUnfinishedScenario(text) : text), ctx, accepted, declared);
+    const parsed = parseGherkinScenarios(truncated ? dropUnfinishedScenario(text) : text);
+    const result = validateStoryScenarios(parsed, ctx, accepted, declared);
     ({ errors, warnings, declaredUncovered: declared } = result);
     accepted = result.scenarios;
+    attemptLog.push({
+      attempt: attempts, truncated, parsedScenarios: parsed.scenarios.length, acceptedTotal: accepted.length, errors,
+    });
     if (truncated) warnings.push(`[${feature.id}/${story.id}] Attempt ${attempts} was cut off at the output token limit; its last scenario was discarded`);
     if (errors.length === 0) break;
     const acceptedTitles = accepted.map((scenario) => scenario.title);
@@ -148,6 +168,6 @@ export async function generateStoryScenarios(request: StoryGenerationRequest, ch
 
   const unresolved = errors.map((error) => `[${feature.id}/${story.id}] Unresolved after ${attempts} attempt(s): ${error}`);
   return {
-    feature, story, scenarios: accepted, attempts, warnings: [...warnings, ...unresolved],
+    feature, story, scenarios: accepted, attempts, warnings: [...warnings, ...unresolved], userPrompt, attemptLog,
   };
 }

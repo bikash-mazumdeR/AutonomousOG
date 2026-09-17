@@ -96,6 +96,15 @@
           "accessibleName": "Password for all users:"
         },
         {
+          "name": "errorMessageContainer",
+          "strategy": "css",
+          "args": [
+            ".error-message-container"
+          ],
+          "tag": "div",
+          "description": "container of the login error message that carries its background colour"
+        },
+        {
           "name": "errorElement",
           "strategy": "testId",
           "args": [
@@ -113,15 +122,6 @@
           "tag": "button",
           "role": "button",
           "accessibleName": "Dismiss error"
-        },
-        {
-          "name": "errorMessageContainer",
-          "strategy": "css",
-          "args": [
-            ".error-message-container"
-          ],
-          "tag": "div",
-          "description": "container of the login error message that carries its background colour"
         },
         {
           "name": "usernameErrorIcon",
@@ -605,50 +605,11 @@
   ],
   "traces": [
     {
-      "tcKey": "TC-001",
+      "tcKey": "TC-002",
       "runs": [],
       "stateAfterStep": {
         "1": "start",
         "2": "start"
-      }
-    },
-    {
-      "tcKey": "TC-002",
-      "runs": [
-        {
-          "state": "start",
-          "actions": [
-            {
-              "stepIndex": 2,
-              "state": "start",
-              "element": "usernameInput",
-              "op": "fill",
-              "value": {
-                "literal": "standard_user"
-              }
-            },
-            {
-              "stepIndex": 2,
-              "state": "start",
-              "element": "passwordInput",
-              "op": "fill",
-              "value": {
-                "literal": "secret_sauce"
-              }
-            },
-            {
-              "stepIndex": 2,
-              "state": "start",
-              "element": "loginButton",
-              "op": "click"
-            }
-          ],
-          "reachedState": "inventory"
-        }
-      ],
-      "stateAfterStep": {
-        "1": "start",
-        "2": "inventory"
       }
     },
     {
@@ -663,7 +624,7 @@
               "element": "usernameInput",
               "op": "fill",
               "value": {
-                "literal": "problem_user"
+                "literal": "standard_user"
               }
             },
             {
@@ -702,7 +663,7 @@
               "element": "usernameInput",
               "op": "fill",
               "value": {
-                "literal": "visual_user"
+                "literal": "problem_user"
               }
             },
             {
@@ -730,15 +691,7 @@
       }
     },
     {
-      "tcKey": "TC-005",
-      "runs": [],
-      "stateAfterStep": {
-        "1": "start",
-        "2": "start"
-      }
-    },
-    {
-      "tcKey": "TC-007",
+      "tcKey": "TC-006",
       "runs": [
         {
           "state": "start",
@@ -773,12 +726,11 @@
       ],
       "stateAfterStep": {
         "1": "start",
-        "2": "start",
-        "3": "start"
+        "2": "start"
       }
     },
     {
-      "tcKey": "TC-008",
+      "tcKey": "TC-007",
       "runs": [
         {
           "state": "start",
@@ -789,7 +741,7 @@
               "element": "usernameInput",
               "op": "fill",
               "value": {
-                "binding": "{{invalidUsername}}"
+                "binding": "{{unregisteredUsername}}"
               }
             },
             {
@@ -798,7 +750,7 @@
               "element": "passwordInput",
               "op": "fill",
               "value": {
-                "binding": "{{invalidPassword}}"
+                "binding": "{{wrongPassword}}"
               }
             },
             {
@@ -813,8 +765,28 @@
       ],
       "stateAfterStep": {
         "1": "start",
-        "2": "start",
-        "3": "start"
+        "2": "start"
+      }
+    },
+    {
+      "tcKey": "TC-008",
+      "runs": [
+        {
+          "state": "start",
+          "actions": [
+            {
+              "stepIndex": 2,
+              "state": "start",
+              "element": "loginButton",
+              "op": "click"
+            }
+          ],
+          "reachedState": "start"
+        }
+      ],
+      "stateAfterStep": {
+        "1": "start",
+        "2": "start"
       }
     },
     {
@@ -829,37 +801,7 @@
               "element": "usernameInput",
               "op": "fill",
               "value": {
-                "literal": "standard_user"
-              }
-            },
-            {
-              "stepIndex": 2,
-              "state": "start",
-              "element": "loginButton",
-              "op": "click"
-            }
-          ],
-          "reachedState": "start"
-        }
-      ],
-      "stateAfterStep": {
-        "1": "start",
-        "2": "start"
-      }
-    },
-    {
-      "tcKey": "TC-011",
-      "runs": [
-        {
-          "state": "start",
-          "actions": [
-            {
-              "stepIndex": 2,
-              "state": "start",
-              "element": "usernameInput",
-              "op": "fill",
-              "value": {
-                "literal": "Standard_User"
+                "binding": "{{unregisteredUsername}}"
               }
             },
             {
@@ -868,7 +810,7 @@
               "element": "passwordInput",
               "op": "fill",
               "value": {
-                "literal": "secret_sauce"
+                "binding": "{{wrongPassword}}"
               }
             },
             {
@@ -876,50 +818,6 @@
               "state": "start",
               "element": "loginButton",
               "op": "click"
-            }
-          ],
-          "reachedState": "start"
-        }
-      ],
-      "stateAfterStep": {
-        "1": "start",
-        "2": "start"
-      }
-    },
-    {
-      "tcKey": "TC-013",
-      "runs": [
-        {
-          "state": "start",
-          "actions": [
-            {
-              "stepIndex": 2,
-              "state": "start",
-              "element": "usernameInput",
-              "op": "fill",
-              "value": {
-                "binding": "{{invalidUsername}}"
-              }
-            },
-            {
-              "stepIndex": 2,
-              "state": "start",
-              "element": "passwordInput",
-              "op": "fill",
-              "value": {
-                "binding": "{{invalidPassword}}"
-              }
-            },
-            {
-              "stepIndex": 2,
-              "state": "start",
-              "element": "loginButton",
-              "op": "click"
-            },
-            {
-              "stepIndex": 3,
-              "state": "start",
-              "op": "reload"
             }
           ],
           "reachedState": "start"
@@ -929,6 +827,30 @@
         "1": "start",
         "2": "start",
         "3": "start"
+      }
+    },
+    {
+      "tcKey": "TC-015",
+      "runs": [],
+      "stateAfterStep": {
+        "1": "start",
+        "2": "start"
+      }
+    },
+    {
+      "tcKey": "TC-016",
+      "runs": [],
+      "stateAfterStep": {
+        "1": "start",
+        "2": "start"
+      }
+    },
+    {
+      "tcKey": "TC-017",
+      "runs": [],
+      "stateAfterStep": {
+        "1": "start",
+        "2": "start"
       }
     }
   ],
@@ -954,12 +876,11 @@
         }
       ],
       "usedBy": [
-        "TC-002",
         "TC-003",
         "TC-004",
+        "TC-006",
         "TC-007",
-        "TC-008",
-        "TC-011"
+        "TC-010"
       ]
     }
   ]

@@ -10,6 +10,7 @@
 
 import { DISCOVERY_SETTINGS } from '../constants';
 import { ChatFn } from '../types';
+import { TraceRecorder, traceLabel } from '../../../core/llm/stagePromptTrace';
 import { AutomationTestCase } from '../contracts/automationTestCase';
 import { MissingItem } from '../../../core/readiness/readinessTypes';
 import { ResolvedAutProfile } from '../../../core/aut/AutProfile';
@@ -34,6 +35,8 @@ export interface DiscoverFeatureParams {
   chat: ChatFn;
   logger: any;
   headless?: boolean;
+  /** Records each navigation-plan request and its attempts for the prompt trace (optional). */
+  trace?: TraceRecorder;
 }
 
 /** Discovery output. */
@@ -64,18 +67,23 @@ async function requestPlan(
 ): Promise<{ plan?: NavigationPlan; error?: string }> {
   const request = buildPlannerRequest(tc, map.states, current, fromStep, executed);
   let errors: string[] = [];
+  const group = params.trace?.group(`plan ${tc.tcKey} step ${fromStep}`, 'Navigation plan',
+    `${params.featureId}/${tc.tcKey} from step ${fromStep} in state ${current.name}`, { 'Verified elements': current.elements.length })
+    ?? `plan ${tc.tcKey} step ${fromStep}`;
   for (let attempt = 0; attempt < DISCOVERY_SETTINGS.PLANNER_ATTEMPTS; attempt += 1) {
     const content = errors.length > 0 ? `${request}\n\nYour previous plan was rejected:\n- ${errors.join('\n- ')}` : request;
     // eslint-disable-next-line no-await-in-loop -- each attempt depends on the previous rejection
-    const text = await params.chat([{ role: 'system', content: params.plannerSystemPrompt }, { role: 'user', content }], { json: true });
+    const text = await params.chat([{ role: 'system', content: params.plannerSystemPrompt }, { role: 'user', content }], { json: true, traceLabel: traceLabel(group, attempt + 1) });
     let raw: any;
     try {
       raw = parseJsonObject(text);
     } catch (err: any) {
       errors = [`Response is not a JSON object: ${err.message}`];
+      params.trace?.attempt(group, { attempt: attempt + 1, summary: 'plan rejected', errors });
       continue;
     }
     const result = validateNavigationPlan(raw, current, tc);
+    params.trace?.attempt(group, { attempt: attempt + 1, summary: result.plan ? 'plan accepted' : 'plan rejected', errors: result.plan ? [] : result.errors });
     if (result.plan) return { plan: result.plan };
     errors = result.errors;
   }

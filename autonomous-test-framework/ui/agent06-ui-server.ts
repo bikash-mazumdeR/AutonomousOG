@@ -13,6 +13,7 @@ import express from 'express';
 import path from 'path';
 
 import { registerPipelineRoutes } from './pipelineRoutes';
+import { registerPromptTraceRoutes } from './promptTraceRoutes';
 import { registerAgent06Routes } from './agent06Routes';
 import { Logger } from '../core/logger/Logger';
 
@@ -24,6 +25,7 @@ const logger = new Logger('Agent06UI');
 
 app.use(express.json());
 registerPipelineRoutes(app);
+registerPromptTraceRoutes(app, ['agent06']);
 app.use(express.static(path.join(__dirname, 'static')));
 registerAgent06Routes(app, logger);
 

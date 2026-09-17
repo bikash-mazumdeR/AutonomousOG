@@ -301,7 +301,7 @@ app.get('/', (req, res) => {
                         usageHtml = \`
                             <div class="usage-metrics">
                                 <div class="usage-item" title="Tokens (Prompt / Completion)"><span class="usage-icon">🪙</span> \${stageState.usage.promptTokens} / \${stageState.usage.completionTokens}</div>
-                                <div class="usage-item"><span class="usage-icon">💵</span> <span class="cost-value">$\${stageState.usage.estimatedCost.toFixed(4)}</span></div>
+                                <div class="usage-item"><span class="usage-icon">💵</span> <span class="cost-value">₹\${(stageState.usage.estimatedCostINR ?? stageState.usage.estimatedCost).toFixed(2)}</span></div>
                             </div>
                         \`;
                     }

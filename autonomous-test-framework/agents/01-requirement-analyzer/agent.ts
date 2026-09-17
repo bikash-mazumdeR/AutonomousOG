@@ -31,6 +31,7 @@ import { computeRequirementFingerprint } from '../../core/requirements/requireme
 import { stateDb } from '../../core/state-manager/Database';
 import { clarificationRequestFor, normalizeAmbiguities, normalizeQuestion } from './ambiguities';
 import { ClarificationStore } from '../../core/clarifications/ClarificationStore';
+import { AnalysisPromptParts, buildPromptTrace, PromptTraceInput, UTILITY_STAGE_ID } from './promptTrace';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -42,6 +43,8 @@ const ANALYSIS_SEED = 42;
 const ANALYSIS_MAX_TOKENS = 16384;
 /** Corrective LLM rounds when the story structure does not match the document. */
 const MAX_STRUCTURE_CORRECTIONS = 1;
+const SKILL_PATH = path.resolve(__dirname, '../../skills/requirement-analysis.md');
+const PROMPT_TRACE_FILE = 'requirement-analysis-prompt-trace.json';
 
 export class RequirementAnalyzerAgent {
   private _logger: Logger;
@@ -58,13 +61,17 @@ export class RequirementAnalyzerAgent {
   async run(input: any): Promise<any> {
     const startMs = Date.now();
     this._logger.stage('START', STAGE_ID, { format: input.format });
+    llmClient.clearCallTraces();
+    const trace: Partial<PromptTraceInput> & { memoryContext?: any } = {};
 
     try {
       const memoryContext = await memoryEngine.getContextForStage(STAGE_ID);
+      trace.memoryContext = memoryContext;
       // Declined replies ("Skip", "N/A") saved before they were rejected do not settle a question: ask it again.
       memoryContext.resolvedClarifications = (memoryContext.resolvedClarifications || []).filter((c: any) => !isNonAnswer(c.answer));
 
       let rawRequirements = await this._parseInput(input);
+      trace.originalRequirements = rawRequirements;
 
       // Identity of the requirement itself, independent of the prompt, skill or clarifications that
       // decide whether the LLM must run again. Checked before any state is touched: an unchanged
@@ -92,11 +99,14 @@ export class RequirementAnalyzerAgent {
         improvementRules: memoryContext.improvementRules || [],
       });
       rawRequirements = await contextSqueezer.squeeze(rawRequirements, input.projectName || 'Requirements');
+      trace.promptParts = this._buildAnalysisPrompt(rawRequirements, input.projectName, memoryContext);
       
       // Save raw requirements for the chatbot and downstream agents
       await stateManager.setPipelineArtifact('requirements', rawRequirements);
       
       const analysisReport = await this._resolveAnalysis(rawRequirements, inputFingerprint, input, memoryContext);
+      Object.assign(trace, { analysisSource: analysisReport.analysisSource, inputFingerprint });
+      await this._savePromptTrace(input, trace, 'COMPLETED');
       analysisReport.featureFilePaths = [];
       // Stamped so the next upload of identical content is recognised as already processed.
       analysisReport.requirementFingerprint = requirementFingerprint;
@@ -180,6 +190,7 @@ export class RequirementAnalyzerAgent {
 
     } catch (error: any) {
       this._logger.error('Agent 01 execution failed', { error: error.message });
+      await this._savePromptTrace(input, { ...trace, error: error.message }, 'FAILED');
       await stateManager.markStageFailed(STAGE_ID, error);
       throw error;
     }
@@ -227,17 +238,22 @@ export class RequirementAnalyzerAgent {
     return { ...report, inputFingerprint, analysisSource: ANALYSIS_SOURCE.REGENERATED };
   }
 
-  private async _performLLMAnalysis(rawRequirements: string, projectName: string, memoryContext: any) {
+  /**
+   * Assembles the analysis user prompt and keeps its variable parts, so the prompt trace can show what each contributed.
+   */
+  private _buildAnalysisPrompt(requirements: string, projectName: string, memoryContext: any): AnalysisPromptParts {
+    const improvementRules = JSON.stringify(memoryContext.improvementRules);
+    const resolvedClarifications = JSON.stringify((memoryContext.resolvedClarifications || [])
+      .filter((c: any) => c.stageId === STAGE_ID)
+      .map((c: any) => ({ question: c.question, answer: c.answer })));
     const prompt = `
 You are a senior QA architect performing an exhaustive requirements decomposition for: ${projectName}
 
 MEMORY / IMPROVEMENT RULES FROM PAST RUNS:
-${JSON.stringify(memoryContext.improvementRules)}
+${improvementRules}
 
 RESOLVED CLARIFICATIONS / ANSWERS FROM HUMAN:
-${JSON.stringify((memoryContext.resolvedClarifications || [])
-    .filter((c: any) => c.stageId === STAGE_ID)
-    .map((c: any) => ({ question: c.question, answer: c.answer })))}
+${resolvedClarifications}
 
 CRITICAL INSTRUCTION: A topic answered in RESOLVED CLARIFICATIONS is settled, even though the requirement text itself does
 not state it. Integrate the answer into your analysis and acceptance criteria, and never raise an ambiguity about the same
@@ -246,7 +262,7 @@ topic again, however it is worded.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 FULL REQUIREMENTS INPUT:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-${rawRequirements}
+${requirements}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 MANDATORY ANALYSIS MANDATE:
@@ -367,6 +383,11 @@ CRITICAL:
 - Extract concrete, unambiguous acceptance criteria (concise 1-2 sentence statements or standard BDD format).
 - Avoid repetitive or circular text to ensure clean, structured JSON output.
 `;
+    return { prompt, requirements, improvementRules, resolvedClarifications };
+  }
+
+  private async _performLLMAnalysis(rawRequirements: string, projectName: string, memoryContext: any) {
+    const { prompt } = this._buildAnalysisPrompt(rawRequirements, projectName, memoryContext);
 
     const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
       { role: 'system', content: this._skill },
@@ -867,8 +888,38 @@ CRITICAL:
   }
 
   private _loadSkill(): string {
-    const skillPath = path.resolve(__dirname, '../../skills/requirement-analysis.md');
-    return fs.existsSync(skillPath) ? fs.readFileSync(skillPath, 'utf-8') : 'You are a requirements analyst.';
+    return fs.existsSync(SKILL_PATH) ? fs.readFileSync(SKILL_PATH, 'utf-8') : 'You are a requirements analyst.';
+  }
+
+  /**
+   * Persists what the analysis LLM was given and how its tokens were counted, for the UI's "Agent input" view and
+   * reports/json. Diagnostic only: a failure here is logged and never fails the stage.
+   */
+  private async _savePromptTrace(input: any, trace: Partial<PromptTraceInput> & { memoryContext?: any }, status: 'COMPLETED' | 'FAILED') {
+    try {
+      const { memoryContext, ...known } = trace;
+      const promptParts = known.promptParts
+        ?? (known.originalRequirements && memoryContext
+          ? this._buildAnalysisPrompt(known.originalRequirements, input.projectName, memoryContext) : null);
+      const report = buildPromptTrace({
+        ...known,
+        stageId: STAGE_ID,
+        status,
+        projectName: input.projectName,
+        format: input.format || 'text',
+        requirementSource: String(input.requirements || ''),
+        skillPath: path.relative(path.resolve(__dirname, '../..'), SKILL_PATH),
+        skill: this._skill,
+        promptParts,
+        calls: llmClient.getCallTraces([STAGE_ID, UTILITY_STAGE_ID]),
+      });
+      await stateManager.setPipelineArtifact('agent01PromptTrace', report);
+      const outDir = path.resolve(__dirname, '../../reports/json');
+      fs.mkdirSync(outDir, { recursive: true });
+      fs.writeFileSync(path.join(outDir, PROMPT_TRACE_FILE), JSON.stringify(report, null, 2), 'utf-8');
+    } catch (error: any) {
+      this._logger.warn('Could not save the Agent 01 prompt trace', { error: error.message });
+    }
   }
 }
 

@@ -11,6 +11,7 @@ import {
 import { FlowUsage } from '../../agents/05-playwright-script-generator/discovery/flowExtractor';
 import { generateTestBodies } from '../../agents/05-playwright-script-generator/generation/testBodyGenerator';
 import { ChatFn } from '../../agents/05-playwright-script-generator/types';
+import { TraceRecorder } from '../../core/llm/stagePromptTrace';
 
 const tc: AutomationTestCase = {
   tcKey: 'TC-001',
@@ -163,6 +164,23 @@ describe('Agent 05 generation loop', () => {
     expect(outcome.status).toBe('GENERATED');
     expect(outcome.attempts).toBe(2);
     expect(calls[1]).toContain('featurePage.magicButton is not a member');
+  });
+
+  it('labels each call and records every attempt with its validation errors for the prompt trace', async () => {
+    const invalid = withBody(validBody.replace('submitButton.click', 'magicButton.click'));
+    const labels: Array<string | undefined> = [];
+    const chat: ChatFn = async (_messages, options) => {
+      labels.push(options?.traceLabel);
+      return labels.length === 1 ? reply(invalid) : reply(validEntry);
+    };
+    const trace = new TraceRecorder();
+    await generateTestBodies({ ...request(2), trace }, chat);
+    const [group] = trace.groups();
+    expect(labels).toEqual([`${group.key} #1`, `${group.key} #2`]);
+    expect(group.kind).toBe('UI test bodies');
+    expect(group.attempts.map((a) => a.summary)).toEqual(['0 of 1 test body valid', '1 of 1 test body valid']);
+    expect(group.attempts[0].errors.join('\n')).toContain('TC-001: ');
+    expect(group.attempts[1].errors).toEqual([]);
   });
 
   it('blocks a test case that stays invalid and never returns its body', async () => {
