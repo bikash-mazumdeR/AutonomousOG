@@ -58,6 +58,11 @@ export interface AutProfile {
     /** Where test credentials live; defaults to "env". */
     credentialStorage?: CredentialStorage;
   };
+  /**
+   * Local-storage keys the application writes that tests may assert (a session expiry, for example).
+   * Storage keys are application knowledge, so a generated test may only poll a key declared here.
+   */
+  storageKeys?: string[];
   secretsEnvVars: string[];
   api?: { basePathEnv?: string; authHeaderEnv?: string };
   performance?: { thresholdEnv?: string };
@@ -148,6 +153,9 @@ export function validateAutProfile(raw: any): string[] {
   const storages: string[] = Object.values(CREDENTIAL_STORAGE);
   if (raw.auth?.credentialStorage !== undefined && !storages.includes(raw.auth.credentialStorage)) {
     errors.push(`auth.credentialStorage must be one of ${storages.join(', ')}`);
+  }
+  if (raw.storageKeys !== undefined && (!isStringArray(raw.storageKeys) || raw.storageKeys.some((k) => !k.trim()))) {
+    errors.push('storageKeys must be an array of non-empty local-storage key names');
   }
   if (!Array.isArray(raw.secretsEnvVars)) errors.push('secretsEnvVars must be an array');
   else validateEnvNames(raw.secretsEnvVars, 'secretsEnvVars', errors);

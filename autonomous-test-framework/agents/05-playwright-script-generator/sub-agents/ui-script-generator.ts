@@ -16,7 +16,7 @@ import { UiSpecParams, importPath, renderUiSpec } from '../rendering/specRendere
 import { hoistCommonPrefix } from '../rendering/hookHoister';
 import { generateTestBodies, TestOutcome } from '../generation/testBodyGenerator';
 import { analyzeWithAST, FILE_TYPE, FINDING_SEVERITY } from '../../../core/automation-reviewer/ReviewRules';
-import { FRAMEWORK_BASE_PAGE, FRAMEWORK_ENV_HELPER } from '../../../core/aut/projectPaths';
+import { FRAMEWORK_BASE_PAGE, FRAMEWORK_ENV_HELPER, FRAMEWORK_STORAGE_HELPER } from '../../../core/aut/projectPaths';
 import { loadDiscoveryPrompt, loadGenerationPrompt } from './shared/generation-utils';
 import {
   FeatureGenerationContext, FeatureGenerationResult, GeneratedFile, fileStem, needsContextOutcome, splitByReadiness,
@@ -103,6 +103,7 @@ export class UIScriptGenerator {
       contract: pom.contract,
       systemPrompt: loadGenerationPrompt('UI', ctx.paths.learningsDir),
       priorReviewFindings: ctx.priorReviewFindings,
+      storageKeys: ctx.profile.storageKeys,
       maxRetries: ctx.maxRetries,
       concurrency: ctx.concurrency,
       trace: ctx.trace,
@@ -126,6 +127,7 @@ export class UIScriptGenerator {
       pomImport: importPath(ctx.paths.specsDir, pomPath),
       fixtureImport: importPath(ctx.paths.specsDir, ctx.paths.fixtureFile),
       envImport: importPath(ctx.paths.specsDir, FRAMEWORK_ENV_HELPER),
+      storageImport: importPath(ctx.paths.specsDir, FRAMEWORK_STORAGE_HELPER),
     };
   }
 

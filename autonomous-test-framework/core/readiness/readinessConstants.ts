@@ -67,6 +67,9 @@ export const TIMING_CLAUSE = /\bwithin\s+\d+(?:\.\d+)?\s*(?:ms|milliseconds?|s|s
 export const UI_TARGET_NOUNS = /\b(page|screen|view|dialog|message|button|field|input|element|list|banner|heading|form|table|link|image|icon)\b/i;
 
 /** Observations a browser-level UI test cannot make. */
+/** Local storage: the one unsupported-looking subject the storage helpers can actually poll, by key. */
+export const LOCAL_STORAGE = /\blocal ?storage\b/i;
+
 export const UNSUPPORTED_OBSERVATION = /\b(local ?storage|session ?storage|cookies?|database|db record|e-?mail (?:is )?sent|inbox|server logs?|log files?|backend|audit log|screen ?readers?|assistive technolog(?:y|ies))\b/i;
 
 /** Actions that enter a value. */

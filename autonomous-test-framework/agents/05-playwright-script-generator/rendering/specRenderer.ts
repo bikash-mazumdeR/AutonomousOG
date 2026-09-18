@@ -6,7 +6,7 @@
  */
 
 import * as path from 'path';
-import { GENERATED_MARKER } from '../constants';
+import { GENERATED_MARKER, STORAGE_HELPERS } from '../constants';
 import { SLA_PATTERN } from '../../../core/readiness/readinessConstants';
 import { browserTag } from '../../../core/readiness/browserTargets';
 import { AutomationTestCase } from '../contracts/automationTestCase';
@@ -30,6 +30,8 @@ export interface UiSpecParams extends SpecRenderContext {
   pomImport: string;
   fixtureImport: string;
   envImport: string;
+  /** Import path of the browser-storage helpers, added only when a body uses them. */
+  storageImport: string;
   /** Statements every test starts with, rendered once as test.beforeEach. */
   hook?: string[];
   tests: RenderedTest[];
@@ -153,11 +155,14 @@ function renderHook(hook: string[]): string {
  */
 export function renderUiSpec(p: UiSpecParams): string {
   const hook = p.hook || [];
-  const usesEnv = [...hook, ...p.tests.map((t) => t.body)].some((code) => /\benv\(/.test(code));
+  const bodies = [...hook, ...p.tests.map((t) => t.body)];
+  const usesEnv = bodies.some((code) => /\benv\(/.test(code));
+  const storageHelpers = STORAGE_HELPERS.filter((helper) => bodies.some((code) => new RegExp(`\\b${helper}\\(`).test(code)));
   return [
     ...header(p),
     "import { test as base, expect } from '@playwright/test';",
     ...(usesEnv ? [`import { requireEnv as env } from '${p.envImport}';`] : []),
+    ...(storageHelpers.length > 0 ? [`import { ${storageHelpers.join(', ')} } from '${p.storageImport}';`] : []),
     `import fixtureData from '${p.fixtureImport}';`,
     `import { ${p.pageObject} } from '${p.pomImport}';`,
     '',

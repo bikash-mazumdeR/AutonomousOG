@@ -39,6 +39,16 @@ describe('Automation readiness rules', () => {
       .toEqual(['UNASSERTABLE_OBSERVATION']);
   });
 
+  it('accepts a local-storage expectation that names its key, since the storage helpers poll it by key', () => {
+    expect(ruleIds(input([step(2, 'the user signs in', ["local storage key 'auth_expires_at' holds a timestamp 30 days in the future"])]), review))
+      .toEqual([]);
+    // Without a key there is nothing to poll, and any other unsupported subject still blocks the whole line
+    expect(ruleIds(input([step(2, 'the user signs in', ['the session is persisted in local storage'])]), review))
+      .toEqual(['UNASSERTABLE_OBSERVATION']);
+    expect(ruleIds(input([step(2, 'the user signs in', ["local storage key 'k' is set and a confirmation e-mail is sent"])]), review))
+      .toEqual(['UNASSERTABLE_OBSERVATION']);
+  });
+
   it('does not ask for text when an element disappears or changes state', () => {
     expect(ruleIds(input([step(3, 'the user edits the username', [
       'The error message is no longer displayed below the form',

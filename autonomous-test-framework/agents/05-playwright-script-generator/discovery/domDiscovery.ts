@@ -197,9 +197,13 @@ export class DiscoverySession {
   /** Current page. */
   page: Page;
 
+  /** Requests the current page has started but not finished. */
+  private _inFlight = 0;
+
   private constructor(private readonly _options: DiscoveryOptions, private readonly _browser: Browser, context: BrowserContext, page: Page) {
     this._context = context;
     this.page = page;
+    this._trackRequests(page);
   }
 
   /**
@@ -227,6 +231,7 @@ export class DiscoverySession {
     const { context, page } = await DiscoverySession._newContext(this._browser, this._options);
     this._context = context;
     this.page = page;
+    this._trackRequests(page);
   }
 
   /**
@@ -243,11 +248,46 @@ export class DiscoverySession {
     return new URL(this.page.url()).pathname;
   }
 
-  /** Waits until the DOM stops changing (bounded). */
-  async settle(): Promise<void> {
+  /**
+   * Waits until in-flight requests drain and the DOM stops changing (both bounded).
+   *
+   * A client-rendered application leaves the DOM quiet while a submit request is in flight — the button reads
+   * "Signing in…" and nothing mutates — so DOM quiet alone captures the transient state instead of the one the action
+   * leads to. `waitForLoadState('networkidle')` does not close the gap either: the request is dispatched a beat after
+   * the click, so the idle window opens and closes before the request exists. Requests are therefore counted directly,
+   * and an interaction is first given time to issue one.
+   * @param {boolean} [afterInteraction] - Whether an interaction that may issue a request has just been performed
+   */
+  async settle(afterInteraction = false): Promise<void> {
+    const deadline = Date.now() + DISCOVERY_SETTINGS.SETTLE_MAX_MS;
     try {
       await this.page.waitForLoadState('load');
-      await this.page.evaluate(({ quietMs, maxMs }) => new Promise<void>((resolve) => {
+      if (afterInteraction) await this.page.waitForTimeout(DISCOVERY_SETTINGS.REQUEST_START_GRACE_MS);
+      while (Date.now() < deadline) {
+        // eslint-disable-next-line no-await-in-loop -- the page is polled until it is quiet
+        while (this._inFlight > 0 && Date.now() < deadline) await this.page.waitForTimeout(DISCOVERY_SETTINGS.IN_FLIGHT_POLL_MS);
+        // eslint-disable-next-line no-await-in-loop
+        await this._waitForDomQuiet();
+        if (this._inFlight === 0) return;
+      }
+    } catch {
+      // A navigation replaced the document while settling; wait for the new document instead.
+      await this.page.waitForLoadState('load');
+    }
+  }
+
+  /** Counts requests the current page has started but not finished. */
+  private _trackRequests(page: Page): void {
+    this._inFlight = 0;
+    const settled = () => { this._inFlight = Math.max(0, this._inFlight - 1); };
+    page.on('request', () => { this._inFlight += 1; });
+    page.on('requestfinished', settled);
+    page.on('requestfailed', settled);
+  }
+
+  /** Resolves once the DOM has stopped mutating for a quiet window (bounded). */
+  private async _waitForDomQuiet(): Promise<void> {
+    await this.page.evaluate(({ quietMs, maxMs }) => new Promise<void>((resolve) => {
         const win: any = globalThis as any;
         let quietTimer: any;
         let observer: any;
@@ -266,11 +306,7 @@ export class DiscoverySession {
           subtree: true, childList: true, attributes: true, characterData: true,
         });
         restart();
-      }), { quietMs: DISCOVERY_SETTINGS.DOM_QUIET_MS, maxMs: DISCOVERY_SETTINGS.DOM_SETTLE_MAX_MS });
-    } catch {
-      // A navigation replaced the document while settling; wait for the new document instead.
-      await this.page.waitForLoadState('load');
-    }
+    }), { quietMs: DISCOVERY_SETTINGS.DOM_QUIET_MS, maxMs: DISCOVERY_SETTINGS.DOM_SETTLE_MAX_MS });
   }
 
   /**
@@ -363,7 +399,7 @@ export class DiscoverySession {
     else if (op === 'selectOption') await locator.selectOption(value as string);
     else if (op === 'press') await locator.press(value as string);
     else throw new Error(`Unsupported discovery operation "${op}"`);
-    await this.settle();
+    await this.settle(true);
   }
 
   /**

@@ -2,7 +2,7 @@
   "version": "1.0.0",
   "projectId": "ARIA Project",
   "createdAt": "2026-09-16T12:21:03.645Z",
-  "updatedAt": "2026-09-17T13:32:50.791Z",
+  "updatedAt": "2026-09-18T17:05:28.225Z",
   "cycles": [],
   "globalLearnings": {
     "selectorPatterns": {},
@@ -154,6 +154,70 @@
         "comment": "Approved test data synthesis and centralized fixtures.",
         "content": "Resolved: 4, Unresolved: 2, Pending clarifications: 2",
         "timestamp": "2026-09-17T13:32:50.791Z"
+      },
+      {
+        "id": "fb_1789744853290",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "",
+        "timestamp": "2026-09-18T15:20:53.290Z"
+      },
+      {
+        "id": "fb_1789744854220",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "Features: 1, Stories: 1",
+        "timestamp": "2026-09-18T15:20:54.220Z"
+      },
+      {
+        "id": "fb_1789744891666",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "",
+        "timestamp": "2026-09-18T15:21:31.666Z"
+      },
+      {
+        "id": "fb_1789744891724",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "TCs: 12",
+        "timestamp": "2026-09-18T15:21:31.724Z"
+      },
+      {
+        "id": "fb_1789745069424",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "Approved Agent 03 review",
+        "content": "",
+        "timestamp": "2026-09-18T15:24:29.424Z"
+      },
+      {
+        "id": "fb_1789745069488",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "Approved Agent 03 review",
+        "content": "Grade: A, Score: 91",
+        "timestamp": "2026-09-18T15:24:29.488Z"
+      },
+      {
+        "id": "fb_1789745116138",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "Approved test data synthesis and centralized fixtures.",
+        "content": "",
+        "timestamp": "2026-09-18T15:25:16.138Z"
+      },
+      {
+        "id": "fb_1789745116208",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "Approved test data synthesis and centralized fixtures.",
+        "content": "Resolved: 10, Unresolved: 1, Pending clarifications: 1",
+        "timestamp": "2026-09-18T15:25:16.208Z"
       }
     ],
     "performanceBaselines": {},
@@ -332,6 +396,41 @@
         "answer": "Yes login will succeed. But user will not be able to add some product to cart.",
         "stageId": "01-requirement-analyzer",
         "resolvedAt": "2026-09-17T11:41:25.604Z"
+      },
+      {
+        "id": "clq_1789744845448",
+        "question": "What is the exact URL path (relative or absolute) that the user lands on after a successful login — e.g. https://admin.nexolvi.ai/dashboard?",
+        "answer": "The URL is https://admin.nexolvi.ai/, but the page has header - Dashboard",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-18T15:20:45.448Z"
+      },
+      {
+        "id": "clq_1789744845454",
+        "question": "What is the observable user-facing behaviour that confirms the Remember Me session is active — for example, does the user land directly on the Dashboard on a subsequent visit without seeing the login form, or is there another visible indicator?",
+        "answer": "the user land directly on the Dashboard on a subsequent visit without seeing the login form",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-18T15:20:45.454Z"
+      },
+      {
+        "id": "clq_1789744845484",
+        "question": "Where exactly on the login page is the 'Login failed' error message displayed — e.g. above the form, between the fields and the button, or below the Sign In button? Is it an inline element, a toast notification, or a banner?",
+        "answer": "above the form in a alert box",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-18T15:20:45.484Z"
+      },
+      {
+        "id": "clq_1789744845492",
+        "question": "Does the Sign In button become enabled as soon as any non-empty string is typed in the Email field (regardless of email format), or does the field require a syntactically valid email address (containing '@' and a domain) before the button is enabled?",
+        "answer": "as soon as any non-empty string is typed in the Email field and the Password field",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-18T15:20:45.492Z"
+      },
+      {
+        "id": "clq_1789744845502",
+        "question": "When the Remember Me checkbox is NOT selected, what is the expected session behaviour — e.g. session expires when the browser is closed, or after a specific idle timeout period?",
+        "answer": "session expires when the browser is closed and on new session user lands on the Login page",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-18T15:20:45.502Z"
       }
     ],
     "stableTestIds": [],
@@ -344,12 +443,12 @@
       "appliesTo": "04-test-data-generator",
       "action": "REUSE_DATA_PATTERNS",
       "data": {
-        "unregisteredUsername": "aria_unknown_user_7a956deb",
-        "wrongPassword": "Aria_Wrong_7a956deb!"
+        "anyEmail": "aria_test_38129964@example.test",
+        "anyPassword": "Aria_Sample_38129964!"
       },
-      "addedAt": "2026-09-17T13:32:33.155Z",
+      "addedAt": "2026-09-18T17:05:28.224Z",
       "activeCount": 0,
-      "updatedAt": "2026-09-17T13:32:33.157Z"
+      "updatedAt": "2026-09-18T17:05:28.225Z"
     }
   ],
   "metrics": {

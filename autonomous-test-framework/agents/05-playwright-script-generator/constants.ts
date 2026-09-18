@@ -62,6 +62,12 @@ export const GENERATED_MARKER = '@aria-generated';
 export const PAGE_FIXTURE = 'featurePage';
 export const DATA_FIXTURE = 'data';
 export const ENV_FUNCTION = 'env';
+
+/**
+ * Browser-storage accessors generated tests may call for application state that no locator can observe.
+ * A body that uses one gets the helper import; the storage key always comes from the approved test case.
+ */
+export const STORAGE_HELPERS: readonly string[] = Object.freeze(['storedValue', 'storedDaysFromNow']);
 export const K6_ENV_FUNCTION = 'requireEnv';
 
 /**
@@ -86,6 +92,12 @@ export const DISCOVERY_SETTINGS = Object.freeze({
   ACTION_TIMEOUT_MS: 10000,
   DOM_QUIET_MS: 400,
   DOM_SETTLE_MAX_MS: 5000,
+  /** Overall bound on settling after an action; an application that polls never goes fully idle. */
+  SETTLE_MAX_MS: 15000,
+  /** Time an interaction is given to dispatch its request before in-flight requests are counted. */
+  REQUEST_START_GRACE_MS: 800,
+  /** Poll interval while in-flight requests drain. */
+  IN_FLIGHT_POLL_MS: 100,
   MAX_ELEMENTS_PER_STATE: 150,
   MAX_TEXT_LENGTH: 80,
   PLANNER_ATTEMPTS: 2,

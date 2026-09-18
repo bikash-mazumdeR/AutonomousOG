@@ -64,6 +64,26 @@ describe('Agent 04 value policy', () => {
     expect(resolvePlaceholder('incorrectCaseUsername', context({ requirementValues })).entry).toMatchObject({ value: 'Acme_User', source: 'generated' });
   });
 
+  it('binds a placeholder the AUT profile declares an environment variable for, even when the requirement states its value', () => {
+    // A login email classifies as a generatable synthetic input, and requirements state it as a non-sensitive value;
+    // the project's declaration is what decides that it is an account credential read from the environment.
+    const requirementValues = storyValues([{ name: 'validEmail', value: 'account@example.test', sourceRef: 'AC-8', sensitive: false }]);
+    expect(resolvePlaceholder('validEmail', context({ requirementValues })).entry)
+      .toMatchObject({ value: 'account@example.test', source: 'requirement' });
+
+    const profile = { credentialEnvVars: { validEmail: 'APP_EMAIL' }, secretsEnvVars: [] };
+    const declared = resolvePlaceholder('validEmail', context({ requirementValues, profile }));
+    expect(declared.entry).toMatchObject({ source: 'runtime', envVar: 'APP_EMAIL' });
+    expect(JSON.stringify(declared)).not.toContain('account@example.test');
+    expect(declared.envIssue).toBeUndefined();
+
+    // The flat fixture is a second write path: a value bound to a variable must not also be copied there.
+    expect(literalRequirementValues(requirementValues)).toEqual({ validEmail: 'account@example.test' });
+    expect(literalRequirementValues(requirementValues, false, Object.keys(profile.credentialEnvVars))).toEqual({});
+    expect(literalRequirementValues(requirementValues, true, Object.keys(profile.credentialEnvVars)))
+      .toEqual({ validEmail: 'account@example.test' });
+  });
+
   it('stores credentials as fixture values when the AUT profile says so, but still never generates them', () => {
     const profile = { credentialEnvVars: {}, secretsEnvVars: [], credentialsInFixture: true };
     const requirementValues = storyValues([{ name: 'validUsername', value: 'acme_user' }, { name: 'validPassword', sensitive: true }]);

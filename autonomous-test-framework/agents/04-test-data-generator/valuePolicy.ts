@@ -169,7 +169,10 @@ function fromRequirement(key: string, valueClass: ValueClass, ctx: PolicyContext
   const stated = requirementValueFor(ctx.requirementValues, key, ctx.tc);
   if (!stated) return null;
   const where = stated.sourceRef || 'the requirement';
-  if (valueClass === VALUE_CLASS.RUNTIME || (stated.sensitive && !ctx.profile?.credentialsInFixture)) {
+  // A project that declares an environment variable for a placeholder has decided where its value comes from:
+  // the requirement may state the value for readers, but the fixture must still reference the variable.
+  const declaredByProject = Boolean(declaredEnvVar(key, ctx.profile)) && !ctx.profile?.credentialsInFixture;
+  if (valueClass === VALUE_CLASS.RUNTIME || declaredByProject || (stated.sensitive && !ctx.profile?.credentialsInFixture)) {
     return boundToEnvironment(key, valueClass, ctx, `Credential stated in ${where}; read from the environment, never stored`);
   }
   if (stated.value === undefined) return null;

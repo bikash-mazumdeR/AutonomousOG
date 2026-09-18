@@ -1,0 +1,669 @@
+{
+  "version": 2,
+  "featureId": "F-01",
+  "states": [
+    {
+      "name": "start",
+      "urlPath": "/",
+      "entryPath": "/",
+      "elements": [
+        {
+          "name": "nexolviImage",
+          "strategy": "role",
+          "args": [
+            "img",
+            "Nexolvi"
+          ],
+          "tag": "img",
+          "role": "img",
+          "accessibleName": "Nexolvi"
+        },
+        {
+          "name": "onePlatformEveryBusinessConnectionHeading",
+          "strategy": "role",
+          "args": [
+            "heading",
+            "One platform. Every business connection."
+          ],
+          "tag": "h1",
+          "role": "heading",
+          "accessibleName": "One platform. Every business connection."
+        },
+        {
+          "name": "welcomeToNexolviHeading",
+          "strategy": "role",
+          "args": [
+            "heading",
+            "Welcome to Nexolvi"
+          ],
+          "tag": "h2",
+          "role": "heading",
+          "accessibleName": "Welcome to Nexolvi"
+        },
+        {
+          "name": "workEmailInput",
+          "strategy": "placeholder",
+          "args": [
+            "you@company.com"
+          ],
+          "tag": "input",
+          "role": "textbox",
+          "accessibleName": "WORK EMAIL",
+          "inputType": "text"
+        },
+        {
+          "name": "passwordInput",
+          "strategy": "placeholder",
+          "args": [
+            "Enter your password"
+          ],
+          "tag": "input",
+          "accessibleName": "PASSWORD",
+          "inputType": "password"
+        },
+        {
+          "name": "showPasswordButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Show password"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Show password"
+        },
+        {
+          "name": "rememberMeFor30DaysCheckbox",
+          "strategy": "role",
+          "args": [
+            "checkbox",
+            "Remember me for 30 days"
+          ],
+          "tag": "input",
+          "role": "checkbox",
+          "accessibleName": "Remember me for 30 days",
+          "inputType": "checkbox"
+        },
+        {
+          "name": "signInButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Sign in"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Sign in"
+        },
+        {
+          "name": "forMacosLink",
+          "strategy": "role",
+          "args": [
+            "link",
+            "For macOS"
+          ],
+          "tag": "a",
+          "role": "link",
+          "accessibleName": "For macOS"
+        },
+        {
+          "name": "forWindowsLink",
+          "strategy": "role",
+          "args": [
+            "link",
+            "For Windows"
+          ],
+          "tag": "a",
+          "role": "link",
+          "accessibleName": "For Windows"
+        },
+        {
+          "name": "contactYourAdministratorLink",
+          "strategy": "role",
+          "args": [
+            "link",
+            "Contact your administrator"
+          ],
+          "tag": "a",
+          "role": "link",
+          "accessibleName": "Contact your administrator"
+        },
+        {
+          "name": "signingInButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Signing in…"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Signing in…"
+        },
+        {
+          "name": "loginErrorAlert",
+          "strategy": "css",
+          "args": [
+            "div[role=\"alert\"]"
+          ],
+          "tag": "div",
+          "description": "banner shown on the login form after a failed sign-in; its text is the failure message"
+        },
+        {
+          "name": "nexolviLogoImage",
+          "strategy": "role",
+          "args": [
+            "img",
+            "Nexolvi Logo"
+          ],
+          "tag": "img",
+          "role": "img",
+          "accessibleName": "Nexolvi Logo"
+        },
+        {
+          "name": "affiliatesButton",
+          "strategy": "text",
+          "args": [
+            "Affiliates"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Affiliates"
+        },
+        {
+          "name": "nexocrmButton",
+          "strategy": "text",
+          "args": [
+            "NexoCRM"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "NexoCRM"
+        },
+        {
+          "name": "chatbotsButton",
+          "strategy": "text",
+          "args": [
+            "Chatbots"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Chatbots"
+        },
+        {
+          "name": "workOsButton",
+          "strategy": "text",
+          "args": [
+            "Work OS"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Work OS"
+        },
+        {
+          "name": "socialButton",
+          "strategy": "text",
+          "args": [
+            "Social"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Social"
+        },
+        {
+          "name": "bButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "B"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "B"
+        },
+        {
+          "name": "dashboardHeading",
+          "strategy": "role",
+          "args": [
+            "heading",
+            "Dashboard"
+          ],
+          "tag": "h2",
+          "role": "heading",
+          "accessibleName": "Dashboard"
+        },
+        {
+          "name": "passwordVisibilityToggle",
+          "strategy": "css",
+          "args": [
+            "button[aria-label=\"Show password\"], button[aria-label=\"Hide password\"]"
+          ],
+          "tag": "button",
+          "description": "eye icon that toggles password visibility; its accessible name states the next action, so this matches it in both the masked and revealed states"
+        }
+      ]
+    }
+  ],
+  "traces": [
+    {
+      "tcKey": "TC-001",
+      "runs": [
+        {
+          "state": "start",
+          "actions": [
+            {
+              "stepIndex": 3,
+              "state": "start",
+              "element": "workEmailInput",
+              "op": "fill",
+              "value": {
+                "binding": "{{validEmail}}"
+              }
+            },
+            {
+              "stepIndex": 3,
+              "state": "start",
+              "element": "passwordInput",
+              "op": "fill",
+              "value": {
+                "binding": "{{validPassword}}"
+              }
+            },
+            {
+              "stepIndex": 3,
+              "state": "start",
+              "element": "signInButton",
+              "op": "click"
+            }
+          ],
+          "reachedState": "start"
+        }
+      ],
+      "stateAfterStep": {
+        "1": "start",
+        "2": "start",
+        "3": "start"
+      }
+    },
+    {
+      "tcKey": "TC-002",
+      "runs": [
+        {
+          "state": "start",
+          "actions": [
+            {
+              "stepIndex": 2,
+              "state": "start",
+              "element": "workEmailInput",
+              "op": "fill",
+              "value": {
+                "binding": "{{anyEmail}}"
+              }
+            },
+            {
+              "stepIndex": 2,
+              "state": "start",
+              "element": "passwordInput",
+              "op": "fill",
+              "value": {
+                "binding": "{{anyPassword}}"
+              }
+            }
+          ],
+          "reachedState": "start"
+        }
+      ],
+      "stateAfterStep": {
+        "1": "start",
+        "2": "start"
+      }
+    },
+    {
+      "tcKey": "TC-003",
+      "runs": [
+        {
+          "state": "start",
+          "actions": [
+            {
+              "stepIndex": 2,
+              "state": "start",
+              "element": "passwordInput",
+              "op": "fill",
+              "value": {
+                "binding": "{{validPassword}}"
+              }
+            }
+          ],
+          "reachedState": "start"
+        }
+      ],
+      "stateAfterStep": {
+        "1": "start",
+        "2": "start"
+      }
+    },
+    {
+      "tcKey": "TC-004",
+      "runs": [
+        {
+          "state": "start",
+          "actions": [
+            {
+              "stepIndex": 2,
+              "state": "start",
+              "element": "passwordInput",
+              "op": "fill",
+              "value": {
+                "binding": "{{validPassword}}"
+              }
+            },
+            {
+              "stepIndex": 2,
+              "state": "start",
+              "element": "showPasswordButton",
+              "op": "click"
+            },
+            {
+              "stepIndex": 3,
+              "state": "start",
+              "element": "passwordVisibilityToggle",
+              "op": "click"
+            }
+          ],
+          "reachedState": "start"
+        }
+      ],
+      "stateAfterStep": {
+        "1": "start",
+        "2": "start",
+        "3": "start"
+      }
+    },
+    {
+      "tcKey": "TC-005",
+      "runs": [
+        {
+          "state": "start",
+          "actions": [
+            {
+              "stepIndex": 2,
+              "state": "start",
+              "element": "workEmailInput",
+              "op": "fill",
+              "value": {
+                "binding": "{{validEmail}}"
+              }
+            },
+            {
+              "stepIndex": 2,
+              "state": "start",
+              "element": "passwordInput",
+              "op": "fill",
+              "value": {
+                "binding": "{{validPassword}}"
+              }
+            },
+            {
+              "stepIndex": 2,
+              "state": "start",
+              "element": "rememberMeFor30DaysCheckbox",
+              "op": "check"
+            },
+            {
+              "stepIndex": 2,
+              "state": "start",
+              "element": "signInButton",
+              "op": "click"
+            }
+          ],
+          "reachedState": "start"
+        }
+      ],
+      "stateAfterStep": {
+        "1": "start",
+        "2": "start"
+      }
+    },
+    {
+      "tcKey": "TC-006",
+      "runs": [
+        {
+          "state": "start",
+          "actions": [
+            {
+              "stepIndex": 2,
+              "state": "start",
+              "element": "workEmailInput",
+              "op": "fill",
+              "value": {
+                "binding": "{{invalidEmail}}"
+              }
+            },
+            {
+              "stepIndex": 2,
+              "state": "start",
+              "element": "passwordInput",
+              "op": "fill",
+              "value": {
+                "literal": "admin"
+              }
+            },
+            {
+              "stepIndex": 2,
+              "state": "start",
+              "element": "signInButton",
+              "op": "click"
+            }
+          ],
+          "reachedState": "start"
+        }
+      ],
+      "stateAfterStep": {
+        "1": "start",
+        "2": "start"
+      }
+    },
+    {
+      "tcKey": "TC-007",
+      "runs": [
+        {
+          "state": "start",
+          "actions": [
+            {
+              "stepIndex": 2,
+              "state": "start",
+              "element": "workEmailInput",
+              "op": "fill",
+              "value": {
+                "literal": "bikash.htc@gmail.com"
+              }
+            },
+            {
+              "stepIndex": 2,
+              "state": "start",
+              "element": "passwordInput",
+              "op": "fill",
+              "value": {
+                "binding": "{{invalidPassword}}"
+              }
+            },
+            {
+              "stepIndex": 2,
+              "state": "start",
+              "element": "signInButton",
+              "op": "click"
+            }
+          ],
+          "reachedState": "start"
+        }
+      ],
+      "stateAfterStep": {
+        "1": "start",
+        "2": "start"
+      }
+    },
+    {
+      "tcKey": "TC-008",
+      "runs": [
+        {
+          "state": "start",
+          "actions": [
+            {
+              "stepIndex": 2,
+              "state": "start",
+              "element": "workEmailInput",
+              "op": "fill",
+              "value": {
+                "binding": "{{invalidEmail}}"
+              }
+            },
+            {
+              "stepIndex": 2,
+              "state": "start",
+              "element": "passwordInput",
+              "op": "fill",
+              "value": {
+                "binding": "{{invalidPassword}}"
+              }
+            },
+            {
+              "stepIndex": 2,
+              "state": "start",
+              "element": "signInButton",
+              "op": "click"
+            }
+          ],
+          "reachedState": "start"
+        }
+      ],
+      "stateAfterStep": {
+        "1": "start",
+        "2": "start"
+      }
+    },
+    {
+      "tcKey": "TC-009",
+      "runs": [
+        {
+          "state": "start",
+          "actions": [
+            {
+              "stepIndex": 2,
+              "state": "start",
+              "element": "workEmailInput",
+              "op": "fill",
+              "value": {
+                "binding": "{{invalidEmail}}"
+              }
+            },
+            {
+              "stepIndex": 2,
+              "state": "start",
+              "element": "passwordInput",
+              "op": "fill",
+              "value": {
+                "binding": "{{invalidPassword}}"
+              }
+            },
+            {
+              "stepIndex": 2,
+              "state": "start",
+              "element": "signInButton",
+              "op": "click"
+            }
+          ],
+          "reachedState": "start"
+        }
+      ],
+      "stateAfterStep": {
+        "1": "start",
+        "2": "start"
+      }
+    },
+    {
+      "tcKey": "TC-010",
+      "runs": [],
+      "stateAfterStep": {
+        "1": "start",
+        "2": "start"
+      }
+    },
+    {
+      "tcKey": "TC-011",
+      "runs": [
+        {
+          "state": "start",
+          "actions": [
+            {
+              "stepIndex": 2,
+              "state": "start",
+              "element": "workEmailInput",
+              "op": "fill",
+              "value": {
+                "binding": "{{validEmail}}"
+              }
+            }
+          ],
+          "reachedState": "start"
+        }
+      ],
+      "stateAfterStep": {
+        "1": "start",
+        "2": "start"
+      }
+    },
+    {
+      "tcKey": "TC-012",
+      "runs": [
+        {
+          "state": "start",
+          "actions": [
+            {
+              "stepIndex": 2,
+              "state": "start",
+              "element": "passwordInput",
+              "op": "fill",
+              "value": {
+                "binding": "{{validPassword}}"
+              }
+            }
+          ],
+          "reachedState": "start"
+        }
+      ],
+      "stateAfterStep": {
+        "1": "start",
+        "2": "start"
+      }
+    }
+  ],
+  "flows": [
+    {
+      "id": "048e6a3618db",
+      "name": "startClickSignInButtonFlow",
+      "state": "start",
+      "actions": [
+        {
+          "element": "workEmailInput",
+          "op": "fill",
+          "param": "workEmailInput"
+        },
+        {
+          "element": "passwordInput",
+          "op": "fill",
+          "param": "passwordInput"
+        },
+        {
+          "element": "signInButton",
+          "op": "click"
+        }
+      ],
+      "usedBy": [
+        "TC-001",
+        "TC-006",
+        "TC-007",
+        "TC-008",
+        "TC-009"
+      ]
+    }
+  ]
+}

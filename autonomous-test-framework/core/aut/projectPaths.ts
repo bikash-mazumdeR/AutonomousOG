@@ -16,6 +16,7 @@ export const PROJECT_TESTS_ROOT = path.join(FRAMEWORK_ROOT, 'tests', 'projects')
 export const ACTIVE_PROJECT_FILE = path.join(PROJECT_TESTS_ROOT, '.active-project');
 export const FRAMEWORK_BASE_PAGE = path.join(FRAMEWORK_ROOT, 'tests', 'pages', 'BasePage.ts');
 export const FRAMEWORK_ENV_HELPER = path.join(FRAMEWORK_ROOT, 'tests', 'helpers', 'env.ts');
+export const FRAMEWORK_STORAGE_HELPER = path.join(FRAMEWORK_ROOT, 'tests', 'helpers', 'storage.ts');
 
 /** Resolved paths for one project. */
 export interface ProjectPaths {

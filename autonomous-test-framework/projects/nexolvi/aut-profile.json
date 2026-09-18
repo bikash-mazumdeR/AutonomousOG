@@ -1,0 +1,43 @@
+{
+  "projectId": "Nexolvi",
+  "displayName": "Nexo Desk Admin (admin.nexolvi.ai)",
+  "baseUrlEnv": "NEXOLVI_BASE_URL",
+  "browsers": ["chromium"],
+  "discovery": {
+    "entryPaths": ["/"],
+    "maxDepth": 3,
+    "dynamicIdPatterns": [],
+    "executeTestSteps": true,
+    "extraLocators": [
+      {
+        "name": "passwordVisibilityToggle",
+        "css": "button[aria-label=\"Show password\"], button[aria-label=\"Hide password\"]",
+        "description": "eye icon that toggles password visibility; its accessible name states the next action, so this matches it in both the masked and revealed states"
+      },
+      {
+        "name": "loginErrorAlert",
+        "css": "div[role=\"alert\"]",
+        "description": "banner shown on the login form after a failed sign-in; its text is the failure message"
+      }
+    ]
+  },
+  "auth": {
+    "strategy": "form",
+    "credentialEnvVars": {
+      "validEmail": "NEXOLVI_EMAIL",
+      "validPassword": "NEXOLVI_PASSWORD"
+    },
+    "loginStateDescription": "Email and password are entered on the login form as part of each test case. Successful login redirects to the Nexo Desk Dashboard; the 'Remember me for 30 days' checkbox extends the session, so no session token is reused across tests.",
+    "credentialStorage": "env"
+  },
+  "storageKeys": ["auth_expires_at"],
+  "secretsEnvVars": ["NEXOLVI_EMAIL", "NEXOLVI_PASSWORD"],
+  "couplingGuardTokens": [
+    "nexolvi",
+    "nexo desk",
+    "nexodesk",
+    "admin.nexolvi.ai",
+    "bikash.htc",
+    "Remember me for 30 days"
+  ]
+}

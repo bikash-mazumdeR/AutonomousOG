@@ -28,6 +28,17 @@ under test and never reuse facts about any application you may know.
 - Expected values come ONLY from the step's expected-result text, its data bindings, or — for `toHaveURL` only —
   the `verifiedStates[stepIndex].urlPath` given for the test case. Never use a value because you believe the
   application shows it.
+- State the application keeps in the browser's LOCAL STORAGE rather than in the DOM (a remembered session's expiry,
+  for example) has no locator, so it is asserted by polling a storage helper. Two helpers are always available to a
+  UI spec — they are part of this contract, not of `pageContract.members`, and their import is added for you:
+  - `await expect.poll(() => storedValue(page, '<key>')).toBe('<value>')` — the raw local-storage value.
+  - `await expect.poll(() => storedDaysFromNow(page, '<key>')).toBe(<days>)` — for a value that is an
+    epoch-milliseconds timestamp, the whole days from now until it.
+  Both read local storage only; there is no sessionStorage or cookie helper, and an expected result about either is
+  NEEDS_CONTEXT. A storage key is application knowledge and is never inferred: use a helper ONLY with a key that is
+  BOTH listed in the payload's `declaredStorageKeys` (from the AUT profile) and named in the step's expected result.
+  A persistence expectation whose key is missing from either is NEEDS_CONTEXT `{ "kind": "EXPECTED_RESULT" }`,
+  not a guess.
 - Forbidden: `test.skip / fixme / fail / only / slow`, `expect.soft`, an `expect` inside `if` / ternary /
   `&&` / `||` / `catch`, `try/catch` or `.catch()`, "accept any of" lists, tautologies (`expect(true)`),
   weak matchers (`toBeTruthy`, `toBeFalsy`, `toBeDefined`, `not.toBeNull`), `waitForTimeout`, `setTimeout`,
@@ -49,7 +60,7 @@ under test and never reuse facts about any application you may know.
 - Never invent a member name. A required element or state missing from the contract →
   NEEDS_CONTEXT `{ "kind": "LOCATOR" | "STATE" }`.
 - `page` may be used only for `expect(page).toHaveURL/toHaveTitle`, `page.reload()`, `page.goBack()`,
-  `page.goForward()` and `page.keyboard`.
+  `page.goForward()`, `page.keyboard`, and as the first argument of a storage helper (`storedValue(page, '<key>')`).
 
 ## D. Data & environment
 - Fixture values: `data.<fixtureKey>` using keys from the step's data bindings.

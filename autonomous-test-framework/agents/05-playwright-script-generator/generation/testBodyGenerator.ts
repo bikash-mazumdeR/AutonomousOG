@@ -34,6 +34,8 @@ export interface BodyGenerationRequest {
   concurrency: number;
   /** Renders one test into its real file skeleton for rule-based validation. */
   renderHarness: (tc: AutomationTestCase, body: string) => string;
+  /** UI: local-storage keys the AUT profile declares, the only keys a storage assertion may poll. */
+  storageKeys?: string[];
   /** UI: verified flows each test case must call (by tcKey). */
   flowsByTcKey?: Map<string, FlowUsage[]>;
   /** UI: states discovery verified after each step (by tcKey). */
@@ -87,6 +89,7 @@ export function buildGenerationPayload(
     mode: req.mode,
     feature: { id: req.featureId },
     pageContract: req.contract,
+    declaredStorageKeys: req.storageKeys && req.storageKeys.length > 0 ? req.storageKeys : undefined,
     testCases: testCases.map((tc) => ({
       ...tc,
       steps: tc.steps.map((step) => ({

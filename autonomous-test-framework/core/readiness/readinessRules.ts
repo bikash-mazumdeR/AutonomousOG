@@ -8,7 +8,7 @@
 
 import {
   ABSENCE_OUTCOME, ELEMENT_STATE, HEX_COLOUR, HTTP_METHODS, INPUT_VERBS, K6_SCENARIOS, NON_TEXT_ELEMENT_NOUNS, NUMBER_WITH_UNIT, PLACEHOLDER_TOKEN,
-  QUOTED_TEXT, READINESS_RULE as RULE, REVIEWER_CLARIFICATION_MARKER, REVIEWER_REWRITE_MARKER, SUBJECT_QUALIFIER, SUBJECT_VERB, TEXT_NOUNS, TIMING_CLAUSE, UI_TARGET_NOUNS,
+  LOCAL_STORAGE, QUOTED_TEXT, READINESS_RULE as RULE, REVIEWER_CLARIFICATION_MARKER, REVIEWER_REWRITE_MARKER, SUBJECT_QUALIFIER, SUBJECT_VERB, TEXT_NOUNS, TIMING_CLAUSE, UI_TARGET_NOUNS,
   UNSUPPORTED_OBSERVATION, URL_PATH, VAGUE_OUTCOME,
 } from './readinessConstants';
 import {
@@ -37,6 +37,19 @@ function isRelativePath(value: string | undefined): boolean {
   return !!value && value.startsWith('/') && !value.startsWith('//');
 }
 
+/**
+ * Whether an expected result describes something automation cannot observe. Local storage is the one exception: the
+ * storage helpers can poll it, but only by key, so a local-storage expectation is assertable exactly when it names
+ * the key. Any other unsupported subject in the line still makes the whole expectation unassertable.
+ * @param {string} line - One expected-result line
+ * @returns {boolean}
+ */
+function unsupportedObservation(line: string): boolean {
+  const withoutLocalStorage = line.replace(new RegExp(LOCAL_STORAGE.source, 'gi'), ' ');
+  if (UNSUPPORTED_OBSERVATION.test(withoutLocalStorage)) return true;
+  return LOCAL_STORAGE.test(line) && !QUOTED_TEXT.test(line);
+}
+
 function expectationItem(step: ReadinessStep, line: string, mode: ReadinessMode): MissingItem | null {
   const at = { stepIndex: step.index, subject: line };
   if (REVIEWER_CLARIFICATION_MARKER.test(line)) {
@@ -44,7 +57,7 @@ function expectationItem(step: ReadinessStep, line: string, mode: ReadinessMode)
       kind: 'EXPECTED_RESULT', ruleId: RULE.REVIEWER_MARKER, ...at, detail: `Step ${step.index}: the reviewer marked the expected result as requiring clarification.`,
     };
   }
-  if (UNSUPPORTED_OBSERVATION.test(line)) {
+  if (unsupportedObservation(line)) {
     return {
       kind: 'UNASSERTABLE', ruleId: RULE.UNASSERTABLE_OBSERVATION, ...at, detail: `Step ${step.index}: "${line}" cannot be observed through the user interface.`,
     };

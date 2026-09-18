@@ -399,7 +399,11 @@ class TestDataGeneratorAgent {
       unresolvedCount: totals.unresolvedCount,
 
       /** Non-credential values the requirement states; written to the flat fixture by FixtureSync */
-      requirementValues: literalRequirementValues(sources.requirementValues, Boolean(sources.profile?.credentialsInFixture)),
+      requirementValues: literalRequirementValues(
+        sources.requirementValues,
+        Boolean(sources.profile?.credentialsInFixture),
+        Object.keys(sources.profile?.credentialEnvVars || {}),
+      ),
       runtimeBindings: totals.runtimeBindings,
       environmentConfig: { name: FRAMEWORK_CONFIG.environment, baseUrlEnv: sources.profile?.baseUrlEnv || null },
       perTCData: resolution.perTCData,
