@@ -10,7 +10,7 @@ import * as crypto from 'crypto';
 import { DATA_FIXTURE, ENV_FUNCTION, FLOW_SETTINGS } from '../constants';
 import { AutomationTestCase } from '../contracts/automationTestCase';
 import {
-  FlowAction, PageElement, PageMap, TestCaseTrace, TraceAction, TraceRun, VerifiedFlow, locatorSignature, toPascal, uniqueName,
+  FlowAction, PageElement, PageMap, TestCaseTrace, TraceAction, TraceRun, VerifiedFlow, locatorSignature, overlayLabel, toPascal, uniqueName,
 } from './pageMap';
 
 /** The value a flow call must pass for one parameter. */
@@ -184,17 +184,26 @@ export function applicableFlows(tc: AutomationTestCase, trace: TestCaseTrace | u
   return [...usages.values()];
 }
 
+/** A state discovery verified after a step: its name, URL path and, when a dialog or menu was open, that overlay. */
+export interface VerifiedState {
+  state: string;
+  urlPath: string;
+  overlay?: string;
+}
+
 /**
- * URL paths of the states discovery verified after each step of a test case.
+ * The states discovery verified after each step of a test case.
  * @param {TestCaseTrace | undefined} trace
  * @param {PageMap} map
- * @returns {Record<number, { state: string, urlPath: string }>}
+ * @returns {Record<number, VerifiedState>}
  */
-export function verifiedStatesFor(trace: TestCaseTrace | undefined, map: PageMap): Record<number, { state: string; urlPath: string }> {
-  const result: Record<number, { state: string; urlPath: string }> = {};
+export function verifiedStatesFor(trace: TestCaseTrace | undefined, map: PageMap): Record<number, VerifiedState> {
+  const result: Record<number, VerifiedState> = {};
   for (const [step, stateName] of Object.entries(trace?.stateAfterStep || {})) {
     const state = map.states.find((candidate) => candidate.name === stateName);
-    if (state) result[Number(step)] = { state: state.name, urlPath: state.urlPath };
+    if (!state) continue;
+    const overlay = overlayLabel(state.overlay);
+    result[Number(step)] = { state: state.name, urlPath: state.urlPath, ...(overlay ? { overlay } : {}) };
   }
   return result;
 }

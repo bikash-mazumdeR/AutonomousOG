@@ -9,16 +9,19 @@
 import {
   chromium, selectors, Browser, BrowserContext, Page, Locator,
 } from '@playwright/test';
-import { DISCOVERY_SETTINGS, DYNAMIC_ID_HEURISTICS } from '../constants';
+import {
+  CONTAINER_ROLES, CONTENT_NAMED_ROLES, DISCOVERY_MARK_ATTRIBUTE, DISCOVERY_SETTINGS, DYNAMIC_ID_HEURISTICS, OVERLAY_ROLES,
+} from '../constants';
 import { ExtraLocator } from '../../../core/aut/AutProfile';
 import {
-  LocatorStrategy, PageElement, PageState, stateNameForPath, toCamel, uniqueName, locatorSignature,
+  LocatorStrategy, PageElement, PageState, StateOverlay, stateKey, stateNameFor, toCamel, uniqueName, locatorSignature,
 } from './pageMap';
 
 /** Element facts collected in the browser. */
 export interface RawElement {
   tag: string;
   role?: string;
+  /** Accessible name as Playwright computes it, so a role locator built from it matches. */
   name?: string;
   testId?: string;
   id?: string;
@@ -26,6 +29,11 @@ export interface RawElement {
   placeholder?: string;
   text?: string;
   inputType?: string;
+  /**
+   * The element is outside the accessibility tree — `aria-hidden`, or covered by a modal overlay that hides
+   * the rest of the page. Role locators cannot reach it; text, placeholder and id locators still can.
+   */
+  ariaHidden?: boolean;
 }
 
 /** Discovery session options (from the AUT profile). */
@@ -55,7 +63,47 @@ const ROLE_SUFFIX: Readonly<Record<string, string>> = Object.freeze({
   radio: 'Radio',
   heading: 'Heading',
   img: 'Image',
+  menu: 'Menu',
+  menubar: 'Menu',
+  menuitem: 'MenuItem',
+  menuitemcheckbox: 'MenuItem',
+  menuitemradio: 'MenuItem',
+  dialog: 'Dialog',
+  alertdialog: 'Dialog',
+  tab: 'Tab',
+  tabpanel: 'Panel',
+  option: 'Option',
+  switch: 'Switch',
+  listbox: 'List',
+  list: 'List',
+  listitem: 'Item',
+  tooltip: 'Tooltip',
+  status: 'Status',
 });
+
+/** First line of an element's accessibility snapshot: `- <role> "<name>"`, the name optional and quote-escaped. */
+const ARIA_SNAPSHOT_HEAD = /^-\s+([a-z]+)(?:\s+"((?:[^"\\]|\\.)*)")?/;
+
+/** Snapshot "roles" that mean the element has no role of its own. */
+const NON_ROLES: ReadonlySet<string> = new Set(['text', 'generic']);
+
+/**
+ * Role and accessible name of the element an accessibility snapshot was taken from.
+ *
+ * Playwright's snapshot names elements the way its role locators match them, which a hand-rolled name
+ * (label, inner text, alt) does not: a menu item, a dialog titled through `aria-labelledby`, a tab or an
+ * option carry names the DOM alone does not show. An empty snapshot means the element is not in the
+ * accessibility tree at all.
+ * @param {string} snapshot - `locator.ariaSnapshot()` output for exactly one element
+ * @returns {{ role: string, name?: string } | null} null when the element has no accessible role
+ */
+export function parseAriaSnapshotHead(snapshot: string): { role: string; name?: string } | null {
+  const head = String(snapshot || '').split('\n').find((line) => line.trim().length > 0) || '';
+  const match = ARIA_SNAPSHOT_HEAD.exec(head.trim());
+  if (!match || NON_ROLES.has(match[1])) return null;
+  const name = match[2] === undefined ? undefined : match[2].replace(/\\(.)/g, '$1');
+  return { role: match[1], ...(name ? { name } : {}) };
+}
 
 /**
  * Whether a value looks auto-generated and therefore unstable.
@@ -69,19 +117,28 @@ export function isDynamicValue(value: string, patterns: RegExp[]): boolean {
 
 /**
  * Candidate locators for an element in preference order.
+ *
+ * A role locator needs the element in the accessibility tree; while a modal menu or dialog is open the rest of
+ * the page is hidden from it, so those elements fall through to their text, placeholder or id. A container
+ * (dialog, menu, landmark) is addressed by its role alone first — one `alertdialog` on the page is exactly that
+ * element, and the name such a container carries is often borrowed from its trigger or title, which may be
+ * account data or copy that changes; the name is kept as the fallback for a page that holds several.
  * @param {RawElement} raw
  * @param {Pick<DiscoveryOptions, 'testIdAttribute'|'dynamicIdPatterns'>} options
  * @returns {Candidate[]}
  */
 export function candidateLocators(raw: RawElement, options: Pick<DiscoveryOptions, 'testIdAttribute' | 'dynamicIdPatterns'>): Candidate[] {
   const candidates: Candidate[] = [];
+  const role = raw.ariaHidden ? undefined : raw.role;
   if (raw.testId && options.testIdAttribute && !isDynamicValue(raw.testId, options.dynamicIdPatterns)) {
     candidates.push({ strategy: 'testId', args: [raw.testId] });
   }
-  if (raw.role && raw.name) candidates.push({ strategy: 'role', args: [raw.role, raw.name] });
+  if (role && CONTAINER_ROLES.has(role)) candidates.push({ strategy: 'role', args: [role] });
+  if (role && raw.name) candidates.push({ strategy: 'role', args: [role, raw.name] });
+  if (role && !raw.name && !CONTAINER_ROLES.has(role)) candidates.push({ strategy: 'role', args: [role] });
   if (raw.label) candidates.push({ strategy: 'label', args: [raw.label] });
   if (raw.placeholder) candidates.push({ strategy: 'placeholder', args: [raw.placeholder] });
-  if (raw.text && ['button', 'link', 'heading'].includes(raw.role || '')) candidates.push({ strategy: 'text', args: [raw.text] });
+  if (raw.text && CONTENT_NAMED_ROLES.has(raw.role || '')) candidates.push({ strategy: 'text', args: [raw.text] });
   if (raw.id && !isDynamicValue(raw.id, options.dynamicIdPatterns)) candidates.push({ strategy: 'id', args: [raw.id] });
   return candidates;
 }
@@ -105,7 +162,7 @@ export function toLocator(page: Page, candidate: Candidate): Locator {
   const [first, second] = candidate.args;
   switch (candidate.strategy) {
     case 'testId': return page.getByTestId(first);
-    case 'role': return page.getByRole(first as any, { name: second, exact: true });
+    case 'role': return second === undefined ? page.getByRole(first as any) : page.getByRole(first as any, { name: second, exact: true });
     case 'label': return page.getByLabel(first, { exact: true });
     case 'placeholder': return page.getByPlaceholder(first, { exact: true });
     case 'text': return page.getByText(first, { exact: true });
@@ -120,24 +177,51 @@ export function toLocator(page: Page, candidate: Candidate): Locator {
  * @returns {string}
  */
 export function elementBaseName(raw: RawElement): string {
-  const source = raw.testId || raw.label || raw.placeholder || raw.name || raw.id || raw.tag;
-  const words = source.split(/[^a-zA-Z0-9]+/).filter(Boolean).slice(0, 5);
-  let base = toCamel(words.length > 0 ? words : [raw.tag]);
-  if (/^[0-9]/.test(base)) base = `element${base}`;
+  const source = raw.testId || raw.label || raw.placeholder || raw.name || raw.id;
   const suffix = raw.inputType === 'password' || (raw.tag === 'input' && !raw.role)
     ? 'Input'
     : (ROLE_SUFFIX[raw.role || ''] || 'Element');
+  // Nothing names it: the role is the identity ("menu", "alertdialog"), not "menuMenu".
+  if (!source) return toCamel((raw.role || raw.tag).split(/[^a-zA-Z0-9]+/).filter(Boolean));
+  const words = source.split(/[^a-zA-Z0-9]+/).filter(Boolean).slice(0, 5);
+  let base = toCamel(words.length > 0 ? words : [raw.role || raw.tag]);
+  if (/^[0-9]/.test(base)) base = `element${base}`;
   return base.toLowerCase().endsWith(suffix.toLowerCase()) ? base : `${base}${suffix}`;
 }
 
+/** A collected element plus the mark that addresses it for its accessibility snapshot. */
+interface MarkedElement extends RawElement {
+  mark: number;
+}
+
 /**
- * Collects element facts from the current page (runs in the browser).
+ * The overlay that defines the current state: the open dialog or menu of highest precedence, the last one in
+ * document order when several of that role are open (a later portal is stacked on top).
+ * @param {RawElement[]} raws - Elements collected from the page, in document order
+ * @returns {StateOverlay | undefined}
+ */
+export function detectOverlay(raws: RawElement[]): StateOverlay | undefined {
+  for (const role of OVERLAY_ROLES) {
+    const open = raws.filter((raw) => raw.role === role && !raw.ariaHidden);
+    if (open.length > 0) {
+      const top = open[open.length - 1];
+      return { role, ...(top.name ? { name: top.name } : {}) };
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Inventories the DOM (runs in the browser): every interactive or assertable element with the facts a locator
+ * can be built from. Each kept element is stamped with the discovery mark so it can be addressed afterwards.
  * @param {Page} page
  * @param {string} [testIdAttribute]
- * @returns {Promise<RawElement[]>}
+ * @returns {Promise<MarkedElement[]>}
  */
-export async function collectRawElements(page: Page, testIdAttribute?: string): Promise<RawElement[]> {
-  return page.evaluate(({ attr, maxText, maxElements }) => {
+async function inventoryDom(page: Page, testIdAttribute?: string): Promise<MarkedElement[]> {
+  return page.evaluate(({
+    attr, mark, maxText, maxElements, contentNamedRoles,
+  }) => {
     const win: any = globalThis as any;
     const doc: any = win.document;
     const clean = (value: any) => (typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '');
@@ -173,8 +257,10 @@ export async function collectRawElements(page: Page, testIdAttribute?: string): 
       const type = clean(el.getAttribute('type')).toLowerCase() || 'text';
       const role = implicitRole(el, tag, type);
       const label = clean(el.labels?.[0]?.innerText) || clean(el.getAttribute('aria-label'));
-      const text = ['button', 'link', 'heading'].includes(role || '') ? clean(el.innerText || el.value).slice(0, maxText) : '';
+      const text = contentNamedRoles.includes(role || '') ? clean(el.innerText || el.value).slice(0, maxText) : '';
+      el.setAttribute(mark, String(results.length));
       results.push({
+        mark: results.length,
         tag,
         role,
         name: label || text || clean(el.getAttribute('alt')) || undefined,
@@ -187,7 +273,56 @@ export async function collectRawElements(page: Page, testIdAttribute?: string): 
       });
     }
     return results;
-  }, { attr: testIdAttribute || '', maxText: DISCOVERY_SETTINGS.MAX_TEXT_LENGTH, maxElements: DISCOVERY_SETTINGS.MAX_ELEMENTS_PER_STATE });
+  }, {
+    attr: testIdAttribute || '',
+    mark: DISCOVERY_MARK_ATTRIBUTE,
+    maxText: DISCOVERY_SETTINGS.MAX_TEXT_LENGTH,
+    maxElements: DISCOVERY_SETTINGS.MAX_ELEMENTS_PER_STATE,
+    contentNamedRoles: [...CONTENT_NAMED_ROLES],
+  });
+}
+
+/**
+ * Replaces each roled element's DOM-derived role and name with the ones Playwright's accessibility tree reports,
+ * and flags elements the tree does not contain. Role-less elements are left alone: their snapshot would describe
+ * their first accessible descendant, not themselves.
+ * @param {Page} page
+ * @param {MarkedElement[]} elements
+ */
+async function annotateAccessibleNames(page: Page, elements: MarkedElement[]): Promise<void> {
+  await Promise.all(elements.filter((raw) => raw.role).map(async (raw) => {
+    const locator = page.locator(`[${DISCOVERY_MARK_ATTRIBUTE}="${raw.mark}"]`);
+    const snapshot = await locator.ariaSnapshot({ timeout: DISCOVERY_SETTINGS.ARIA_SNAPSHOT_TIMEOUT_MS }).catch(() => '');
+    const head = parseAriaSnapshotHead(snapshot);
+    if (!head) {
+      raw.ariaHidden = true;
+      return;
+    }
+    raw.role = head.role;
+    if (head.name) raw.name = head.name;
+  }));
+}
+
+/**
+ * Collects element facts from the current page.
+ *
+ * The DOM supplies the facts a locator is built from (tag, type, id, label, placeholder, test id); Playwright's
+ * accessibility tree supplies the role and accessible name, so a menu item, a dialog, a tab or an option is named
+ * exactly as `getByRole` will match it. The marks stamped during the inventory are removed before returning.
+ * @param {Page} page
+ * @param {string} [testIdAttribute]
+ * @returns {Promise<RawElement[]>}
+ */
+export async function collectRawElements(page: Page, testIdAttribute?: string): Promise<RawElement[]> {
+  const marked = await inventoryDom(page, testIdAttribute);
+  try {
+    await annotateAccessibleNames(page, marked);
+  } finally {
+    await page.evaluate((mark) => {
+      (globalThis as any).document.querySelectorAll(`[${mark}]`).forEach((el: any) => el.removeAttribute(mark));
+    }, DISCOVERY_MARK_ATTRIBUTE).catch(() => undefined);
+  }
+  return marked.map(({ mark, ...raw }) => raw);
 }
 
 /** A live browser session used for discovery. */
@@ -332,15 +467,18 @@ export class DiscoverySession {
   }
 
   /**
-   * Captures the current state with verified unique locators.
-   * @param {Set<string>} takenStateNames - Names used by states with other URL paths
+   * Captures the current state with verified unique locators. The state is identified by the URL and the modal
+   * overlay open on it; a known state with the same identity keeps its name, any other name stays taken.
+   * @param {ReadonlyArray<PageState>} knownStates - States already in the page map
    * @param {string} [entryPath] - Set when the state is reachable by direct navigation
    * @param {boolean} [reloadVerify] - Re-verify locators after a reload (entry states only)
    * @returns {Promise<PageState>}
    */
-  async captureState(takenStateNames: Set<string>, entryPath?: string, reloadVerify = false): Promise<PageState> {
+  async captureState(knownStates: ReadonlyArray<PageState>, entryPath?: string, reloadVerify = false): Promise<PageState> {
     const urlPath = this.currentPath();
-    let elements = await this._verifyElements(await collectRawElements(this.page, this._options.testIdAttribute));
+    const raws = await collectRawElements(this.page, this._options.testIdAttribute);
+    const overlay = detectOverlay(raws);
+    let elements = await this._verifyElements(raws, overlay !== undefined);
     elements = [...elements, ...await this._verifyExtraLocators(elements)];
     if (reloadVerify) {
       await this.page.reload({ waitUntil: 'commit' });
@@ -352,8 +490,10 @@ export class DiscoverySession {
       }
       elements = stable;
     }
+    const key = stateKey({ urlPath, overlay });
+    const taken = new Set(knownStates.filter((state) => stateKey(state) !== key).map((state) => state.name));
     return {
-      name: stateNameForPath(urlPath, takenStateNames), urlPath, entryPath, elements,
+      name: stateNameFor(urlPath, overlay, taken), urlPath, entryPath, ...(overlay ? { overlay } : {}), elements,
     };
   }
 
@@ -384,11 +524,18 @@ export class DiscoverySession {
     return elements;
   }
 
-  private async _verifyElements(raws: RawElement[]): Promise<PageElement[]> {
+  /**
+   * Verifies one unique locator per element.
+   * @param {RawElement[]} raws
+   * @param {boolean} [modal] - An overlay is open: elements it hides from the accessibility tree are inert behind it
+   *   and belong to the state underneath, so they are left out of this one
+   */
+  private async _verifyElements(raws: RawElement[], modal = false): Promise<PageElement[]> {
     const taken = new Set<string>();
     const seen = new Set<string>();
     const elements: PageElement[] = [];
     for (const raw of raws) {
+      if (modal && raw.ariaHidden) continue;
       for (const candidate of candidateLocators(raw, this._options)) {
         const signature = locatorSignature(candidate);
         if (seen.has(signature)) break;
@@ -417,6 +564,8 @@ export class DiscoverySession {
     if (needsValue && value === undefined) throw new Error(`Operation "${op}" on ${element.name} requires a value`);
     if (op === 'fill') await locator.fill(value as string);
     else if (op === 'click') await locator.click();
+    else if (op === 'dblclick') await locator.dblclick();
+    else if (op === 'hover') await locator.hover();
     else if (op === 'check') await locator.check();
     else if (op === 'uncheck') await locator.uncheck();
     else if (op === 'selectOption') await locator.selectOption(value as string);

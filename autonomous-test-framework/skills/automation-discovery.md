@@ -8,7 +8,9 @@ describe elements that the input does not list. This skill is application-agnost
 ## Input
 - `testCase`: the approved test case (steps with actions, expected results and data bindings).
 - `knownStates`: states already discovered, each with its verified `elements` (name, role, accessible name).
-- `currentState`: the state the browser is in now.
+- `currentState`: the state the browser is in now. Its `overlay`, when set, names the dialog or menu that is open
+  (e.g. `alertdialog "Log out?"`): the state has the same `urlPath` as the page underneath, and its `elements` are
+  the overlay's own — the page behind a modal overlay is inert until the overlay closes.
 
 ## Rules
 1. Plan actions ONLY with elements listed under `currentState.elements`. Never invent an element name.
@@ -20,8 +22,9 @@ describe elements that the input does not list. This skill is application-agnost
 4. If a step cannot be performed with the listed elements and does not lead to a new state, set
    `stopReason: "NOT_ACHIEVABLE"` and explain in `detail`.
 5. If all steps are planned, set `stopReason: "COMPLETE"`.
-6. Only these operations exist: `fill`, `click`, `check`, `uncheck`, `selectOption`, `press` (on an element), and
-   `reload`, `goBack`, `goForward` (on the page — omit `element`). Use page operations only when a step asks for them.
+6. Only these operations exist: `fill`, `click`, `dblclick`, `hover`, `check`, `uncheck`, `selectOption`, `press` (on an
+   element), and `reload`, `goBack`, `goForward` (on the page — omit `element`). Use `hover` only when a step says the
+   user hovers or points at something; use page operations only when a step asks for them.
 7. `currentState` is where the browser is right now, after `executedActions` were performed. Never repeat an
    executed action. When `executedActions` already perform everything the remaining steps describe, return
    `stopReason: "COMPLETE"` with an empty `actions` array.

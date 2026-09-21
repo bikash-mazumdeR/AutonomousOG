@@ -7,8 +7,11 @@ import * as http from 'http';
 import * as os from 'os';
 import * as path from 'path';
 import { AddressInfo } from 'net';
-import { DiscoverySession } from '../../agents/05-playwright-script-generator/discovery/domDiscovery';
+import {
+  DiscoverySession, candidateLocators, elementBaseName, parseAriaSnapshotHead,
+} from '../../agents/05-playwright-script-generator/discovery/domDiscovery';
 import { discoverFeature } from '../../agents/05-playwright-script-generator/discovery/discoverFeature';
+import { emptyPageMap, mergeState } from '../../agents/05-playwright-script-generator/discovery/pageMap';
 import { AutomationTestCase } from '../../agents/05-playwright-script-generator/contracts/automationTestCase';
 import { ResolvedAutProfile } from '../../core/aut/AutProfile';
 import { ChatFn } from '../../agents/05-playwright-script-generator/types';
@@ -26,6 +29,56 @@ const START_PAGE = `<!doctype html><html><head><title>Sample</title></head><body
 </form></body></html>`;
 
 const DASHBOARD_PAGE = '<!doctype html><html><body><h1 data-qa="welcome">Welcome</h1></body></html>';
+
+/** A sign-in form: email, password and a submit control that lands on the dashboard. */
+const AUTH_PAGE = `<!doctype html><html><body>
+<form onsubmit="event.preventDefault(); location.href = '/dashboard.html';">
+  <label for="email">Email</label><input id="email" type="email" />
+  <label for="password">Password</label><input id="password" type="password" />
+  <button type="submit">Sign in</button>
+</form></body></html>`;
+
+/**
+ * The same sign-in form, mounted by script well after the page is interactive — the way a client-rendered login
+ * page appears: a control is there at once, the form a beat later. The delay exceeds the DOM-quiet window, so the
+ * entry capture holds a partial page.
+ */
+const LATE_AUTH_PAGE = `<!doctype html><html><body>
+<button type="button">Help</button>
+<div id="root"></div>
+<script>
+  setTimeout(() => {
+    document.getElementById('root').innerHTML = '<form><label for="email">Email</label><input id="email" type="email" />'
+      + '<label for="password">Password</label><input id="password" type="password" /><button type="submit">Sign in</button></form>';
+    document.querySelector('form').addEventListener('submit', (e) => { e.preventDefault(); location.href = '/dashboard.html'; });
+  }, 1500);
+</script></body></html>`;
+
+/**
+ * A dashboard with a modal user menu and a confirmation dialog, built the way headless-UI libraries build them:
+ * the menu and dialog are nameless containers, their entries are `menuitem`s named by their text, the dialog is
+ * titled through `aria-labelledby`, and while the menu is open the rest of the page is `aria-hidden`.
+ */
+const MENU_PAGE = `<!doctype html><html><body>
+<div id="app">
+  <nav><button type="button">Blogs</button></nav>
+  <h1>Dashboard</h1>
+  <button type="button" aria-haspopup="menu" aria-expanded="false" onclick="openMenu()">B</button>
+</div>
+<div id="menu" role="menu" hidden>
+  <div role="menuitem" tabindex="-1" onclick="openDialog()">Logout</div>
+  <div role="menuitem" tabindex="-1">Profile</div>
+</div>
+<div id="dialog" role="alertdialog" aria-labelledby="dialog-title" aria-describedby="dialog-desc" hidden>
+  <h2 id="dialog-title">Log out?</h2>
+  <p id="dialog-desc">Are you sure you want to log out?</p>
+  <button type="button">Cancel</button>
+  <button type="button">Log out</button>
+</div>
+<script>
+  function openMenu() { document.getElementById('menu').hidden = false; document.getElementById('app').setAttribute('aria-hidden', 'true'); }
+  function openDialog() { document.getElementById('menu').hidden = true; document.getElementById('dialog').hidden = false; }
+</script></body></html>`;
 
 const signInCase = (tcKey: string): AutomationTestCase => ({
   tcKey,
@@ -60,6 +113,43 @@ const signInPlans = () => [
   { actions: [], stopReason: 'COMPLETE' },
 ];
 
+describe('Agent 05 discovery — accessible names and candidate locators', () => {
+  const options = { testIdAttribute: undefined, dynamicIdPatterns: [] };
+
+  it('reads the role and unescaped name of the element a snapshot was taken from', () => {
+    expect(parseAriaSnapshotHead('- menuitem "Logout"')).toEqual({ role: 'menuitem', name: 'Logout' });
+    expect(parseAriaSnapshotHead('- alertdialog "Log out?":\n  - heading "Log out?" [level=2]')).toEqual({ role: 'alertdialog', name: 'Log out?' });
+    expect(parseAriaSnapshotHead('- heading "Dashboard" [level=1]')).toEqual({ role: 'heading', name: 'Dashboard' });
+    expect(parseAriaSnapshotHead('- menuitem "Pro\\"file"')).toEqual({ role: 'menuitem', name: 'Pro"file' });
+    expect(parseAriaSnapshotHead('- menu:\n  - menuitem "Logout"')).toEqual({ role: 'menu' });
+    expect(parseAriaSnapshotHead('- text: Just text')).toBeNull();
+    expect(parseAriaSnapshotHead('')).toBeNull();
+  });
+
+  it('addresses a container by role alone before its name, and a named element by role and name', () => {
+    expect(candidateLocators({ tag: 'div', role: 'alertdialog', name: 'Log out?' }, options))
+      .toEqual([{ strategy: 'role', args: ['alertdialog'] }, { strategy: 'role', args: ['alertdialog', 'Log out?'] }]);
+    expect(candidateLocators({ tag: 'select', role: 'combobox' }, options)).toEqual([{ strategy: 'role', args: ['combobox'] }]);
+    expect(candidateLocators({ tag: 'div', role: 'menu' }, options)).toEqual([{ strategy: 'role', args: ['menu'] }]);
+    expect(candidateLocators({ tag: 'div', role: 'menuitem', name: 'Logout', text: 'Logout' }, options))
+      .toEqual([{ strategy: 'role', args: ['menuitem', 'Logout'] }, { strategy: 'text', args: ['Logout'] }]);
+  });
+
+  it('never builds a role locator for an element outside the accessibility tree', () => {
+    expect(candidateLocators({ tag: 'button', role: 'button', name: 'Blogs', text: 'Blogs', id: 'blogs', ariaHidden: true }, options))
+      .toEqual([{ strategy: 'text', args: ['Blogs'] }, { strategy: 'id', args: ['blogs'] }]);
+  });
+
+  it('names elements by what identifies them, and nameless containers by their role', () => {
+    expect(elementBaseName({ tag: 'div', role: 'menuitem', name: 'Logout' })).toBe('logoutMenuItem');
+    expect(elementBaseName({ tag: 'div', role: 'alertdialog', name: 'Log out?' })).toBe('logOutDialog');
+    expect(elementBaseName({ tag: 'div', role: 'menu' })).toBe('menu');
+    expect(elementBaseName({ tag: 'div', role: 'alertdialog' })).toBe('alertdialog');
+    expect(elementBaseName({ tag: 'p', role: 'alert', testId: 'error' })).toBe('errorElement');
+    expect(elementBaseName({ tag: 'input', inputType: 'password' })).toBe('input');
+  });
+});
+
 describe('Agent 05 live DOM discovery', () => {
   let server: http.Server;
   let baseURL: string;
@@ -89,7 +179,11 @@ describe('Agent 05 live DOM discovery', () => {
   beforeAll(async () => {
     server = http.createServer((req, res) => {
       res.writeHead(200, { 'Content-Type': 'text/html' });
-      res.end(req.url?.startsWith('/dashboard') ? DASHBOARD_PAGE : START_PAGE);
+      if (req.url?.startsWith('/dashboard')) res.end(DASHBOARD_PAGE);
+      else if (req.url?.startsWith('/menu')) res.end(MENU_PAGE);
+      else if (req.url?.startsWith('/late-auth')) res.end(LATE_AUTH_PAGE);
+      else if (req.url?.startsWith('/auth')) res.end(AUTH_PAGE);
+      else res.end(START_PAGE);
     });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
     baseURL = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -104,7 +198,7 @@ describe('Agent 05 live DOM discovery', () => {
     const session = await DiscoverySession.open({ baseURL, testIdAttribute: 'data-qa', dynamicIdPatterns: [] });
     try {
       await session.goto('/');
-      const state = await session.captureState(new Set(), '/', true);
+      const state = await session.captureState([], '/', true);
       const byName = Object.fromEntries(state.elements.map((e) => [e.name, e]));
       expect(state.name).toBe('start');
       expect(byName.codeInput).toMatchObject({ strategy: 'testId', args: ['code'] });
@@ -113,6 +207,48 @@ describe('Agent 05 live DOM discovery', () => {
       expect(byName.helpButton).toMatchObject({ strategy: 'role', args: ['button', 'Help'] });
       expect(state.elements.some((e) => e.args.includes('dup'))).toBe(false);
       expect(state.elements.some((e) => e.args.includes('ember12345'))).toBe(false);
+    } finally {
+      await session.close();
+    }
+  });
+
+  it('captures an open menu and an open dialog as their own states, with their own elements', async () => {
+    const session = await DiscoverySession.open({ baseURL, dynamicIdPatterns: [] });
+    const map = emptyPageMap('F-05');
+    try {
+      await session.goto('/menu.html');
+      const dashboard = mergeState(map, await session.captureState(map.states, '/menu.html'));
+      const onDashboard = Object.fromEntries(dashboard.elements.map((e) => [e.name, e]));
+      expect([dashboard.name, dashboard.overlay]).toEqual(['menu', undefined]);
+      expect(onDashboard.bButton).toMatchObject({ strategy: 'role', args: ['button', 'B'] });
+      expect(onDashboard.blogsButton).toMatchObject({ strategy: 'role', args: ['button', 'Blogs'] });
+      expect(onDashboard.menu).toBeUndefined();
+
+      await session.perform(onDashboard.bButton, 'click');
+      const menuOpen = mergeState(map, await session.captureState(map.states));
+      const withMenu = Object.fromEntries(menuOpen.elements.map((e) => [e.name, e]));
+      expect([menuOpen.name, menuOpen.overlay]).toEqual(['menuMenu', { role: 'menu' }]);
+      expect(withMenu.menu).toMatchObject({ strategy: 'role', args: ['menu'], role: 'menu' });
+      expect(withMenu.logoutMenuItem).toMatchObject({ strategy: 'role', args: ['menuitem', 'Logout'], accessibleName: 'Logout' });
+      expect(withMenu.profileMenuItem).toMatchObject({ strategy: 'role', args: ['menuitem', 'Profile'] });
+      // The page behind the modal menu is aria-hidden and inert: it belongs to the state underneath, not to this one.
+      expect(withMenu.blogsButton).toBeUndefined();
+      expect(withMenu.bButton).toBeUndefined();
+
+      await session.perform(withMenu.logoutMenuItem, 'click');
+      const dialogOpen = mergeState(map, await session.captureState(map.states));
+      const withDialog = Object.fromEntries(dialogOpen.elements.map((e) => [e.name, e]));
+      expect([dialogOpen.name, dialogOpen.overlay]).toEqual(['menuLogOutDialog', { role: 'alertdialog', name: 'Log out?' }]);
+      expect(withDialog.logOutDialog).toMatchObject({ strategy: 'role', args: ['alertdialog'], accessibleName: 'Log out?' });
+      expect(withDialog.logOutHeading).toMatchObject({ strategy: 'role', args: ['heading', 'Log out?'] });
+      expect(withDialog.cancelButton).toMatchObject({ strategy: 'role', args: ['button', 'Cancel'] });
+      expect(withDialog.logOutButton).toMatchObject({ strategy: 'role', args: ['button', 'Log out'] });
+
+      // Three states at one address, and the entry state keeps its identity and its elements.
+      expect(map.states.map((s) => [s.name, s.urlPath, s.entryPath])).toEqual([
+        ['menu', '/menu.html', '/menu.html'], ['menuMenu', '/menu.html', undefined], ['menuLogOutDialog', '/menu.html', undefined],
+      ]);
+      expect(map.states[0].elements.map((e) => e.name)).toContain('blogsButton');
     } finally {
       await session.close();
     }
@@ -151,6 +287,61 @@ describe('Agent 05 live DOM discovery', () => {
       usedBy: ['TC-001', 'TC-002'],
       actions: [{ element: 'codeInput', op: 'fill', param: 'codeInput' }, { element: 'submitButton', op: 'click' }],
     })]);
+  });
+
+  it('records the sign-in it performed so the page object can reach the states behind it', async () => {
+    process.env.SAMPLE_EMAIL = 'qa@example.test';
+    process.env.SAMPLE_PASSWORD = 's3cret';
+    const result = await discoverFeature({
+      featureId: 'F-04',
+      testCases: [],
+      profile: {
+        ...profile(),
+        testIdAttribute: undefined,
+        discovery: { entryPaths: ['/auth.html'], maxDepth: 1, executeTestSteps: false },
+        auth: { strategy: 'form', credentialEnvVars: { validEmail: 'SAMPLE_EMAIL', validPassword: 'SAMPLE_PASSWORD' } },
+      },
+      pageMapFile: path.join(tmp, 'F-04.json'),
+      fixtureValues: {},
+      plannerSystemPrompt: 'planner',
+      chat: jest.fn(),
+      logger: console,
+      authenticate: true,
+    });
+
+    expect(result.pageMap.states.map((s) => s.name)).toEqual(['auth', 'dashboard']);
+    expect(result.pageMap.auth).toEqual({
+      loginState: 'auth', signedInState: 'dashboard', identifier: 'emailInput', password: 'passwordInput', submit: 'signInButton', identifierEnv: 'SAMPLE_EMAIL', passwordEnv: 'SAMPLE_PASSWORD',
+    });
+    expect(JSON.stringify(result.pageMap)).not.toContain('s3cret');
+  });
+
+  it('waits for a sign-in form that mounts after the entry capture instead of judging the partial page', async () => {
+    process.env.SAMPLE_EMAIL = 'qa@example.test';
+    process.env.SAMPLE_PASSWORD = 's3cret';
+    const warn = jest.fn();
+    const result = await discoverFeature({
+      featureId: 'F-05',
+      testCases: [],
+      profile: {
+        ...profile(),
+        testIdAttribute: undefined,
+        discovery: { entryPaths: ['/late-auth.html'], maxDepth: 1, executeTestSteps: false },
+        auth: { strategy: 'form', credentialEnvVars: { validEmail: 'SAMPLE_EMAIL', validPassword: 'SAMPLE_PASSWORD' } },
+      },
+      pageMapFile: path.join(tmp, 'F-05.json'),
+      fixtureValues: {},
+      plannerSystemPrompt: 'planner',
+      chat: jest.fn(),
+      logger: { ...console, warn },
+      authenticate: true,
+    });
+
+    expect(warn).not.toHaveBeenCalled();
+    expect(result.pageMap.states.map((s) => s.name)).toEqual(['lateAuth', 'dashboard']);
+    expect(result.pageMap.auth).toMatchObject({ loginState: 'lateAuth', signedInState: 'dashboard', identifier: 'emailInput', password: 'passwordInput', submit: 'signInButton' });
+    const login = result.pageMap.states.find((s) => s.name === 'lateAuth');
+    expect(login?.elements.map((e) => e.name)).toEqual(expect.arrayContaining(['helpButton', 'emailInput', 'passwordInput', 'signInButton']));
   });
 
   it('reports unreachable applications as NEEDS_CONTEXT instead of guessing', async () => {

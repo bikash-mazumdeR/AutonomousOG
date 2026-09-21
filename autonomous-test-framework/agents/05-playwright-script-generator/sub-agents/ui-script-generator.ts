@@ -88,7 +88,10 @@ export class UIScriptGenerator {
     const pageObject = pageObjectClassName(ctx.featureKey);
     const pomPath = path.join(ctx.paths.pagesDir, `${pageObject}.ts`);
     const pom = renderPom(discovery.pageMap, {
-      className: pageObject, projectSlug: ctx.projectSlug, basePageImport: importPath(ctx.paths.pagesDir, FRAMEWORK_BASE_PAGE),
+      className: pageObject,
+      projectSlug: ctx.projectSlug,
+      basePageImport: importPath(ctx.paths.pagesDir, FRAMEWORK_BASE_PAGE),
+      envHelperImport: importPath(ctx.paths.pagesDir, FRAMEWORK_ENV_HELPER),
     });
     const hasLocators = pom.contract.members.some((member) => member.kind === MEMBER_KIND.LOCATOR);
     const blocked: TestOutcome[] = ready

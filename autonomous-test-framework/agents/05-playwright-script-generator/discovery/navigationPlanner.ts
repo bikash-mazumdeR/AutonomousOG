@@ -7,11 +7,13 @@
 
 import { AutomationTestCase } from '../contracts/automationTestCase';
 import { MissingItem } from '../../../core/readiness/readinessTypes';
-import { PageState } from './pageMap';
+import { PageState, overlayLabel } from './pageMap';
 
 /** Operations on the page itself; they take no element. */
 export const PAGE_OPERATIONS: readonly string[] = Object.freeze(['reload', 'goBack', 'goForward']);
-export const PLAN_OPERATIONS: readonly string[] = Object.freeze(['fill', 'click', 'check', 'uncheck', 'selectOption', 'press', ...PAGE_OPERATIONS]);
+/** Operations on an element. `hover` and `dblclick` reveal what a pointer does — a menu that opens on hover, a row that opens on double click. */
+export const ELEMENT_OPERATIONS: readonly string[] = Object.freeze(['fill', 'click', 'dblclick', 'hover', 'check', 'uncheck', 'selectOption', 'press']);
+export const PLAN_OPERATIONS: readonly string[] = Object.freeze([...ELEMENT_OPERATIONS, ...PAGE_OPERATIONS]);
 const STOP_REASONS = ['COMPLETE', 'NEEDS_NEW_STATE', 'NOT_ACHIEVABLE'];
 
 /** One planned discovery action. */
@@ -65,11 +67,12 @@ export function buildPlannerRequest(
     currentState: {
       name: currentState.name,
       urlPath: currentState.urlPath,
+      overlay: overlayLabel(currentState.overlay),
       elements: currentState.elements.map((e) => ({
         name: e.name, role: e.role, accessibleName: e.accessibleName, inputType: e.inputType,
       })),
     },
-    knownStates: knownStates.map((state) => ({ name: state.name, urlPath: state.urlPath })),
+    knownStates: knownStates.map((state) => ({ name: state.name, urlPath: state.urlPath, overlay: overlayLabel(state.overlay) })),
   }, null, 2);
 }
 

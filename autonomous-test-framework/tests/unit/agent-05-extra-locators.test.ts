@@ -51,6 +51,11 @@ describe('Page map and page object — css locators', () => {
     expect(locatorExpression({ strategy: 'id', args: ['main'] })).toBe('this.page.locator("#main")');
   });
 
+  it('renders a role element with or without its accessible name', () => {
+    expect(locatorExpression({ strategy: 'role', args: ['menuitem', 'Logout'] })).toBe('this.page.getByRole("menuitem", { name: "Logout", exact: true })');
+    expect(locatorExpression({ strategy: 'role', args: ['alertdialog'] })).toBe('this.page.getByRole("alertdialog")');
+  });
+
   it('keeps a css element captured only in a later visit of the same state', () => {
     const map: PageMap = {
       version: 2, featureId: 'F-01', states: [], traces: [], flows: [],

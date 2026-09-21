@@ -49,8 +49,8 @@ export interface ValidationContext {
   harness: string;
   /** UI: verified flows this test case must call, with the exact arguments of each call. */
   flows?: FlowUsage[];
-  /** UI: states discovery verified after each step (step index → state name and URL path). */
-  verifiedStates?: Record<number, { state: string; urlPath: string }>;
+  /** UI: states discovery verified after each step (step index → state name, URL path and the overlay open there). */
+  verifiedStates?: Record<number, { state: string; urlPath: string; overlay?: string }>;
 }
 
 interface AssertionStatement {
@@ -345,6 +345,8 @@ const STAYS_ON_PAGE = /\b(?:remains?|stays?|is still|are still) on\b|\bno (?:red
 export function verifiedUrlFor(ctx: ValidationContext, stepIndex: number): string | undefined {
   const verified = ctx.verifiedStates?.[stepIndex];
   if (!verified) return undefined;
+  // A dialog or menu opens without changing the address, so its URL is the page's underneath — it cannot prove the step.
+  if (verified.overlay) return undefined;
   const expected = (ctx.tc.steps.find((s) => s.index === stepIndex)?.expected.join(' ') || '').toLowerCase();
   if (STAYS_ON_PAGE.test(expected)) {
     // "Remains on the page / no redirect": the URL discovery saw before the step, and still saw after it, may be asserted.

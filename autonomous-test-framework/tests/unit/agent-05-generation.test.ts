@@ -49,6 +49,15 @@ describe('navigation planner page operations', () => {
     expect(result.errors).toContain('actions[0].element must be omitted for page operation "reload"');
   });
 
+  it('accepts hover and dblclick on a verified element without a value', () => {
+    const result = validateNavigationPlan({
+      actions: [{ stepIndex: 2, op: 'hover', element: 'submitButton' }, { stepIndex: 2, op: 'dblclick', element: 'submitButton' }],
+      stopReason: 'COMPLETE',
+    }, state, tc);
+    expect(result.errors).toEqual([]);
+    expect(result.plan?.actions.map((a) => a.op)).toEqual(['hover', 'dblclick']);
+  });
+
   it('tells the planner which actions were already executed', () => {
     const request = JSON.parse(buildPlannerRequest(tc, [state], state, 2, [{ stepIndex: 1, element: 'submitButton', op: 'click' }]));
     expect(request.executedActions).toEqual([{ stepIndex: 1, element: 'submitButton', op: 'click' }]);

@@ -53,12 +53,8 @@ export interface DiscoveryResult {
   issues: Map<string, MissingItem[]>;
 }
 
-function otherStateNames(map: PageMap, urlPath: string): Set<string> {
-  return new Set(map.states.filter((state) => state.urlPath !== urlPath).map((state) => state.name));
-}
-
 async function captureAndMerge(session: DiscoverySession, map: PageMap, entryPath?: string, reloadVerify = false): Promise<PageState> {
-  const live = await session.captureState(otherStateNames(map, session.currentPath()), entryPath, reloadVerify);
+  const live = await session.captureState(map.states, entryPath, reloadVerify);
   const merged = mergeState(map, live);
   const liveSignatures = new Set(live.elements.map((element) => locatorSignature(element)));
   return { ...merged, elements: merged.elements.filter((element) => liveSignatures.has(locatorSignature(element))) };
@@ -202,10 +198,15 @@ async function crawlTestCase(
  * A failure to sign in is recorded as a warning rather than raised: the crawl still runs, and each
  * test case that needed the authenticated state reports precisely what it could not reach.
  *
+ * The first sign-in that works is recorded on the page map: the page object renders it as `signIn()`,
+ * which is the only way a generated test can reach a state behind the login form — credentials are
+ * kept out of test data, so no test body can perform the sign-in itself.
+ *
  * @param {DiscoverySession} session
  * @param {PageMap} map
  * @param {DiscoverFeatureParams} params
- * @returns {Promise<void>}
+ * @param {PageState} from - The verified entry state holding the sign-in form
+ * @returns {Promise<{ state?: PageState, reason?: string }>}
  */
 async function signIn(
   session: DiscoverySession,
@@ -213,9 +214,16 @@ async function signIn(
   params: DiscoverFeatureParams,
   from: PageState,
 ): Promise<{ state?: PageState; reason?: string }> {
-  const result = await authenticateSession(session, from, params.profile.auth.credentialEnvVars || {});
+  // A client-rendered form may mount after the entry capture; re-capture it rather than judge a partial state.
+  const wait = {
+    recapture: () => captureAndMerge(session, map, from.entryPath),
+    budgetMs: DISCOVERY_SETTINGS.NAVIGATION_TIMEOUT_MS,
+    pollMs: DISCOVERY_SETTINGS.SIGN_IN_FORM_POLL_MS,
+  };
+  const result = await authenticateSession(session, from, params.profile.auth.credentialEnvVars || {}, process.env, wait);
   if (!result.signedIn) return { reason: result.reason };
   const state = await captureAndMerge(session, map, undefined, false);
+  if (!map.auth && result.form) map.auth = { loginState: from.name, signedInState: state.name, ...result.form };
   return { state };
 }
 
@@ -252,7 +260,7 @@ export async function discoverFeature(params: DiscoverFeatureParams): Promise<Di
     }
     if (params.authenticate) {
       const signedInPath = session.currentPath();
-      const from = pageMap.states.find((state) => state.urlPath === signedInPath) || pageMap.states[0];
+      const from = pageMap.states.find((state) => state.urlPath === signedInPath && !state.overlay) || pageMap.states[0];
       const bootstrap = from ? await signIn(session, pageMap, params, from) : { reason: 'No entry state was captured.' };
       if (bootstrap.state) {
         params.logger?.info?.('Discovery signed in', { featureId: params.featureId, state: bootstrap.state.name, elements: bootstrap.state.elements.length });

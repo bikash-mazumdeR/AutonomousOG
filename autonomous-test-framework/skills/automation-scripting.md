@@ -52,7 +52,9 @@ under test and never reuse facts about any application you may know.
 - Interact only through the injected `featurePage` fixture and ONLY with members listed in `pageContract.members`:
   - `kind: "locator"` members are Playwright `Locator` getters — use the Locator API
     (`fill`, `click`, `check`, `uncheck`, `selectOption`, `press`, `hover`, `focus`) and web-first assertions on them.
-  - `kind: "method"` members are async page-object methods (e.g. `open<State>()` to navigate).
+  - `kind: "method"` members are async page-object methods: `open<State>()` to navigate, and `signIn()` when the
+    contract lists it — it performs the sign-in discovery verified, reading the account from the environment inside
+    the page object, so an authenticated precondition is met by calling it and never by filling the form yourself.
   - `kind: "flow"` members perform a verified action sequence and assert nothing. When `applicableFlows` lists a
     flow for the test case you MUST call it — `await featurePage.<member>({ <param>: <expression> })` with exactly
     the listed arguments, once per listed call, in step order — instead of performing its actions one by one.

@@ -9,7 +9,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-/** `css` is used only for locators the AUT profile declares (discovery.extraLocators), never inferred. */
+/**
+ * `role` takes `[role, name]`, or `[role]` alone for a container (dialog, menu, landmark) the page holds exactly one of.
+ * `css` is used only for locators the AUT profile declares (discovery.extraLocators), never inferred.
+ */
 export type LocatorStrategy = 'testId' | 'role' | 'label' | 'placeholder' | 'text' | 'id' | 'css';
 
 /** A verified element (its locator resolved to exactly one element when discovered). */
@@ -25,11 +28,24 @@ export interface PageElement {
   description?: string;
 }
 
-/** A discovered application state, keyed by URL path. */
+/**
+ * The modal overlay open in a state — a dialog or menu that swaps what the page shows without changing its URL.
+ * Identified by role and accessible name, so "Log out?" and "Delete post?" at the same address are two states.
+ */
+export interface StateOverlay {
+  role: string;
+  name?: string;
+}
+
+/**
+ * A discovered application state, keyed by URL path plus the overlay open in it. A single-page application keeps
+ * one address while it opens menus and dialogs, so the URL alone would fold every such view into one state.
+ */
 export interface PageState {
   name: string;
   urlPath: string;
   entryPath?: string;
+  overlay?: StateOverlay;
   elements: PageElement[];
 }
 
@@ -76,6 +92,25 @@ export interface VerifiedFlow {
   usedBy: string[];
 }
 
+/**
+ * The sign-in discovery performed and verified against the application, recorded so the generated page object
+ * can perform the same sign-in and reach the states behind the login form. Holds element names and environment
+ * variable names only — never a credential value.
+ */
+export interface PageMapAuth {
+  /** State holding the sign-in form (an entry state). */
+  loginState: string;
+  /** State the sign-in landed on. */
+  signedInState: string;
+  /** Names, in `loginState`, of the identifier field, the password field and the submit control. */
+  identifier: string;
+  password: string;
+  submit: string;
+  /** Environment variables the identifier and the password are read from. */
+  identifierEnv: string;
+  passwordEnv: string;
+}
+
 /** Page map for one feature. */
 export interface PageMap {
   version: 1 | typeof PAGE_MAP_VERSION;
@@ -84,6 +119,7 @@ export interface PageMap {
   states: PageState[];
   traces?: TestCaseTrace[];
   flows?: VerifiedFlow[];
+  auth?: PageMapAuth;
 }
 
 /**
@@ -179,28 +215,77 @@ export function toPascal(identifier: string): string {
   return identifier.charAt(0).toUpperCase() + identifier.slice(1);
 }
 
+/** Words of a dialog title kept in a state name; the rest of a long title adds nothing to its identity. */
+const OVERLAY_NAME_WORDS = 4;
+
 /**
- * State name from a URL path ("/" → "start", "/account/settings.html" → "accountSettings").
+ * Human-readable overlay identity, e.g. `alertdialog "Log out?"` or `menu`.
+ * @param {StateOverlay | undefined} overlay
+ * @returns {string | undefined}
+ */
+export function overlayLabel(overlay: StateOverlay | undefined): string | undefined {
+  if (!overlay) return undefined;
+  return overlay.name ? `${overlay.role} "${overlay.name}"` : overlay.role;
+}
+
+/**
+ * Identity of a state: its URL path and the overlay open in it.
+ * @param {Pick<PageState, 'urlPath' | 'overlay'>} state
+ * @returns {string}
+ */
+export function stateKey(state: Pick<PageState, 'urlPath' | 'overlay'>): string {
+  return `${state.urlPath}|${overlayLabel(state.overlay) || ''}`;
+}
+
+/**
+ * Suffix that names an overlay inside a state name. A dialog is named by its title ("Log out?" → "LogOutDialog");
+ * a menu by its role alone, because a menu's accessible name is usually borrowed from its trigger — often the
+ * signed-in user's initial or name, which must not become a state name.
+ * @param {StateOverlay} overlay
+ * @returns {string}
+ */
+function overlaySuffix(overlay: StateOverlay): string {
+  const words = /dialog$/.test(overlay.role) && overlay.name
+    ? overlay.name.split(/[^a-zA-Z0-9]+/).filter(Boolean).slice(0, OVERLAY_NAME_WORDS)
+    : [];
+  const kind = /dialog$/.test(overlay.role) ? 'Dialog' : toPascal(overlay.role);
+  return `${toPascal(toCamel(words))}${kind}`;
+}
+
+/**
+ * State name from a URL path and the overlay open there ("/" → "start", "/account/settings.html" → "accountSettings",
+ * "/" with the "Log out?" alertdialog open → "startLogOutDialog").
+ * @param {string} urlPath
+ * @param {StateOverlay | undefined} overlay
+ * @param {Set<string>} taken
+ * @returns {string}
+ */
+export function stateNameFor(urlPath: string, overlay: StateOverlay | undefined, taken: Set<string>): string {
+  const words = urlPath.replace(/\.[a-z0-9]+$/i, '').split(/[^a-zA-Z0-9]+/).filter(Boolean);
+  let base = words.length === 0 ? 'start' : toCamel(words);
+  if (/^[0-9]/.test(base)) base = `page${toPascal(base)}`;
+  return uniqueName(overlay ? `${base}${overlaySuffix(overlay)}` : base, taken);
+}
+
+/**
+ * State name from a URL path alone.
  * @param {string} urlPath
  * @param {Set<string>} taken
  * @returns {string}
  */
 export function stateNameForPath(urlPath: string, taken: Set<string>): string {
-  const words = urlPath.replace(/\.[a-z0-9]+$/i, '').split(/[^a-zA-Z0-9]+/).filter(Boolean);
-  let base = words.length === 0 ? 'start' : toCamel(words);
-  if (/^[0-9]/.test(base)) base = `page${toPascal(base)}`;
-  return uniqueName(base, taken);
+  return stateNameFor(urlPath, undefined, taken);
 }
 
 /**
  * Merges a freshly captured state into the map. Existing elements keep their names; new elements are added
- * with unique names. States are matched by URL path.
+ * with unique names. States are matched by URL path and open overlay.
  * @param {PageMap} map
  * @param {PageState} incoming
  * @returns {PageState} The merged state stored in the map
  */
 export function mergeState(map: PageMap, incoming: PageState): PageState {
-  const existing = map.states.find((state) => state.urlPath === incoming.urlPath);
+  const existing = map.states.find((state) => stateKey(state) === stateKey(incoming));
   if (!existing) {
     map.states.push(incoming);
     return incoming;

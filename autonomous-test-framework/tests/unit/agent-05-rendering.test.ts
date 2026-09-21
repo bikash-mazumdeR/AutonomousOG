@@ -101,6 +101,65 @@ describe('Agent 05 rendering', () => {
   });
 });
 
+describe('Agent 05 verified sign-in in page objects', () => {
+  const authMap: PageMap = {
+    version: 2,
+    featureId: 'F-02',
+    states: [
+      {
+        name: 'login',
+        urlPath: '/login',
+        entryPath: '/login',
+        elements: [
+          { name: 'emailInput', strategy: 'label', args: ['Email'], tag: 'input', role: 'textbox', inputType: 'email' },
+          { name: 'passwordInput', strategy: 'label', args: ['Password'], tag: 'input', inputType: 'password' },
+          { name: 'signInButton', strategy: 'role', args: ['button', 'Sign in'], tag: 'button', role: 'button', accessibleName: 'Sign in' },
+        ],
+      },
+      { name: 'dashboard', urlPath: '/', elements: [{ name: 'dashboardHeading', strategy: 'role', args: ['heading', 'Dashboard'], tag: 'h1', role: 'heading' }] },
+    ],
+    traces: [],
+    flows: [],
+    auth: {
+      loginState: 'login', signedInState: 'dashboard', identifier: 'emailInput', password: 'passwordInput', submit: 'signInButton', identifierEnv: 'APP_EMAIL', passwordEnv: 'APP_PASSWORD',
+    },
+  };
+  const options = { className: 'LoginPage', basePageImport: '../../../pages/BasePage', projectSlug: 'sample', envHelperImport: '../../../helpers/env' };
+
+  it('renders signIn() from the verified form and opens the signed-in state through it', () => {
+    const { code, contract } = renderPom(authMap, options);
+    expect(code).toContain("import { requireEnv } from '../../../helpers/env';");
+    expect(code).toContain('  async signIn(): Promise<void> {\n    await this.navigate("/login");\n'
+      + '    await this.emailInput.fill(requireEnv("APP_EMAIL"));\n    await this.passwordInput.fill(requireEnv("APP_PASSWORD"));\n'
+      + '    await this.signInButton.click();\n  }');
+    expect(code).toContain('  async openDashboard(): Promise<void> {\n    await this.signIn();\n  }');
+    expect(code).not.toContain('process.env');
+    expect(analyzeWithAST(code, FILE_TYPE.POM).findings.filter((f) => f.severity === FINDING_SEVERITY.BLOCKER)).toEqual([]);
+
+    const methods = contract.members.filter((member) => member.kind === MEMBER_KIND.METHOD);
+    expect(methods.map((member) => [member.name, member.state])).toEqual([['openLogin', 'login'], ['openDashboard', 'dashboard'], ['signIn', 'dashboard']]);
+    expect(methods[1].description).toContain('by signing in');
+    expect(methods[2].description).toContain('APP_EMAIL, APP_PASSWORD');
+    expect(methods[2].description).toContain('never fill the sign-in form');
+  });
+
+  it('drops a sign-in whose members are no longer verified, and refuses to render one without the env helper', () => {
+    const stale: PageMap = { ...authMap, auth: { ...authMap.auth!, submit: 'vanishedButton' } };
+    const { code, contract } = renderPom(stale, options);
+    expect(code).not.toContain('async signIn(');
+    expect(code).not.toContain('requireEnv');
+    expect(contract.members.map((member) => member.name)).not.toContain('openDashboard');
+    expect(() => renderPom(authMap, { ...options, envHelperImport: undefined })).toThrow('envHelperImport is required');
+  });
+
+  it('keeps direct navigation for a signed-in state that is also an entry state', () => {
+    const shared: PageMap = { ...authMap, states: [authMap.states[0], { ...authMap.states[1], entryPath: '/' }] };
+    const { code } = renderPom(shared, options);
+    expect(code).toContain('  async openDashboard(): Promise<void> {\n    await this.navigate("/");\n  }');
+    expect(code).toContain('async signIn(): Promise<void>');
+  });
+});
+
 describe('Agent 05 verified flows in page objects', () => {
   const flowMap: PageMap = {
     ...map,

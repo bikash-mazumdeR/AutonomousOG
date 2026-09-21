@@ -63,6 +63,10 @@ export const PAGE_FIXTURE = 'featurePage';
 export const DATA_FIXTURE = 'data';
 export const ENV_FUNCTION = 'env';
 
+/** Page-object method that performs the sign-in discovery verified; the framework env helper it reads credentials with. */
+export const SIGN_IN_METHOD = 'signIn';
+export const POM_ENV_FUNCTION = 'requireEnv';
+
 /**
  * Browser-storage accessors generated tests may call for application state that no locator can observe.
  * A body that uses one gets the helper import; the storage key always comes from the approved test case.
@@ -122,7 +126,43 @@ export const DISCOVERY_SETTINGS = Object.freeze({
   MAX_ELEMENTS_PER_STATE: 150,
   MAX_TEXT_LENGTH: 80,
   PLANNER_ATTEMPTS: 2,
+  /** Budget for reading one element's accessibility snapshot; an element that vanished must not stall the capture. */
+  ARIA_SNAPSHOT_TIMEOUT_MS: 2000,
+  /** Poll interval while a client-rendered sign-in form finishes mounting before the bootstrap judges it. */
+  SIGN_IN_FORM_POLL_MS: 250,
 });
+
+/**
+ * Attribute discovery stamps on the elements it inventories so each can be addressed for its accessibility
+ * snapshot; removed again before the capture ends.
+ */
+export const DISCOVERY_MARK_ATTRIBUTE = 'data-aria-discovery';
+
+/**
+ * Roles whose accessible name is their visible content, so that text also addresses them (`getByText`).
+ * Everything else names itself by label, attribute or reference and is never matched by text.
+ */
+export const CONTENT_NAMED_ROLES: ReadonlySet<string> = new Set([
+  'button', 'link', 'heading', 'menuitem', 'menuitemcheckbox', 'menuitemradio', 'option', 'tab', 'treeitem',
+  'cell', 'gridcell', 'columnheader', 'rowheader', 'switch', 'listitem',
+]);
+
+/**
+ * Roles whose open instance makes the page a different state at the same URL, in order of precedence when several
+ * are open at once (a confirmation raised from a menu sits above the menu).
+ */
+export const OVERLAY_ROLES: readonly string[] = Object.freeze(['alertdialog', 'dialog', 'menu']);
+
+/**
+ * Roles that are addressable by role alone (`getByRole('alertdialog')`) when the page holds exactly one: overlays,
+ * landmarks and composite widgets. They typically carry no accessible name, which is why a role + name locator
+ * cannot capture them, yet a test must reach them to assert what they show or to scope its own assertions.
+ */
+export const CONTAINER_ROLES: ReadonlySet<string> = new Set([
+  'dialog', 'alertdialog', 'menu', 'menubar', 'alert', 'status', 'log', 'tooltip', 'navigation', 'main', 'banner',
+  'contentinfo', 'complementary', 'search', 'form', 'region', 'tablist', 'tabpanel', 'toolbar', 'tree', 'grid',
+  'table', 'list', 'listbox', 'radiogroup', 'progressbar',
+]);
 
 /** Verified flows: a run of at least MIN_ACTIONS actions that at least MIN_USERS test cases performed identically. */
 export const FLOW_SETTINGS = Object.freeze({
