@@ -51,7 +51,7 @@ async function answerQuestions(outcome: EditOutcome, answeredBy: string, logger:
   }
 }
 
-function updateTestDataHandler(logger: Logger, fixturesPath: string) {
+function updateTestDataHandler(logger: Logger, fixturesPath: () => string) {
   return async (req: Request, res: Response) => {
     const body = req.body || {};
     try {
@@ -68,7 +68,7 @@ function updateTestDataHandler(logger: Logger, fixturesPath: string) {
       if (outcome.errors.length > 0) return res.status(400).json({ error: outcome.errors.join(' '), errors: outcome.errors });
 
       await stateManager.setPipelineArtifact(TEST_DATA_ARTIFACT, testData);
-      const flatTestData = syncFixturesFileFromTestData(testData, undefined, fixturesPath);
+      const flatTestData = syncFixturesFileFromTestData(testData, undefined, fixturesPath());
       const answeredClarifications = await answerQuestions(outcome, String(body.answeredBy || DEFAULT_EDITOR), logger);
       logger.info('Test data updated via Agent 04 UI', {
         type: body.type || EDIT_TYPE.SINGLE_TC, tcKey: body.tcKey, changes: outcome.changes.length, ignored: outcome.ignored.length, answeredClarifications: answeredClarifications.length,
@@ -87,9 +87,10 @@ function updateTestDataHandler(logger: Logger, fixturesPath: string) {
  * Mounts the Agent 04 test data edit routes.
  * @param {Express} app
  * @param {Logger} logger
- * @param {string} fixturesPath - Flat fixture file to re-sync after an edit
+ * @param {Function} fixturesPath - Resolves the current project's flat fixture file, called per
+ *   request: which project the pipeline is on can change between one edit and the next.
  */
-export function registerAgent04DataRoutes(app: Express, logger: Logger, fixturesPath: string): void {
+export function registerAgent04DataRoutes(app: Express, logger: Logger, fixturesPath: () => string): void {
   const handler = updateTestDataHandler(logger, fixturesPath);
   app.put('/api/agent04/data', handler);
   app.post('/api/agent04/data', handler);

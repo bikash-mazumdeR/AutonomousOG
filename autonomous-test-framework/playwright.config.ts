@@ -21,6 +21,26 @@ const profile = profileFile && fs.existsSync(profileFile) ? JSON.parse(fs.readFi
 const projectSpecsDir = projectSlug ? path.join(__dirname, 'tests', 'projects', projectSlug, 'specs') : null;
 const browsers: string[] = Array.isArray(profile?.browsers) && profile.browsers.length > 0 ? profile.browsers : ['chromium'];
 
+/**
+ * Positive integer from the environment, or the fallback when unset, non-numeric or not positive.
+ * @param {string} name
+ * @param {number} fallback
+ * @returns {number}
+ */
+function envInt(name: string, fallback: number): number {
+  const parsed = Number(process.env[name]);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
+// An application whose first paint is slow — a large JavaScript bundle, a cold start, a throttled
+// link — needs every budget raised together, so these are configurable rather than fixed.
+const ACTION_TIMEOUT = envInt('PLAYWRIGHT_ACTION_TIMEOUT', 10000);
+const NAVIGATION_TIMEOUT = envInt('PLAYWRIGHT_NAVIGATION_TIMEOUT', 15000);
+// A per-test budget smaller than the navigation it must contain fails the test before the page has
+// loaded, reported as a test timeout rather than as the slow page it is. Raising the navigation
+// budget alone therefore raises this floor with it, unless the caller sets an explicit value.
+const TEST_TIMEOUT = envInt('PLAYWRIGHT_TIMEOUT', Math.max(30000, NAVIGATION_TIMEOUT + ACTION_TIMEOUT + 5000));
+
 const BROWSER_PROJECTS: Record<string, any> = {
   chromium: { name: 'chromium', use: { ...devices['Desktop Chrome'], channel: 'chrome' } },
   firefox: { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
@@ -36,7 +56,7 @@ module.exports = defineConfig({
   fullyParallel: true,
   workers: parseInt(process.env.PLAYWRIGHT_WORKERS || '3', 10),
   retries: parseInt(process.env.PLAYWRIGHT_RETRIES || '1', 10),
-  timeout: parseInt(process.env.PLAYWRIGHT_TIMEOUT || '30000', 10),
+  timeout: TEST_TIMEOUT,
   forbidOnly: !!process.env.CI, // Fail if test.only left in code in CI
 
   // ── Reporting ────────────────────────────────────────────────────────────
@@ -60,8 +80,8 @@ module.exports = defineConfig({
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
     trace: 'on-first-retry',
-    actionTimeout: 10000,
-    navigationTimeout: 15000,
+    actionTimeout: ACTION_TIMEOUT,
+    navigationTimeout: NAVIGATION_TIMEOUT,
     viewport: { width: 1280, height: 720 },
     ignoreHTTPSErrors: true,
     testIdAttribute: process.env.PLAYWRIGHT_TEST_ID_ATTRIBUTE || profile?.testIdAttribute || 'data-testid',

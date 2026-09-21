@@ -9,6 +9,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { isTestCaseSelected, GherkinKeyword, REVIEW_STATUS } from '../../core/types';
+import { projectPaths } from '../../core/aut/projectPaths';
 
 /** Feature file tags for test cases excluded from automation at review. */
 const REVIEW_STATUS_TAGS: Readonly<Record<string, string>> = Object.freeze({
@@ -17,7 +18,6 @@ const REVIEW_STATUS_TAGS: Readonly<Record<string, string>> = Object.freeze({
 });
 import { TC_TYPE, TYPE_TAGS } from './constants';
 
-const FEATURES_DIR = path.resolve(__dirname, '../../tests/features');
 const GHERKIN_KEYWORDS: readonly GherkinKeyword[] = ['Given', 'When', 'Then', 'And', 'But'];
 const ACTION_KEYWORDS: ReadonlySet<string> = new Set(['Given', 'When']);
 const UNMAPPED_STORY_ID = 'UNMAPPED';
@@ -149,33 +149,32 @@ function findStoryContext(analysis: any, storyId: string): StoryContext {
 }
 
 /**
- * Finds the folder/file already holding this story's feature file. feature.name is regenerated
- * by Agent 01 on every run, so only the storyId prefix is a stable identity.
+ * Finds the file already holding this story, inside its own feature folder.
+ *
+ * The search is deliberately confined to that folder. Agent 01 numbers stories from US-01 for every
+ * requirement document, so a project's second requirement has a US-01 of its own; searching every
+ * folder for the storyId prefix let the newer requirement claim — and overwrite — the older
+ * requirement's feature file. A renamed feature now opens a new folder instead, which leaves the
+ * previous file in place rather than destroying it.
  */
-function findExistingStoryFile(storyId: string): { dir: string; fileName: string } | null {
-  if (!fs.existsSync(FEATURES_DIR)) return null;
-  const isStoryFile = (file: string) => file.endsWith('.feature') && file.startsWith(`${storyId}-`);
-  for (const entry of fs.readdirSync(FEATURES_DIR, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const dir = path.join(FEATURES_DIR, entry.name);
-    const matches = fs.readdirSync(dir).filter(isStoryFile).sort((a, b) => a.length - b.length);
-    if (matches.length > 0) return { dir, fileName: matches[0] };
-  }
-  return null;
+function findExistingStoryFile(storyId: string, dir: string): string | null {
+  if (!fs.existsSync(dir)) return null;
+  const matches = fs.readdirSync(dir)
+    .filter((file) => file.endsWith('.feature') && file.startsWith(`${storyId}-`))
+    .sort((a, b) => a.length - b.length);
+  return matches[0] || null;
 }
 
 function slugify(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
-function resolveStoryFile(storyId: string, ctx: StoryContext): { dir: string; baseName: string } {
-  const existing = findExistingStoryFile(storyId);
-  if (existing) {
-    return { dir: existing.dir, baseName: existing.fileName.replace(/\.feature$/i, '').replace(/-(api|perf)$/i, '') };
-  }
+function resolveStoryFile(featuresDir: string, storyId: string, ctx: StoryContext): { dir: string; baseName: string } {
   const folder = String(ctx.feature?.name || DEFAULT_FEATURE_FOLDER).replace(/[/\\?%*:|"<>]/g, '-').trim();
-  const dir = path.join(FEATURES_DIR, folder);
+  const dir = path.join(featuresDir, folder);
+  const existing = findExistingStoryFile(storyId, dir);
   fs.mkdirSync(dir, { recursive: true });
+  if (existing) return { dir, baseName: existing.replace(/\.feature$/i, '').replace(/-(api|perf)$/i, '') };
   return { dir, baseName: `${storyId}-${slugify(ctx.story?.title || ctx.feature?.name || 'feature')}` };
 }
 
@@ -193,17 +192,23 @@ function renderFeatureFile(ctx: StoryContext, storyId: string, titleSuffix: stri
  * Writes one .feature file per story partition (UI / API / Performance) with strict 1:1
  * scenario ↔ test case parity. Deselected test cases are tagged @obsolete; partition files
  * that no longer have test cases are removed.
+ *
+ * Files land under the project's own generated-test root, never in a shared folder, so a feature
+ * uploaded for one application cannot appear among another application's features.
+ *
+ * @param {string} projectId - Project the requirement belongs to
  * @param {any} analysis - analyzedRequirements artifact (for feature/story narrative)
  * @param {any[]} testCases
  * @param {any} [logger]
  * @returns {string[]} Written file paths
  */
-export function syncFeatureFiles(analysis: any, testCases: any[], logger?: any): string[] {
-  fs.mkdirSync(FEATURES_DIR, { recursive: true });
+export function syncFeatureFiles(projectId: string, analysis: any, testCases: any[], logger?: any): string[] {
+  const featuresDir = projectPaths(projectId).featuresDir;
+  fs.mkdirSync(featuresDir, { recursive: true });
   const savedPaths: string[] = [];
   for (const [storyId, storyTCs] of groupByStory(testCases || [])) {
     const ctx = findStoryContext(analysis, storyId);
-    const target = resolveStoryFile(storyId, ctx);
+    const target = resolveStoryFile(featuresDir, storyId, ctx);
     for (const partition of PARTITIONS) {
       const filePath = path.join(target.dir, `${target.baseName}${partition.suffix}.feature`);
       const partitionTCs = storyTCs.filter((tc) => partition.matches(String(tc.type || '')));

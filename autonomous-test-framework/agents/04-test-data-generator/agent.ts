@@ -19,7 +19,8 @@ import { approvalGate } from '../../core/approval-gate/ApprovalGate';
 import { Logger } from '../../core/logger/Logger';
 import { FRAMEWORK_CONFIG } from '../../config/framework.config';
 import { isAutomationApproved, reviewExclusionReason } from '../../core/types';
-import { buildFlatTestData } from '../../core/state-manager/FixtureSync';
+import { syncFixturesFileFromTestData } from '../../core/state-manager/FixtureSync';
+import { projectPaths } from '../../core/aut/projectPaths';
 import { ClarificationStore } from '../../core/clarifications/ClarificationStore';
 import { CREDENTIAL_STORAGE, loadAutProfile } from '../../core/aut/AutProfile';
 import { STAGE_ID, VALUE_SOURCE } from './constants';
@@ -35,6 +36,7 @@ import { injectResolvedData, isBoundToEnvironment, summarizeInputs } from './tes
 import { llmClient } from '../../core/llm/LLMClient';
 import { buildStagePromptTrace } from '../../core/llm/stagePromptTrace';
 import { savePromptTrace } from '../../core/state-manager/promptTraceStore';
+import { LATEST_PROJECT_SQL } from '../../core/state-manager/projectResolver';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -569,16 +571,11 @@ class TestDataGeneratorAgent {
       'utf-8',
     );
 
-    // Flat key-value fixture for Playwright via the shared builder (requirement values come from manifest.requirementValues)
-    const fixturesDir = path.resolve(__dirname, '../../tests/fixtures');
-    if (!fs.existsSync(fixturesDir)) fs.mkdirSync(fixturesDir, { recursive: true });
-
-    const flatTestData = buildFlatTestData(manifest);
-    fs.writeFileSync(
-      path.join(fixturesDir, 'test-data.json'),
-      JSON.stringify(flatTestData, null, 2),
-      'utf-8',
-    );
+    // Flat key-value fixture for Playwright, written inside the project's own generated-test root,
+    // which is where its specs import it from. syncFixturesFileFromTestData is the single writer of
+    // that file and merges, so another requirement's keys survive this run.
+    const { fixturesDir, fixtureFile } = projectPaths(stateManager.getProjectId());
+    const flatTestData = syncFixturesFileFromTestData(manifest, undefined, fixtureFile);
 
     this._logger.info('Test data saved to disk (flat fixtures synced)', { outDir, fixturesDir, keysCount: Object.keys(flatTestData).length });
   }
@@ -617,7 +614,7 @@ if (require.main === module) {
     if (!activeProjectId) {
       try {
         const stateDb = stateManager.getDatabase();
-        const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get() as any;
+        const latestRun = stateDb.prepare(LATEST_PROJECT_SQL).get() as any;
         if (latestRun?.project_id) {
           activeProjectId = latestRun.project_id;
         }

@@ -42,7 +42,11 @@ import {
 } from './contracts/automationTestCase';
 import { TestOutcome } from './generation/testBodyGenerator';
 import { renderTestTitle } from './rendering/specRenderer';
-import { removeStaleGeneratedFiles, toRelative, writeManifest } from './output/manifest';
+import {
+  findUnclaimedGeneratedFiles, readManifest, removeSupersededFiles, toRelative, writeManifest,
+} from './output/manifest';
+import { requirementScope, scopedFeatureKey, toSpecStem } from '../../core/aut/requirementScope';
+import { writeFixtureFile } from '../../core/state-manager/FixtureSync';
 import { UIScriptGenerator } from './sub-agents/ui-script-generator';
 import { APIScriptGenerator } from './sub-agents/api-script-generator';
 import { K6ScriptGenerator } from './sub-agents/k6-script-generator';
@@ -50,6 +54,7 @@ import { FeatureGenerationContext, FeatureGenerationResult } from './sub-agents/
 import { writeBackClarifications } from './clarifications/writeBack';
 import { buildStagePromptTrace, TraceRecorder } from '../../core/llm/stagePromptTrace';
 import { savePromptTrace } from '../../core/state-manager/promptTraceStore';
+import { LATEST_PROJECT_SQL } from '../../core/state-manager/projectResolver';
 
 const PROMPT_TRACE_FILE = 'playwright-script-generation-prompt-trace.json';
 
@@ -70,6 +75,12 @@ interface ApprovedScope {
 interface SharedGeneration {
   profile: ResolvedAutProfile;
   paths: ProjectPaths;
+  /** Requirement this generation belongs to, e.g. "logout". Scopes file names and file ownership. */
+  scope: string;
+  /** Explicit file stem from --spec-name, e.g. "Logout" -> Logout.spec.ts, LogoutPage.ts. */
+  specStem: string;
+  /** Sign in before discovery, for a requirement whose states sit behind the login form. */
+  authenticate: boolean;
   sourceReviewId: string | null;
   fixtureValues: Record<string, unknown>;
   priorReviewFindings: Array<{ ruleId: string; message: string }>;
@@ -144,12 +155,22 @@ class PlaywrightScriptGeneratorAgent {
       const fixture = new FixtureAccumulator();
       const testCases = scope.approved.map((tc) => buildAutomationTestCase(tc, scope.rawByKey.get(tc.key), fixture));
       const sourceReviewId = input.reviewedTestCases?.reviewId || null;
+      // The requirement behind this run. Feature ids restart at F-01 for every requirement document, so
+      // the scope is what keeps one requirement's specs, page objects and K6 scripts off another's.
+      const analysis = input.analyzedRequirements ?? await stateManager.getPipelineArtifact('analyzedRequirements');
       const shared: SharedGeneration = {
-        profile, paths, sourceReviewId, fixtureValues: fixture.toObject(), priorReviewFindings: await this._priorReviewFindings(input, paths, sourceReviewId),
+        profile,
+        paths,
+        scope: requirementScope(analysis),
+        specStem: toSpecStem(String(input.specName || '')),
+        authenticate: Boolean(input.authenticate),
+        sourceReviewId,
+        fixtureValues: fixture.toObject(),
+        priorReviewFindings: await this._priorReviewFindings(input, paths, sourceReviewId),
       };
 
       this._logger.info('Generating automation for approved test cases', {
-        project: paths.slug, approved: testCases.length, excluded: scope.excluded.length, aut: profile.displayName,
+        project: paths.slug, requirement: shared.scope, approved: testCases.length, excluded: scope.excluded.length, aut: profile.displayName,
       });
       const results = await this._generateFeatures(testCases, shared);
       const output = this._persistOutputs(results, testCases, scope, shared);
@@ -209,6 +230,24 @@ class PlaywrightScriptGeneratorAgent {
 
   // ── Generation ───────────────────────────────────────────────────────────
 
+  /**
+   * File stem for one feature of this requirement.
+   *
+   * --spec-name names the files directly, which is why it drops the feature id when the requirement
+   * has a single feature: "Logout" then yields Logout.spec.ts rather than Logout-F-01.spec.ts. With
+   * several features the id is kept, because one name cannot address them all. Without the option the
+   * requirement scope is used, which is unique per requirement and so cannot collide with another.
+   * @param {SharedGeneration} shared
+   * @param {string} featureId
+   * @param {number} featureCount - Features generated in this run
+   * @returns {string}
+   * @private
+   */
+  private _featureKey(shared: SharedGeneration, featureId: string, featureCount: number): string {
+    if (!shared.specStem) return scopedFeatureKey(shared.scope, featureId);
+    return featureCount === 1 ? shared.specStem : `${shared.specStem}-${featureId}`;
+  }
+
   private async _generateFeatures(testCases: AutomationTestCase[], shared: SharedGeneration): Promise<FeatureGenerationResult[]> {
     const byFeature = new Map<string, AutomationTestCase[]>();
     testCases.forEach((tc) => byFeature.set(tc.featureId, [...(byFeature.get(tc.featureId) || []), tc]));
@@ -218,6 +257,7 @@ class PlaywrightScriptGeneratorAgent {
       const ctx: FeatureGenerationContext = {
         projectSlug: shared.paths.slug,
         featureId,
+        featureKey: this._featureKey(shared, featureId, byFeature.size),
         sourceReviewId: shared.sourceReviewId,
         profile: shared.profile,
         paths: shared.paths,
@@ -227,6 +267,7 @@ class PlaywrightScriptGeneratorAgent {
         maxRetries: FRAMEWORK_CONFIG.selfReviewRetries,
         concurrency: Math.max(1, FRAMEWORK_CONFIG.maxThreads),
         headless: FRAMEWORK_CONFIG.playwright.headless,
+        authenticate: Boolean(shared.authenticate),
         logger: this._logger,
         trace: this._trace,
       };
@@ -286,13 +327,32 @@ class PlaywrightScriptGeneratorAgent {
     return result;
   }
 
+  /**
+   * Retires the files this requirement wrote on its previous run and reports the ones no requirement
+   * claims. Only this scope's files are ever deleted: another requirement's generated tests must
+   * survive untouched, and files predating scoped ownership are reported rather than removed.
+   * @param {SharedGeneration} shared
+   * @param {ReadonlySet<string>} keep - Absolute paths written by the current run
+   * @private
+   */
+  private _retireOwnedFiles(shared: SharedGeneration, keep: ReadonlySet<string>) {
+    const { paths } = shared;
+    const manifest = readManifest(paths.manifestFile, paths.slug);
+    const removed = removeSupersededFiles(FRAMEWORK_ROOT, manifest.scopes[shared.scope]?.files || [], keep);
+    const claimed = new Set<string>(keep);
+    Object.values(manifest.scopes).forEach((entry) => entry.files
+      .forEach((relative) => claimed.add(path.resolve(FRAMEWORK_ROOT, relative))));
+    const unclaimed = findUnclaimedGeneratedFiles([paths.specsDir, paths.pagesDir, paths.k6Dir], claimed);
+    return { removed, unclaimed, manifest };
+  }
+
   private _persistOutputs(results: FeatureGenerationResult[], testCases: AutomationTestCase[], scope: ApprovedScope, shared: SharedGeneration): PlaywrightScriptsArtifact {
     const { paths } = shared;
     const files = results.flatMap((r) => r.files);
     [paths.specsDir, paths.pagesDir, paths.k6Dir, paths.fixturesDir, paths.pageMapsDir].forEach((dir) => fs.mkdirSync(dir, { recursive: true }));
-    fs.writeFileSync(paths.fixtureFile, `${JSON.stringify(shared.fixtureValues, null, 2)}\n`, 'utf-8');
+    writeFixtureFile(paths.fixtureFile, shared.fixtureValues);
     files.forEach((file) => fs.writeFileSync(file.path, file.content, 'utf-8'));
-    const removed = removeStaleGeneratedFiles([paths.specsDir, paths.pagesDir, paths.k6Dir], new Set(files.map((f) => path.resolve(f.path))));
+    const { removed, unclaimed, manifest } = this._retireOwnedFiles(shared, new Set(files.map((f) => path.resolve(f.path))));
 
     const outcomes = new Map(results.flatMap((r) => r.outcomes).map((o) => [o.tcKey, o]));
     const fileByTcKey = new Map(results.flatMap((r) => [...r.fileByTcKey.entries()]));
@@ -305,16 +365,17 @@ class PlaywrightScriptGeneratorAgent {
 
     const warnings = [
       ...scope.warnings,
-      ...(removed.length > 0 ? [`Removed ${removed.length} stale generated file(s): ${removed.map((f) => toRelative(FRAMEWORK_ROOT, f)).join(', ')}`] : []),
+      ...(removed.length > 0 ? [`Removed ${removed.length} superseded ${shared.scope} file(s): ${removed.map((f) => toRelative(FRAMEWORK_ROOT, f)).join(', ')}`] : []),
+      ...(unclaimed.length > 0 ? [`${unclaimed.length} generated file(s) belong to no recorded requirement and were left in place; `
+        + `delete them once their requirement has been regenerated: ${unclaimed.map((f) => toRelative(FRAMEWORK_ROOT, f)).join(', ')}`] : []),
       ...testCaseResults.filter((r) => r.status === TC_OUTCOME.BLOCKED).map((r) => `${r.tcKey} BLOCKED: ${r.reason}`),
     ];
-    writeManifest(paths.manifestFile, {
-      version: 1,
-      projectSlug: paths.slug,
+    manifest.scopes[shared.scope] = {
       sourceReviewId: shared.sourceReviewId,
       files: files.map((f) => toRelative(FRAMEWORK_ROOT, f.path)),
       testCases: testCaseResults.map(({ tcKey, status, file }) => ({ tcKey, status, file })),
-    });
+    };
+    writeManifest(paths.manifestFile, manifest);
 
     return {
       projectSlug: paths.slug,
@@ -430,7 +491,7 @@ function resolveProjectId(opts: Record<string, any>): string {
   try {
     const { stateDb } = require('../../core/state-manager/Database');
     stateDb.initialize();
-    const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get();
+    const latestRun = stateDb.prepare(LATEST_PROJECT_SQL).get();
     if (latestRun?.project_id) return latestRun.project_id;
   } catch {
     // fall back to configuration
@@ -440,7 +501,8 @@ function resolveProjectId(opts: Record<string, any>): string {
 
 if (require.main === module) {
   (async () => {
-    const projectId = resolveProjectId(parseCliArgs(process.argv.slice(2)));
+    const opts = parseCliArgs(process.argv.slice(2));
+    const projectId = resolveProjectId(opts);
     await stateManager.initialize(projectId);
     await memoryEngine.initialize(projectId);
 
@@ -451,6 +513,10 @@ if (require.main === module) {
     }
     const result = await new PlaywrightScriptGeneratorAgent().run({
       projectId,
+      // --spec-name=Logout names the generated files Logout.spec.ts / LogoutPage.ts.
+      specName: opts['spec-name'],
+      // --authenticate signs discovery in first, for a feature that lives behind the login form.
+      authenticate: Boolean(opts.authenticate),
       reviewedTestCases,
       testData: await stateManager.getPipelineArtifact('testData'),
       reviewedScripts: await stateManager.getPipelineArtifact('reviewedScripts'),

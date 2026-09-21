@@ -9,9 +9,11 @@ import { llmClient } from '../core/llm/LLMClient';
 import { memoryEngine } from '../core/project-memory/MemoryEngine';
 import { Logger } from '../core/logger/Logger';
 import { registerAgent04DataRoutes } from './agent04DataRoutes';
+import { projectPaths } from '../core/aut/projectPaths';
 import path from 'path';
 import fs from 'fs';
 import * as http from 'http';
+import { LATEST_PROJECT_SQL } from '../core/state-manager/projectResolver';
 
 const app = express();
 const PORT = parseInt(process.env.AGENT04_UI_PORT || '3003', 10);
@@ -19,7 +21,9 @@ const APPROVAL_PORT = parseInt(process.env.APPROVAL_WEBHOOK_PORT || '8081', 10);
 const logger = new Logger('Agent04UI');
 
 const FRAMEWORK_DIR = path.resolve(__dirname, '..');
-const FIXTURES_PATH = path.join(FRAMEWORK_DIR, 'tests', 'fixtures', 'test-data.json');
+// Resolved per call, never cached: the fixture file belongs to whichever project the pipeline is
+// on, and generated tests import it from that project's own folder.
+const fixturesPath = () => projectPaths(stateManager.getProjectId()).fixtureFile;
 
 app.use(express.json());
 registerPipelineRoutes(app);
@@ -55,14 +59,14 @@ app.get('/api/agent04/state', async (_req: Request, res: Response) => {
     const { stage, reviewedTestCases, testData, stored, freshness } = await loadCurrentTestData(stateManager);
 
     let flatTestData: Record<string, any> = {};
-    if (testData && fs.existsSync(FIXTURES_PATH)) {
+    if (testData && fs.existsSync(fixturesPath())) {
       try {
-        flatTestData = JSON.parse(fs.readFileSync(FIXTURES_PATH, 'utf-8'));
+        flatTestData = JSON.parse(fs.readFileSync(fixturesPath(), 'utf-8'));
       } catch (_) {}
     }
     if (Object.keys(flatTestData).length === 0 && testData) {
       try {
-        flatTestData = syncFixturesFileFromTestData(testData, undefined, FIXTURES_PATH);
+        flatTestData = syncFixturesFileFromTestData(testData, undefined, fixturesPath());
       } catch (_) {}
     }
 
@@ -94,7 +98,7 @@ app.post('/api/agent04/run', async (req: Request, res: Response) => {
   if (!projectName) {
     try {
       const stateDb = stateManager.getDatabase();
-      const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get() as any;
+      const latestRun = stateDb.prepare(LATEST_PROJECT_SQL).get() as any;
       if (latestRun?.project_id) projectName = latestRun.project_id;
     } catch (_) {}
   }
@@ -184,7 +188,7 @@ function handleApproval(stageId: string, action: 'approve' | 'reject') {
         if (!(stateManager as any)._initialized) {
           try {
             const stateDb = stateManager.getDatabase();
-            const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get() as any;
+            const latestRun = stateDb.prepare(LATEST_PROJECT_SQL).get() as any;
             await stateManager.initialize(latestRun?.project_id || 'ARIA Project');
             await memoryEngine.initialize(latestRun?.project_id || 'ARIA Project');
           } catch (_) {
@@ -253,8 +257,8 @@ app.post('/api/agent04/approve', async (req: Request, res: Response) => {
       return res.status(409).json({ error: `Cannot approve Agent 04: ${freshness.reason} Run Agent 04 first.` });
     }
     // Only sync the fixture — never copy the artifact into the current run (that is how stale data spread)
-    syncFixturesFileFromTestData(testData, undefined, FIXTURES_PATH);
-    logger.info('Synchronized fixtures to disk on Agent 04 approval', { fixturesPath: FIXTURES_PATH });
+    syncFixturesFileFromTestData(testData, undefined, fixturesPath());
+    logger.info('Synchronized fixtures to disk on Agent 04 approval', { fixturesPath: fixturesPath() });
   } catch (err: any) {
     logger.error('Agent 04 approval pre-check failed', { error: err.message });
     return res.status(500).json({ error: err.message });
@@ -321,7 +325,7 @@ app.post('/api/agent04/chat', async (req: Request, res: Response) => {
 });
 
 // ── PUT / POST /api/agent04/data (Human Test Data Override) ───────────────────
-registerAgent04DataRoutes(app, logger, FIXTURES_PATH);
+registerAgent04DataRoutes(app, logger, fixturesPath);
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {

@@ -54,3 +54,21 @@ export function findReusableAnalysis(previous: any, inputFingerprint: string): a
   if (!matches || !Array.isArray(previous.features) || previous.features.length === 0) return null;
   return JSON.parse(JSON.stringify(previous));
 }
+
+/**
+ * Whether this requirement needs a run of its own.
+ *
+ * Runs are per requirement, not per project: a project accumulates one run per requirement document
+ * it has ingested. A requirement whose content differs from the one the current run holds must branch
+ * into a fresh run, so the previous requirement's analysis, test cases, test data and scripts stay
+ * exactly as they were. The same requirement analysed again keeps its run and invalidates the
+ * downstream stages in place.
+ *
+ * @param {any} currentAnalysis - analyzedRequirements of the run currently open, if any
+ * @param {string} requirementFingerprint - Content identity of the incoming requirement
+ * @returns {boolean}
+ */
+export function requiresIsolatedRun(currentAnalysis: any, requirementFingerprint: string): boolean {
+  const current = String(currentAnalysis?.requirementFingerprint || '');
+  return Boolean(current) && current !== requirementFingerprint;
+}

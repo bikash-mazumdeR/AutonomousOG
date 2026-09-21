@@ -19,7 +19,8 @@ import { analyzeWithAST, FILE_TYPE, FINDING_SEVERITY } from '../../../core/autom
 import { FRAMEWORK_BASE_PAGE, FRAMEWORK_ENV_HELPER, FRAMEWORK_STORAGE_HELPER } from '../../../core/aut/projectPaths';
 import { loadDiscoveryPrompt, loadGenerationPrompt } from './shared/generation-utils';
 import {
-  FeatureGenerationContext, FeatureGenerationResult, GeneratedFile, fileStem, needsContextOutcome, splitByReadiness,
+  FeatureGenerationContext, FeatureGenerationResult, GeneratedFile, fileStem, missingForTestCase,
+  needsContextOutcome, splitByReadiness,
 } from './shared/featureContext';
 
 type SpecBase = Omit<UiSpecParams, 'tests' | 'hook'>;
@@ -67,7 +68,7 @@ export class UIScriptGenerator {
     const { ready, notReady } = splitByReadiness(testCases, ctx.profile, 'UI');
     if (ready.length === 0) return { outcomes: notReady, files: [], fileByTcKey: new Map() };
 
-    const stem = fileStem(ctx.featureId);
+    const stem = fileStem(ctx.featureKey);
     const pageMapFile = path.join(ctx.paths.pageMapsDir, `${stem}.json`);
     ctx.logger.info(`Discovering application states for ${ctx.featureId} (${ready.length} test case(s))`);
     const discovery = await discoverFeature({
@@ -81,9 +82,10 @@ export class UIScriptGenerator {
       trace: ctx.trace,
       logger: ctx.logger,
       headless: ctx.headless,
+      authenticate: ctx.authenticate,
     });
 
-    const pageObject = pageObjectClassName(ctx.featureId);
+    const pageObject = pageObjectClassName(ctx.featureKey);
     const pomPath = path.join(ctx.paths.pagesDir, `${pageObject}.ts`);
     const pom = renderPom(discovery.pageMap, {
       className: pageObject, projectSlug: ctx.projectSlug, basePageImport: importPath(ctx.paths.pagesDir, FRAMEWORK_BASE_PAGE),
@@ -91,9 +93,7 @@ export class UIScriptGenerator {
     const hasLocators = pom.contract.members.some((member) => member.kind === MEMBER_KIND.LOCATOR);
     const blocked: TestOutcome[] = ready
       .filter((tc) => !hasLocators || discovery.issues.has(tc.tcKey))
-      .map((tc) => needsContextOutcome(tc.tcKey, hasLocators
-        ? discovery.issues.get(tc.tcKey) || []
-        : [{ kind: 'LOCATOR', detail: 'Discovery found no verifiable elements in the application.' }]));
+      .map((tc) => needsContextOutcome(tc.tcKey, missingForTestCase(discovery.issues, tc.tcKey)));
     const generatable = ready.filter((tc) => hasLocators && !discovery.issues.has(tc.tcKey));
     const base = this._specBase(ctx, pageObject, pomPath);
     const bodies = generatable.length === 0 ? [] : await generateTestBodies({

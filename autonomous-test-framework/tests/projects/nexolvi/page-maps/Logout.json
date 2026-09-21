@@ -1,0 +1,765 @@
+{
+  "version": 2,
+  "featureId": "F-01",
+  "states": [
+    {
+      "name": "login",
+      "urlPath": "/login",
+      "entryPath": "/login",
+      "elements": [
+        {
+          "name": "nexolviImage",
+          "strategy": "role",
+          "args": [
+            "img",
+            "Nexolvi"
+          ],
+          "tag": "img",
+          "role": "img",
+          "accessibleName": "Nexolvi"
+        },
+        {
+          "name": "onePlatformEveryBusinessConnectionHeading",
+          "strategy": "role",
+          "args": [
+            "heading",
+            "One platform. Every business connection."
+          ],
+          "tag": "h1",
+          "role": "heading",
+          "accessibleName": "One platform. Every business connection."
+        },
+        {
+          "name": "welcomeToNexolviHeading",
+          "strategy": "role",
+          "args": [
+            "heading",
+            "Welcome to Nexolvi"
+          ],
+          "tag": "h2",
+          "role": "heading",
+          "accessibleName": "Welcome to Nexolvi"
+        },
+        {
+          "name": "workEmailInput",
+          "strategy": "placeholder",
+          "args": [
+            "you@company.com"
+          ],
+          "tag": "input",
+          "role": "textbox",
+          "accessibleName": "WORK EMAIL",
+          "inputType": "text"
+        },
+        {
+          "name": "passwordInput",
+          "strategy": "placeholder",
+          "args": [
+            "Enter your password"
+          ],
+          "tag": "input",
+          "accessibleName": "PASSWORD",
+          "inputType": "password"
+        },
+        {
+          "name": "showPasswordButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Show password"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Show password"
+        },
+        {
+          "name": "rememberMeFor30DaysCheckbox",
+          "strategy": "role",
+          "args": [
+            "checkbox",
+            "Remember me for 30 days"
+          ],
+          "tag": "input",
+          "role": "checkbox",
+          "accessibleName": "Remember me for 30 days",
+          "inputType": "checkbox"
+        },
+        {
+          "name": "signInButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Sign in"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Sign in"
+        },
+        {
+          "name": "forMacosLink",
+          "strategy": "role",
+          "args": [
+            "link",
+            "For macOS"
+          ],
+          "tag": "a",
+          "role": "link",
+          "accessibleName": "For macOS"
+        },
+        {
+          "name": "forWindowsLink",
+          "strategy": "role",
+          "args": [
+            "link",
+            "For Windows"
+          ],
+          "tag": "a",
+          "role": "link",
+          "accessibleName": "For Windows"
+        },
+        {
+          "name": "contactYourAdministratorLink",
+          "strategy": "role",
+          "args": [
+            "link",
+            "Contact your administrator"
+          ],
+          "tag": "a",
+          "role": "link",
+          "accessibleName": "Contact your administrator"
+        },
+        {
+          "name": "passwordVisibilityToggle",
+          "strategy": "css",
+          "args": [
+            "button[aria-label=\"Show password\"], button[aria-label=\"Hide password\"]"
+          ],
+          "tag": "button",
+          "description": "eye icon that toggles password visibility; its accessible name states the next action, so this matches it in both the masked and revealed states"
+        }
+      ]
+    },
+    {
+      "name": "start",
+      "urlPath": "/",
+      "elements": [
+        {
+          "name": "nexolviLogoImage",
+          "strategy": "role",
+          "args": [
+            "img",
+            "Nexolvi Logo"
+          ],
+          "tag": "img",
+          "role": "img",
+          "accessibleName": "Nexolvi Logo"
+        },
+        {
+          "name": "engageFlowButton",
+          "strategy": "text",
+          "args": [
+            "Engage Flow"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Engage Flow"
+        },
+        {
+          "name": "gptButton",
+          "strategy": "text",
+          "args": [
+            "GPT"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "GPT"
+        },
+        {
+          "name": "affiliatesButton",
+          "strategy": "text",
+          "args": [
+            "Affiliates"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Affiliates"
+        },
+        {
+          "name": "nexocrmButton",
+          "strategy": "text",
+          "args": [
+            "NexoCRM"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "NexoCRM"
+        },
+        {
+          "name": "chatbotsButton",
+          "strategy": "text",
+          "args": [
+            "Chatbots"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Chatbots"
+        },
+        {
+          "name": "workOsButton",
+          "strategy": "text",
+          "args": [
+            "Work OS"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Work OS"
+        },
+        {
+          "name": "socialButton",
+          "strategy": "text",
+          "args": [
+            "Social"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Social"
+        },
+        {
+          "name": "bButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "B"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "B"
+        },
+        {
+          "name": "dashboardButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Dashboard"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Dashboard"
+        },
+        {
+          "name": "blogsButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Blogs"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Blogs"
+        },
+        {
+          "name": "authorsButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Authors"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Authors"
+        },
+        {
+          "name": "pagesButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Pages"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Pages"
+        },
+        {
+          "name": "mediaButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Media"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Media"
+        },
+        {
+          "name": "menusButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Menus"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Menus"
+        },
+        {
+          "name": "contactRequestsButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Contact Requests"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Contact Requests"
+        },
+        {
+          "name": "testimonialsButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Testimonials"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Testimonials"
+        },
+        {
+          "name": "releasesButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Releases"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Releases"
+        },
+        {
+          "name": "mediaCoverageButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Media Coverage"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Media Coverage"
+        },
+        {
+          "name": "eventsButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Events"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Events"
+        },
+        {
+          "name": "teamButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Team"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Team"
+        },
+        {
+          "name": "subscribersButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Subscribers"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Subscribers"
+        },
+        {
+          "name": "faqsButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "FAQs"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "FAQs"
+        },
+        {
+          "name": "servicesButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Services"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Services"
+        },
+        {
+          "name": "serviceCategoriesButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Service Categories"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Service Categories"
+        },
+        {
+          "name": "docsLibraryButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Docs Library"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Docs Library"
+        },
+        {
+          "name": "analyticsButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Analytics"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Analytics"
+        },
+        {
+          "name": "siteAuditButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Site Audit"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Site Audit"
+        },
+        {
+          "name": "searchConsoleButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Search Console"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Search Console"
+        },
+        {
+          "name": "seoButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "SEO"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "SEO"
+        },
+        {
+          "name": "backlinksButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Backlinks"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Backlinks"
+        },
+        {
+          "name": "keywordsButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Keywords"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Keywords"
+        },
+        {
+          "name": "collapseButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Collapse"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Collapse"
+        },
+        {
+          "name": "dashboardHeading",
+          "strategy": "role",
+          "args": [
+            "heading",
+            "Dashboard"
+          ],
+          "tag": "h2",
+          "role": "heading",
+          "accessibleName": "Dashboard"
+        },
+        {
+          "name": "blogsButton2",
+          "strategy": "text",
+          "args": [
+            "Blogs"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Blogs"
+        },
+        {
+          "name": "authorsButton2",
+          "strategy": "text",
+          "args": [
+            "Authors"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Authors"
+        },
+        {
+          "name": "pagesButton2",
+          "strategy": "text",
+          "args": [
+            "Pages"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Pages"
+        },
+        {
+          "name": "mediaButton2",
+          "strategy": "text",
+          "args": [
+            "Media"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Media"
+        },
+        {
+          "name": "menusButton2",
+          "strategy": "text",
+          "args": [
+            "Menus"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Menus"
+        },
+        {
+          "name": "contactRequestsButton2",
+          "strategy": "text",
+          "args": [
+            "Contact Requests"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Contact Requests"
+        },
+        {
+          "name": "testimonialsButton2",
+          "strategy": "text",
+          "args": [
+            "Testimonials"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Testimonials"
+        },
+        {
+          "name": "releasesButton2",
+          "strategy": "text",
+          "args": [
+            "Releases"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Releases"
+        },
+        {
+          "name": "mediaCoverageButton2",
+          "strategy": "text",
+          "args": [
+            "Media Coverage"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Media Coverage"
+        },
+        {
+          "name": "eventsButton2",
+          "strategy": "text",
+          "args": [
+            "Events"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Events"
+        },
+        {
+          "name": "teamButton2",
+          "strategy": "text",
+          "args": [
+            "Team"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Team"
+        },
+        {
+          "name": "subscribersButton2",
+          "strategy": "text",
+          "args": [
+            "Subscribers"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Subscribers"
+        },
+        {
+          "name": "faqsButton2",
+          "strategy": "text",
+          "args": [
+            "FAQs"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "FAQs"
+        },
+        {
+          "name": "servicesButton2",
+          "strategy": "text",
+          "args": [
+            "Services"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Services"
+        },
+        {
+          "name": "serviceCategoriesButton2",
+          "strategy": "text",
+          "args": [
+            "Service Categories"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Service Categories"
+        },
+        {
+          "name": "docsLibraryButton2",
+          "strategy": "text",
+          "args": [
+            "Docs Library"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Docs Library"
+        },
+        {
+          "name": "analyticsButton2",
+          "strategy": "text",
+          "args": [
+            "Analytics"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Analytics"
+        },
+        {
+          "name": "siteAuditButton2",
+          "strategy": "text",
+          "args": [
+            "Site Audit"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Site Audit"
+        },
+        {
+          "name": "searchConsoleButton2",
+          "strategy": "text",
+          "args": [
+            "Search Console"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Search Console"
+        },
+        {
+          "name": "seoButton2",
+          "strategy": "text",
+          "args": [
+            "SEO"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "SEO"
+        },
+        {
+          "name": "backlinksButton2",
+          "strategy": "text",
+          "args": [
+            "Backlinks"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Backlinks"
+        },
+        {
+          "name": "keywordsButton2",
+          "strategy": "text",
+          "args": [
+            "Keywords"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Keywords"
+        },
+        {
+          "name": "collapseButton2",
+          "strategy": "text",
+          "args": [
+            "Collapse"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Collapse"
+        }
+      ]
+    }
+  ],
+  "traces": [
+    {
+      "tcKey": "TC-001",
+      "runs": [],
+      "stateAfterStep": {
+        "1": "start",
+        "2": "start"
+      }
+    },
+    {
+      "tcKey": "TC-009",
+      "runs": [],
+      "stateAfterStep": {
+        "1": "start",
+        "2": "start"
+      }
+    }
+  ],
+  "flows": []
+}

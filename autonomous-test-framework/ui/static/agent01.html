@@ -412,7 +412,7 @@
 
           <div class="form-group mt-12">
             <label>Project Name <span style="color:var(--text-dim)">(optional)</span></label>
-            <input type="text" id="projectNameInput" placeholder="e.g. E-Commerce Checkout" />
+            <input type="text" id="projectNameInput" placeholder="Leave empty to use the current pipeline project" />
           </div>
 
           <div class="form-group mt-12">
@@ -666,7 +666,9 @@ document.getElementById('runBtn').addEventListener('click', startAnalysis);
 
 async function startAnalysis() {
   const jiraId      = document.getElementById('jiraIdInput').value.trim();
-  const projectName = document.getElementById('projectNameInput').value.trim() || 'ARIA Project';
+  // Sent raw, empty included: the server resolves an empty field to the project being worked on.
+  // Defaulting to a literal here is what split an upload away from the project Agent 02 generates for.
+  const projectName = document.getElementById('projectNameInput').value.trim();
 
   if (activeTab === 'upload' && !selectedFile) {
     alert('Please select a .md or .txt requirement document first.'); return;
@@ -1011,7 +1013,7 @@ document.getElementById('reanalyzeAnswersBtn').addEventListener('click', async (
     await saveAnswers(answers);
     btn.textContent = 'Re-analyzing with your answers…';
     const fd = new FormData();
-    fd.append('projectName', document.getElementById('projectNameInput').value.trim() || 'ARIA Project');
+    fd.append('projectName', document.getElementById('projectNameInput').value.trim());
     if (selectedFile) fd.append('file', selectedFile);
     else fd.append('jiraId', document.getElementById('jiraIdInput').value.trim());
 

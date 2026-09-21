@@ -10,6 +10,7 @@ import { projectPaths, readActiveProjectSlug } from '../core/aut/projectPaths';
 import path from 'path';
 import fs from 'fs';
 import * as http from 'http';
+import { LATEST_PROJECT_SQL } from '../core/state-manager/projectResolver';
 
 const app = express();
 const PORT = parseInt(process.env.AGENT05_UI_PORT || '3004', 10);
@@ -132,7 +133,7 @@ app.post('/api/agent05/run', async (req: Request, res: Response) => {
   if (!projectName) {
     try {
       const stateDb = (stateManager as any).getDatabase();
-      const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get() as any;
+      const latestRun = stateDb.prepare(LATEST_PROJECT_SQL).get() as any;
       if (latestRun?.project_id) projectName = latestRun.project_id;
     } catch (_) {}
   }
@@ -286,7 +287,7 @@ function handleApproval(stageId: string, action: 'approve' | 'reject') {
         if (!(stateManager as any)._initialized) {
           try {
             const stateDb = (stateManager as any).getDatabase();
-            const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get() as any;
+            const latestRun = stateDb.prepare(LATEST_PROJECT_SQL).get() as any;
             await stateManager.initialize(latestRun?.project_id || 'ARIA Project');
             await memoryEngine.initialize(latestRun?.project_id || 'ARIA Project');
           } catch (_) {

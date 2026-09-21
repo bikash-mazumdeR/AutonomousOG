@@ -199,13 +199,20 @@ autonomous-test-framework/
 │       ├── GmailClient.ts             ← Gmail SMTP mailer
 │       └── templates/                 ← HTML email templates
 │
-├── tests/
-│   ├── specs/                         ← Generated Playwright test specs (.spec.ts)
-│   ├── pages/                         ← Generated Page Object Models (POMs)
-│   ├── fixtures/                      ← Generated test data JSON & manifests
-│   ├── helpers/                       ← Shared test utilities
+├── tests/                             ← Framework test code + per-project generated output
+│   ├── projects/<project-slug>/       ← EVERYTHING a pipeline run generates, per project
+│   │   ├── features/<Feature>/        ← Generated Gherkin .feature files (Agent 02)
+│   │   ├── specs/                     ← Generated Playwright specs, <requirement>-<F-id>.spec.ts
+│   │   ├── pages/                     ← Generated Page Object Models (POMs)
+│   │   ├── page-maps/                 ← Discovery page maps (Agent 05)
+│   │   ├── fixtures/test-data.json    ← Generated flat test data (Agents 04 + 05)
+│   │   ├── k6/                        ← Generated K6 performance scripts
+│   │   └── automation-manifest.json   ← File ownership, partitioned per requirement scope
+│   ├── pages/BasePage.ts              ← Framework base page every generated POM extends
+│   ├── helpers/                       ← Shared test utilities (env, storage)
+│   ├── specs/                         ← Framework health spec (Playwright fallback testDir)
 │   ├── unit/                          ← Framework Jest unit tests
-│   └── k6/                            ← Generated K6 performance test scripts
+│   └── k6/                            ← Framework K6 scripts
 │
 ├── .state/                            ← Persisted Pipeline State (Git ignored)
 │   ├── pipeline-state.db              ← SQLite transactional database
@@ -280,8 +287,20 @@ AUT_ENVIRONMENT=staging
 # Playwright
 PLAYWRIGHT_HEADLESS=true
 PLAYWRIGHT_WORKERS=4
-PLAYWRIGHT_TIMEOUT=30000
+PLAYWRIGHT_TIMEOUT=30000           # Per-test budget. Must exceed the navigation + action budgets
+                                   # below, or a slow page fails as a test timeout instead. Left
+                                   # unset, it defaults to navigation + action + 5s (min 30s).
 PLAYWRIGHT_RETRIES=2
+PLAYWRIGHT_NAVIGATION_TIMEOUT=15000  # Budget for one page load during execution
+PLAYWRIGHT_ACTION_TIMEOUT=10000      # Budget for one click/fill/assertion; a slow-rendering SPA
+                                     # needs this raised too, not just the navigation budget
+
+# Agent 05 live discovery
+DISCOVERY_NAVIGATION_TIMEOUT_MS=30000  # Budget for one page load while discovering the AUT.
+                                       # Raise it when the application's first load is slow (large JS
+                                       # bundle, cold start, throttled link): discovery waits for the
+                                       # load event, and a page that has not rendered yields no
+                                       # elements, parking every test case as NEEDS_CONTEXT.
 
 # Jira MCP Integration
 JIRA_BASE_URL=https://yourcompany.atlassian.net

@@ -56,7 +56,7 @@ async function saveReview(reviewedOutput: any, logger: Logger): Promise<void> {
   await stateManager.setPipelineArtifact(REVIEW_ARTIFACT, reviewedOutput);
   try {
     const requirements = await stateManager.getPipelineArtifact(REQUIREMENTS_ARTIFACT);
-    syncFeatureFiles(requirements, reviewedOutput.reviewedZephyrExport.testCases, logger);
+    syncFeatureFiles(stateManager.getProjectId(), requirements, reviewedOutput.reviewedZephyrExport.testCases, logger);
   } catch (err: any) {
     logger.warn('Feature file sync failed after review update', { error: err.message });
   }

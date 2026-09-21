@@ -87,8 +87,29 @@ export const DYNAMIC_ID_HEURISTICS: readonly RegExp[] = Object.freeze([
   /\d{4,}/, /[a-f0-9]{10,}/i, /^:r[0-9a-z]*:?$/i, /^(ember|react-|mui-|radix-|headlessui-)/i,
 ]);
 
+/**
+ * Positive integer from the environment, or the fallback when the variable is unset, non-numeric or
+ * not positive. A malformed override must never silently disable a timeout.
+ * @param {string} name - Environment variable name
+ * @param {number} fallback
+ * @returns {number}
+ */
+function envInt(name: string, fallback: number): number {
+  const parsed = Number(process.env[name]);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
 export const DISCOVERY_SETTINGS = Object.freeze({
-  NAVIGATION_TIMEOUT_MS: 30000,
+  /**
+   * Budget for one page load during discovery, overridable with DISCOVERY_NAVIGATION_TIMEOUT_MS.
+   * Discovery waits for the load event, so an application whose first load is slow — a large
+   * JavaScript bundle, a cold start, a throttled link — needs a larger budget than the default:
+   * a page that has not finished rendering yields no elements, and every test case of the
+   * feature is parked as NEEDS_CONTEXT.
+   */
+  // Read on access, not at module load: whether dotenv has populated process.env by then depends
+  // on which entry point imported this file first.
+  get NAVIGATION_TIMEOUT_MS(): number { return envInt('DISCOVERY_NAVIGATION_TIMEOUT_MS', 30000); },
   ACTION_TIMEOUT_MS: 10000,
   DOM_QUIET_MS: 400,
   DOM_SETTLE_MAX_MS: 5000,

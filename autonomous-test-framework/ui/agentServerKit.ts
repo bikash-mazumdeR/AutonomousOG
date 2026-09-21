@@ -27,9 +27,9 @@ import * as http from 'http';
 import path from 'path';
 
 import { stateManager } from '../core/state-manager/StateManager';
-import { stateDb } from '../core/state-manager/Database';
 import { memoryEngine } from '../core/project-memory/MemoryEngine';
 import { Logger } from '../core/logger/Logger';
+import { resolveProjectId as resolveProjectIdShared } from '../core/state-manager/projectResolver';
 
 /** Framework root (the parent of ui/). */
 export const FRAMEWORK_DIR = path.resolve(__dirname, '..');
@@ -42,9 +42,6 @@ const HEARTBEAT_MS = 20000;
 
 /** Approval webhook the running agent opens while its gate is blocking. */
 const APPROVAL_PORT = parseInt(process.env.APPROVAL_WEBHOOK_PORT || '8081', 10);
-
-/** SQL for the newest non-test pipeline run. */
-const LATEST_RUN_SQL = "SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -241,18 +238,8 @@ export function createAgentRunner(options: {
  * @returns {string}
  */
 export function resolveProjectId(requested?: string): string {
-  const trimmed = (requested || '').trim();
-  if (trimmed) return trimmed;
-  try {
-    // stateDb, not stateManager: StateManager exposes no database accessor, so the call that used to
-    // live here threw on every invocation and silently pinned every run to the fallback literal.
-    stateDb.initialize();
-    const latest = stateDb.prepare(LATEST_RUN_SQL).get() as any;
-    if (latest?.project_id) return latest.project_id;
-  } catch {
-    // The DB may not be open yet; fall through to the default.
-  }
-  return 'ARIA Project';
+  // Re-exported, never reimplemented: the UI routes and the agent CLIs must answer this identically.
+  return resolveProjectIdShared(requested);
 }
 
 /**

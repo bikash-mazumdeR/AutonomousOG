@@ -26,7 +26,7 @@ export class APIScriptGenerator {
     const { ready, notReady } = splitByReadiness(testCases, ctx.profile, 'API');
     if (ready.length === 0) return { outcomes: notReady, files: [], fileByTcKey: new Map() };
 
-    const specPath = path.join(ctx.paths.specsDir, `${fileStem(ctx.featureId)}.api.spec.ts`);
+    const specPath = path.join(ctx.paths.specsDir, `${fileStem(ctx.featureKey)}.api.spec.ts`);
     const specParams = {
       projectSlug: ctx.projectSlug,
       featureId: ctx.featureId,

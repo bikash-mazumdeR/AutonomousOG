@@ -20,6 +20,7 @@ import * as recast from 'recast';
 // annotations, which made every AST heal and every LLM patch fail validation. Agent 06 already
 // parses these files, so reuse its TypeScript-aware parser rather than adding a second one.
 import { parseTypeScript } from '../../core/automation-reviewer/ReviewRules';
+import { LATEST_PROJECT_SQL } from '../../core/state-manager/projectResolver';
 const b = recast.types.builders;
 
 const STAGE_ID = '10-auto-healer';
@@ -526,7 +527,7 @@ if (require.main === module) {
     try {
       const { stateDb } = require('../../core/state-manager/Database');
       stateDb.initialize();
-      const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get();
+      const latestRun = stateDb.prepare(LATEST_PROJECT_SQL).get();
       if (latestRun && latestRun.project_id) {
         projectId = latestRun.project_id;
       }

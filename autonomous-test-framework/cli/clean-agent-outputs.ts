@@ -42,13 +42,13 @@ function targets(): Record<string, string[]> {
       'reports/json/requirement-analysis.json',
     ],
     '02-test-case-generator': [
-      'tests/features/**/*.feature',
+      `${projectGlob}/features/**/*.feature`,
       'reports/json/test-cases-zephyr-*.json', // only exists when SAVE_ZEPHYR_DISK_JSON=true
     ],
     '04-test-data-generator': [
       'reports/json/test-data-manifest-*.json',
       'reports/json/enriched-test-cases-*.json',
-      'tests/fixtures/test-data.json',
+      `${projectGlob}/fixtures/test-data.json`,
     ],
     '05-playwright-script-generator': [
       `${projectGlob}/specs/*.spec.ts`,

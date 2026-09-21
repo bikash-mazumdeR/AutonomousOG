@@ -4,7 +4,9 @@
  * @fileoverview Project-scoped filesystem layout.
  * Every application under test gets its own configuration folder (`projects/<slug>`) and its own
  * generated-test root (`tests/projects/<slug>`), so switching or adding applications never mixes
- * or overwrites another project's artifacts.
+ * or overwrites another project's artifacts. Everything a run generates — feature files, specs,
+ * page objects, page maps, fixtures and K6 scripts — lives under that root; nothing generated is
+ * written to the shared `tests/` folders, which hold only framework code every project imports.
  */
 
 import * as fs from 'fs';
@@ -25,6 +27,7 @@ export interface ProjectPaths {
   profileFile: string;
   learningsDir: string;
   testsRoot: string;
+  featuresDir: string;
   specsDir: string;
   pagesDir: string;
   pageMapsDir: string;
@@ -60,6 +63,7 @@ export function projectPaths(projectId: string): ProjectPaths {
     profileFile: path.join(configDir, 'aut-profile.json'),
     learningsDir: path.join(configDir, 'learnings'),
     testsRoot,
+    featuresDir: path.join(testsRoot, 'features'),
     specsDir: path.join(testsRoot, 'specs'),
     pagesDir: path.join(testsRoot, 'pages'),
     pageMapsDir: path.join(testsRoot, 'page-maps'),

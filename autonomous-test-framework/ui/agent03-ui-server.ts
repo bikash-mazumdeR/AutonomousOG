@@ -10,6 +10,7 @@ import path from 'path';
 import * as http from 'http';
 import { isTestCaseSelected } from '../core/types';
 import { registerAgent03ReviewRoutes } from './agent03ReviewRoutes';
+import { LATEST_PROJECT_SQL } from '../core/state-manager/projectResolver';
 
 const app = express();
 const PORT = parseInt(process.env.AGENT03_UI_PORT || '3002', 10);
@@ -163,7 +164,7 @@ app.post('/api/agent03/run', async (req: Request, res: Response) => {
   if (!projectName) {
     try {
       const stateDb = stateManager.getDatabase();
-      const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get() as any;
+      const latestRun = stateDb.prepare(LATEST_PROJECT_SQL).get() as any;
       if (latestRun?.project_id) projectName = latestRun.project_id;
     } catch (_) {}
   }

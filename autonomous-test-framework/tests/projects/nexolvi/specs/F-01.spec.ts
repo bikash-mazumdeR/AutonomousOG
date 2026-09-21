@@ -140,7 +140,7 @@ test.describe("F-01", () => {
     ],
   }, async ({ page, featurePage, data, browser }) => {
     await featurePage.startClickSignInButtonFlow({ workEmailInput: data.invalidEmail, passwordInput: data.invalidPassword });
-    await expect(page).toHaveURL('/');
+    await expect(page).toHaveURL('/login');
   });
 
   test("[TC-010] Sign In button is disabled when both Email and Password fields are empty", {

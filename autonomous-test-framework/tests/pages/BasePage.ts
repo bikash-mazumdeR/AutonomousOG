@@ -39,14 +39,23 @@ export class BasePage {
 
   // ── Navigation ───────────────────────────────────────────────────────────
 
+  /**
+   * Navigates and returns as soon as the navigation commits.
+   *
+   * Not 'domcontentloaded' or 'load': both wait for the parser to finish, so an application served
+   * behind one large blocking script does not fire them until that script has fully arrived —
+   * long after the page is usable, or never on a degraded link, failing the test as a navigation
+   * timeout rather than reporting the slow asset it is. Nothing is lost by committing early:
+   * locator actions and web-first assertions auto-wait for the elements they name.
+   */
   async navigate(url: string): Promise<void> {
     await this._logAction(`[NAVIGATE] → ${url}`);
-    await this.page.goto(url, { waitUntil: 'domcontentloaded' });
+    await this.page.goto(url, { waitUntil: 'commit' });
   }
 
   async reload(): Promise<void> {
     await this._logAction('[RELOAD] Page refresh');
-    await this.page.reload({ waitUntil: 'domcontentloaded' });
+    await this.page.reload({ waitUntil: 'commit' });
   }
 
   async goBack(): Promise<void> {

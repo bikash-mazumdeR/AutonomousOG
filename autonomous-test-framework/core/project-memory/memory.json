@@ -2,7 +2,7 @@
   "version": "1.0.0",
   "projectId": "ARIA Project",
   "createdAt": "2026-09-16T12:21:03.645Z",
-  "updatedAt": "2026-09-18T17:05:28.225Z",
+  "updatedAt": "2026-09-19T09:44:45.927Z",
   "cycles": [],
   "globalLearnings": {
     "selectorPatterns": {},
@@ -218,6 +218,126 @@
         "comment": "Approved test data synthesis and centralized fixtures.",
         "content": "Resolved: 10, Unresolved: 1, Pending clarifications: 1",
         "timestamp": "2026-09-18T15:25:16.208Z"
+      },
+      {
+        "id": "fb_1789803529338",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "",
+        "timestamp": "2026-09-19T07:38:49.338Z"
+      },
+      {
+        "id": "fb_1789803530543",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "Features: 1, Stories: 1",
+        "timestamp": "2026-09-19T07:38:50.543Z"
+      },
+      {
+        "id": "fb_1789803611960",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "",
+        "timestamp": "2026-09-19T07:40:11.960Z"
+      },
+      {
+        "id": "fb_1789803611996",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "TCs: 10",
+        "timestamp": "2026-09-19T07:40:11.996Z"
+      },
+      {
+        "id": "fb_1789803968766",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "Approved Agent 03 review",
+        "content": "",
+        "timestamp": "2026-09-19T07:46:08.766Z"
+      },
+      {
+        "id": "fb_1789803968798",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "Approved Agent 03 review",
+        "content": "Grade: B, Score: 86",
+        "timestamp": "2026-09-19T07:46:08.798Z"
+      },
+      {
+        "id": "fb_1789803981120",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "Approved test data synthesis and centralized fixtures.",
+        "content": "",
+        "timestamp": "2026-09-19T07:46:21.120Z"
+      },
+      {
+        "id": "fb_1789803981156",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "Approved test data synthesis and centralized fixtures.",
+        "content": "Resolved: 0, Unresolved: 0, Pending clarifications: 0",
+        "timestamp": "2026-09-19T07:46:21.156Z"
+      },
+      {
+        "id": "fb_1789809402950",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "AUTO-APPROVED",
+        "content": "Generated: 0, Needs context: 10, Blocked: 0",
+        "timestamp": "2026-09-19T09:16:42.950Z"
+      },
+      {
+        "id": "fb_1789809621788",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "AUTO-APPROVED",
+        "content": "Generated: 0, Needs context: 10, Blocked: 0",
+        "timestamp": "2026-09-19T09:20:21.788Z"
+      },
+      {
+        "id": "fb_1789809757676",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "AUTO-APPROVED",
+        "content": "Generated: 0, Needs context: 10, Blocked: 0",
+        "timestamp": "2026-09-19T09:22:37.676Z"
+      },
+      {
+        "id": "fb_1789809918751",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "AUTO-APPROVED",
+        "content": "Generated: 0, Needs context: 10, Blocked: 0",
+        "timestamp": "2026-09-19T09:25:18.751Z"
+      },
+      {
+        "id": "fb_1789810246940",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "AUTO-APPROVED",
+        "content": "Generated: 0, Needs context: 10, Blocked: 0",
+        "timestamp": "2026-09-19T09:30:46.940Z"
+      },
+      {
+        "id": "fb_1789810369959",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "AUTO-APPROVED",
+        "content": "Generated: 0, Needs context: 10, Blocked: 0",
+        "timestamp": "2026-09-19T09:32:49.959Z"
+      },
+      {
+        "id": "fb_1789811085927",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "AUTO-APPROVED",
+        "content": "Generated: 0, Needs context: 10, Blocked: 0",
+        "timestamp": "2026-09-19T09:44:45.927Z"
       }
     ],
     "performanceBaselines": {},
@@ -431,6 +551,83 @@
         "answer": "session expires when the browser is closed and on new session user lands on the Login page",
         "stageId": "01-requirement-analyzer",
         "resolvedAt": "2026-09-18T15:20:45.502Z"
+      },
+      {
+        "id": "clq_1789796494619",
+        "question": "Inside the opened user menu, is the 'user initial' displayed as the same avatar/button element that was clicked, or as a separate distinct element? What is its exact visible form (e.g. a circle with the letter, plain text)?",
+        "answer": "Yes the User Initial is displayed along with User name, Email, Profile button and Logout button.",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-19T05:41:34.619Z"
+      },
+      {
+        "id": "clq_1789796494626",
+        "question": "What is the exact URL path of at least one protected Dashboard page that a test should attempt to navigate to after logout in order to verify session termination (e.g. https://admin.nexolvi.ai/dashboard)?",
+        "answer": "https://admin.nexolvi.ai/",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-19T05:41:34.627Z"
+      },
+      {
+        "id": "clq_1789796494632",
+        "question": "When hovering over the profile button, is the user's email displayed as a native browser tooltip (via a 'title' attribute), a custom styled tooltip element in the DOM, or another mechanism?",
+        "answer": "a Native Browser tooltip",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-19T05:41:34.632Z"
+      },
+      {
+        "id": "clq_1789796494637",
+        "question": "What are the valid test account email address and password to be used as preconditions for logout tests in the test environment (https://admin.nexolvi.ai/)?",
+        "answer": "Email - bikash.htc@gmail.com\nPassword - admin@123",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-19T05:41:34.637Z"
+      },
+      {
+        "id": "clq_1789802975913",
+        "question": "What specific invalid email and/or password values should be used in the test to trigger the 'Login failed' error message on https://admin.nexolvi.ai/?",
+        "answer": "Email - notanemail.nodomain\nPassword - Aria_Wrong_a576210f!",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-19T07:29:35.913Z"
+      },
+      {
+        "id": "clq_1789802975923",
+        "question": "For the email 'bikash.htc@gmail.com', what exact character is displayed on the profile button — is it 'B' (uppercase first letter of local part), 'b' (lowercase), or another character?",
+        "answer": "B",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-19T07:29:35.923Z"
+      },
+      {
+        "id": "clq_1789802975926",
+        "question": "Is the logout confirmation popup ('Log out?' / 'Are you sure you want to log out?') a native browser dialog or a custom element rendered in the page DOM?",
+        "answer": "Native Browser dailog",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-19T07:29:35.926Z"
+      },
+      {
+        "id": "clq_1789802975928",
+        "question": "Is 'Remember me for 30 days' the exact visible label text of the checkbox on the Login page, or does the UI render a different string (e.g. 'Remember me')?",
+        "answer": "'Remember me for 30 days' is the exact visible label text",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-19T07:29:35.928Z"
+      },
+      {
+        "id": "clq_1789803520653",
+        "question": "What is the observable UI indicator that confirms the user is still authenticated after clicking Cancel — for example, the Dashboard page remains fully visible with the profile button present and no redirect to the Login page?",
+        "answer": "User will be on the dashboard screen and the Logout pop up will disappear",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-19T07:38:40.653Z"
+      },
+      {
+        "id": "clq_1789803520655",
+        "question": "After logout, if the user navigates directly to a protected sub-page URL (other than https://admin.nexolvi.ai/), are they also redirected to the Login page? If so, please provide at least one example protected sub-page URL to use in the test.",
+        "answer": "Yes",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-19T07:38:40.655Z"
+      },
+      {
+        "id": "clq_1789803520657",
+        "question": "Is bikash.htc@gmail.com / admin@123 the only test account to be used for all logout test scenarios, or are there additional valid accounts that should also be tested?",
+        "answer": "Yes",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-19T07:38:40.657Z"
       }
     ],
     "stableTestIds": [],
@@ -442,13 +639,10 @@
       "description": "Synthetic test data values from this run for reuse",
       "appliesTo": "04-test-data-generator",
       "action": "REUSE_DATA_PATTERNS",
-      "data": {
-        "anyEmail": "aria_test_38129964@example.test",
-        "anyPassword": "Aria_Sample_38129964!"
-      },
-      "addedAt": "2026-09-18T17:05:28.224Z",
+      "data": {},
+      "addedAt": "2026-09-19T07:46:14.533Z",
       "activeCount": 0,
-      "updatedAt": "2026-09-18T17:05:28.225Z"
+      "updatedAt": "2026-09-19T07:46:14.535Z"
     }
   ],
   "metrics": {

@@ -2,9 +2,13 @@
   "projectId": "Nexolvi",
   "displayName": "Nexo Desk Admin (admin.nexolvi.ai)",
   "baseUrlEnv": "NEXOLVI_BASE_URL",
-  "browsers": ["chromium"],
+  "browsers": [
+    "chromium"
+  ],
   "discovery": {
-    "entryPaths": ["/"],
+    "entryPaths": [
+      "/login"
+    ],
     "maxDepth": 3,
     "dynamicIdPatterns": [],
     "executeTestSteps": true,
@@ -30,8 +34,13 @@
     "loginStateDescription": "Email and password are entered on the login form as part of each test case. Successful login redirects to the Nexo Desk Dashboard; the 'Remember me for 30 days' checkbox extends the session, so no session token is reused across tests.",
     "credentialStorage": "env"
   },
-  "storageKeys": ["auth_expires_at"],
-  "secretsEnvVars": ["NEXOLVI_EMAIL", "NEXOLVI_PASSWORD"],
+  "storageKeys": [
+    "auth_expires_at"
+  ],
+  "secretsEnvVars": [
+    "NEXOLVI_EMAIL",
+    "NEXOLVI_PASSWORD"
+  ],
   "couplingGuardTokens": [
     "nexolvi",
     "nexo desk",

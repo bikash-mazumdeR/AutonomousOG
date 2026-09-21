@@ -239,8 +239,31 @@ export class DiscoverySession {
    * @param {string} pathname
    */
   async goto(pathname: string): Promise<void> {
-    await this.page.goto(pathname, { waitUntil: 'load' });
+    // 'commit', not 'load' or 'domcontentloaded': both events are gated on the parser finishing, so
+    // an application served behind one large blocking script does not fire them until that script
+    // has fully arrived — minutes after the page is interactive, or never on a degraded link. The
+    // page would then time out with an empty map, reported as "no verifiable elements" on an
+    // application that had in fact rendered. Readiness is judged by what the document contains.
+    await this.page.goto(pathname, { waitUntil: 'commit' });
+    await this._waitForInteractiveDom();
     await this.settle();
+  }
+
+  /**
+   * Resolves once the document holds something discovery could verify, or the navigation budget
+   * runs out. Bounded and non-throwing: a page that legitimately renders nothing is captured as the
+   * empty state it is, and the test cases that needed an element report that precisely.
+   */
+  private async _waitForInteractiveDom(): Promise<void> {
+    try {
+      await this.page.waitForFunction(
+        () => (globalThis as any).document.querySelectorAll('input, button, a, select, textarea, [role]').length > 0,
+        undefined,
+        { timeout: DISCOVERY_SETTINGS.NAVIGATION_TIMEOUT_MS },
+      );
+    } catch {
+      // Nothing interactive appeared in time; capture whatever is there.
+    }
   }
 
   /** Current URL path. */
@@ -261,7 +284,6 @@ export class DiscoverySession {
   async settle(afterInteraction = false): Promise<void> {
     const deadline = Date.now() + DISCOVERY_SETTINGS.SETTLE_MAX_MS;
     try {
-      await this.page.waitForLoadState('load');
       if (afterInteraction) await this.page.waitForTimeout(DISCOVERY_SETTINGS.REQUEST_START_GRACE_MS);
       while (Date.now() < deadline) {
         // eslint-disable-next-line no-await-in-loop -- the page is polled until it is quiet
@@ -271,8 +293,8 @@ export class DiscoverySession {
         if (this._inFlight === 0) return;
       }
     } catch {
-      // A navigation replaced the document while settling; wait for the new document instead.
-      await this.page.waitForLoadState('load');
+      // A navigation replaced the document while settling; wait for the new one to hold content.
+      await this._waitForInteractiveDom();
     }
   }
 
@@ -321,7 +343,8 @@ export class DiscoverySession {
     let elements = await this._verifyElements(await collectRawElements(this.page, this._options.testIdAttribute));
     elements = [...elements, ...await this._verifyExtraLocators(elements)];
     if (reloadVerify) {
-      await this.page.reload({ waitUntil: 'load' });
+      await this.page.reload({ waitUntil: 'commit' });
+      await this._waitForInteractiveDom();
       await this.settle();
       const stable: PageElement[] = [];
       for (const element of elements) {
@@ -407,9 +430,11 @@ export class DiscoverySession {
    * @param {string} op - reload | goBack | goForward
    */
   async performPage(op: string): Promise<void> {
-    if (op === 'reload') await this.page.reload({ waitUntil: 'load' });
-    else if (op === 'goBack') await this.page.goBack({ waitUntil: 'load' });
-    else if (op === 'goForward') await this.page.goForward({ waitUntil: 'load' });
+    // 'commit' for the same reason as goto(): the lifecycle events are gated on a blocking script.
+    if (op === 'reload') await this.page.reload({ waitUntil: 'commit' });
+    else if (op === 'goBack') await this.page.goBack({ waitUntil: 'commit' });
+    else if (op === 'goForward') await this.page.goForward({ waitUntil: 'commit' });
+    if (['reload', 'goBack', 'goForward'].includes(op)) await this._waitForInteractiveDom();
     else throw new Error(`Unsupported page operation "${op}"`);
     await this.settle();
   }

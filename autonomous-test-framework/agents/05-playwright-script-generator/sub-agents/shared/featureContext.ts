@@ -18,6 +18,11 @@ import { TraceRecorder } from '../../../../core/llm/stagePromptTrace';
 export interface FeatureGenerationContext {
   projectSlug: string;
   featureId: string;
+  /**
+   * Requirement-scoped identity of the feature, e.g. "logout-F-01". Names every generated file so a
+   * second requirement's F-01 cannot overwrite the first's. featureId stays the human-facing id.
+   */
+  featureKey: string;
   sourceReviewId: string | null;
   profile: ResolvedAutProfile;
   paths: ProjectPaths;
@@ -27,6 +32,8 @@ export interface FeatureGenerationContext {
   maxRetries: number;
   concurrency: number;
   headless: boolean;
+  /** Sign in before crawling, so states behind the login form can be discovered. */
+  authenticate: boolean;
   logger: any;
   /** Records LLM work units and validation attempts for the prompt trace (optional). */
   trace?: TraceRecorder;
@@ -49,12 +56,12 @@ export interface FeatureGenerationResult {
 }
 
 /**
- * File-name-safe stem for a feature id.
- * @param {string} featureId
+ * File-name-safe stem. Pass a featureKey, not a bare featureId, for anything written to disk.
+ * @param {string} value
  * @returns {string}
  */
-export function fileStem(featureId: string): string {
-  return String(featureId).replace(/[^A-Za-z0-9_-]+/g, '-');
+export function fileStem(value: string): string {
+  return String(value).replace(/[^A-Za-z0-9_-]+/g, '-');
 }
 
 /**
@@ -86,6 +93,26 @@ export function needsContextOutcome(tcKey: string, missing: MissingItem[]): Test
   return {
     tcKey, status: 'NEEDS_CONTEXT', missing, attempts: 0,
   };
+}
+
+/** Reported only when discovery reached the application and verified nothing there. */
+export const NO_VERIFIABLE_ELEMENTS = 'Discovery found no verifiable elements in the application.';
+
+/**
+ * Why this test case could not be generated.
+ *
+ * An empty page map almost always has a recorded cause — a navigation timeout, an unreachable host,
+ * a step that could not be executed — stored against the test case by discovery. That cause is what
+ * gets reported: substituting a generic message made a page-load timeout, a DNS failure and a page
+ * that genuinely has nothing to verify indistinguishable, though each calls for a different fix.
+ *
+ * @param {Map<string, MissingItem[]>} issues - Per test case, as recorded by discovery
+ * @param {string} tcKey
+ * @returns {MissingItem[]}
+ */
+export function missingForTestCase(issues: Map<string, MissingItem[]>, tcKey: string): MissingItem[] {
+  const recorded = issues.get(tcKey);
+  return recorded && recorded.length > 0 ? recorded : [{ kind: 'LOCATOR', detail: NO_VERIFIABLE_ELEMENTS }];
 }
 
 /**

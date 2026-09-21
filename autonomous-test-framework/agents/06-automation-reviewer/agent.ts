@@ -23,6 +23,7 @@ import { FRAMEWORK_CONFIG } from '../../config/framework.config';
 import { llmClient } from '../../core/llm/LLMClient';
 import { buildStagePromptTrace, TraceRecorder, traceLabel } from '../../core/llm/stagePromptTrace';
 import { savePromptTrace } from '../../core/state-manager/promptTraceStore';
+import { LATEST_PROJECT_SQL } from '../../core/state-manager/projectResolver';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -641,7 +642,7 @@ function resolveProjectId(opts: Record<string, any>): string {
   try {
     const { stateDb } = require('../../core/state-manager/Database');
     stateDb.initialize();
-    const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get();
+    const latestRun = stateDb.prepare(LATEST_PROJECT_SQL).get();
     if (latestRun?.project_id) return latestRun.project_id;
   } catch {
     // fall back to configuration

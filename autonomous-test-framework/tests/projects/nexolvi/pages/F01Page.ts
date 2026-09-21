@@ -13,7 +13,7 @@ export class F01Page extends BasePage {
 
   /** Navigate to the "start" state. */
   async openStart(): Promise<void> {
-    await this.navigate("/");
+    await this.navigate("/login");
   }
 
   /**

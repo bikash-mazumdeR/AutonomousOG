@@ -9,6 +9,7 @@ import * as path from 'path';
 import {
   buildFlatTestData,
   syncFixturesFileFromTestData,
+  writeFixtureFile,
 } from '../../core/state-manager/FixtureSync';
 
 describe('FixtureSync Centralized Test Data Engine', () => {
@@ -88,6 +89,43 @@ describe('FixtureSync Centralized Test Data Engine', () => {
       },
     });
     expect(flat).toMatchObject({ TC003_productName: 'Blue Mug', TC003_couponCode: 'SPRING' });
+  });
+
+  describe('one project, many requirements', () => {
+    const projectFixture = path.resolve(__dirname, '../fixtures/test-data-merge-tmp.json');
+
+    afterEach(() => {
+      if (fs.existsSync(projectFixture)) fs.unlinkSync(projectFixture);
+    });
+
+    it('keeps the keys an earlier requirement left behind', () => {
+      // The specs generated for the first requirement import these by name; a second requirement
+      // that does not mention them must not delete them and break those tests.
+      writeFixtureFile(projectFixture, { anyEmail: 'first@example.test', invalidPassword: 'wrong' });
+
+      const merged = syncFixturesFileFromTestData({
+        manifest: { perTCData: { 'TC-001': { inputs: { '{{popupHeader}}': { value: 'Log out?' } } } } },
+      }, undefined, projectFixture);
+
+      const onDisk = JSON.parse(fs.readFileSync(projectFixture, 'utf-8'));
+      expect(onDisk.anyEmail).toBe('first@example.test');
+      expect(onDisk.invalidPassword).toBe('wrong');
+      expect(onDisk.TC001_popupHeader).toBe('Log out?');
+      expect(merged).toEqual(onDisk);
+    });
+
+    it('lets the current requirement win when both define a key', () => {
+      writeFixtureFile(projectFixture, { sharedValue: 'old' });
+      writeFixtureFile(projectFixture, { sharedValue: 'new' });
+
+      expect(JSON.parse(fs.readFileSync(projectFixture, 'utf-8')).sharedValue).toBe('new');
+    });
+
+    it('starts clean when the file is missing or unreadable', () => {
+      fs.writeFileSync(projectFixture, 'not json at all', 'utf-8');
+
+      expect(writeFixtureFile(projectFixture, { onlyKey: 1 })).toEqual({ onlyKey: 1 });
+    });
   });
 
   describe('syncFixturesFileFromTestData', () => {

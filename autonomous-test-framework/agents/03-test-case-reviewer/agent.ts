@@ -27,6 +27,7 @@ import { carryForwardHumanEdits, reapplyHumanStatuses } from './readiness/humanE
 import { llmClient } from '../../core/llm/LLMClient';
 import { buildStagePromptTrace } from '../../core/llm/stagePromptTrace';
 import { savePromptTrace } from '../../core/state-manager/promptTraceStore';
+import { LATEST_PROJECT_SQL } from '../../core/state-manager/projectResolver';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -1299,7 +1300,7 @@ if (require.main === module) {
     if (!activeProjectId) {
       try {
         const stateDb = stateManager.getDatabase();
-        const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get() as any;
+        const latestRun = stateDb.prepare(LATEST_PROJECT_SQL).get() as any;
         if (latestRun?.project_id) {
           activeProjectId = latestRun.project_id;
         }

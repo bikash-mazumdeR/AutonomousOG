@@ -23,3 +23,16 @@ following value needs an explicit empty value in the test case; otherwise return
 ## 4. Same described interactions, same actions
 Test cases whose steps describe the same interactions must produce exactly the same action list, element by
 element and step by step, so that they share one verified flow.
+
+## 5. Never plan a credential as a literal
+Rule 3 allows `{ "literal": … }` for text that appears verbatim in the test case. A working credential is the
+exception: when the step presents the literal as the value the application must accept — a valid, registered or
+working email, password, token or key — it is an unbound credential, not test text. Do not plan it. Set
+`stopReason: "NOT_ACHIEVABLE"` and name the step and the field in `detail`, so the value is bound to an environment
+variable upstream. A planned credential literal is typed into the real application, then copied into the page map,
+into the arguments of every flow built from that action sequence and into every spec generated from it.
+- Wrong: `{ "element": "emailInput", "op": "fill", "value": { "literal": "someone@example.com" } }` for a step that
+  calls that address the registered one.
+- Right: `stopReason: "NOT_ACHIEVABLE"`, `detail: "step 2 gives the registered email as a literal; it needs a binding"`.
+A literal the test case supplies as invalid, throwaway or arbitrary text for a negative case is ordinary test data —
+plan it as before.

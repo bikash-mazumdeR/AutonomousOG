@@ -12,6 +12,9 @@
 import { Mutex } from '../thread-manager/Mutex';
 import { stateDb, StateDatabase } from './Database';
 import { PipelineState, StageStatus, ApprovalStatus, PipelineArtifacts } from '../types';
+import {
+  LATEST_PROJECT_SQL, LATEST_RUN_SQL, LATEST_RUN_FOR_PROJECT_SQL, LATEST_RUN_FOR_PROJECT_CI_SQL,
+} from './projectResolver';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -116,14 +119,14 @@ export class StateManager {
       let targetProjectId = projectId;
       // If default or my-project, resolve to latest non-test run if available
       if (projectId === 'default' || projectId === 'my-project') {
-        const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get() as any;
+        const latestRun = stateDb.prepare(LATEST_PROJECT_SQL).get() as any;
         if (latestRun?.project_id) {
           targetProjectId = latestRun.project_id;
         }
       } else {
-        const existingRun = stateDb.prepare('SELECT project_id FROM runs WHERE project_id = ? ORDER BY started_at DESC LIMIT 1').get(projectId) as any;
+        const existingRun = stateDb.prepare(LATEST_RUN_FOR_PROJECT_SQL).get(projectId) as any;
         if (!existingRun) {
-          const caseInsensitiveRun = stateDb.prepare('SELECT project_id FROM runs WHERE LOWER(project_id) = LOWER(?) ORDER BY started_at DESC LIMIT 1').get(projectId) as any;
+          const caseInsensitiveRun = stateDb.prepare(LATEST_RUN_FOR_PROJECT_CI_SQL).get(projectId) as any;
           if (caseInsensitiveRun?.project_id) {
             targetProjectId = caseInsensitiveRun.project_id;
           }
@@ -321,27 +324,20 @@ export class StateManager {
   }
 
   /**
-   * Retrieves a pipeline artifact.
+   * Retrieves a pipeline artifact of the open run.
+   *
+   * Strictly run-scoped: this is how a stage loads the output of the stage before it, and a run holds
+   * exactly one requirement. Answering from another run used to hide a missing input behind the
+   * previous requirement's artifact, so a stage silently regenerated a requirement that had already
+   * been superseded. A stage with nothing to read must say so. Comparing against an earlier run is a
+   * different question, asked through getLatestArtifactForProject().
+   *
    * @param {string} artifactKey - Key in pipeline object
-   * @returns {Promise<*>} The artifact or null
+   * @returns {Promise<*>} The artifact of the open run, or null
    */
   async getPipelineArtifact(artifactKey: keyof PipelineArtifacts): Promise<any> {
     const val = await this.get(`pipeline.${artifactKey}`);
-    if (val !== undefined && val !== null) {
-      return val;
-    }
-    try {
-      const latestArtifact = stateDb.prepare(`
-        SELECT a.value FROM artifacts a
-        JOIN runs r ON a.run_id = r.run_id
-        WHERE a.key = ? AND r.project_id NOT LIKE 'test-unit-%' AND r.project_id NOT LIKE 'test-%'
-        ORDER BY r.started_at DESC LIMIT 1
-      `).get(artifactKey) as any;
-      if (latestArtifact?.value) {
-        return JSON.parse(latestArtifact.value);
-      }
-    } catch {}
-    return null;
+    return val === undefined || val === null ? null : val;
   }
 
   /**
@@ -375,7 +371,7 @@ export class StateManager {
         SELECT a.value FROM artifacts a
         JOIN runs r ON a.run_id = r.run_id
         WHERE a.key = ? AND r.project_id = ? AND a.value IS NOT NULL AND a.value <> 'null'
-        ORDER BY r.started_at DESC LIMIT 1
+        ORDER BY COALESCE(r.updated_at, r.started_at) DESC LIMIT 1
       `).get(artifactKey, this._projectId) as any;
       return row?.value ? JSON.parse(row.value) : null;
     } catch {
@@ -492,17 +488,17 @@ export class StateManager {
   private _readFile(): PipelineState | null {
     let run: any = null;
     if (this._projectId === 'default' || this._projectId === 'my-project') {
-      const latestRun = stateDb.prepare("SELECT * FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get() as any;
+      const latestRun = stateDb.prepare(LATEST_RUN_SQL).get() as any;
       if (latestRun) {
         run = latestRun;
         this._projectId = latestRun.project_id;
       }
     }
     if (!run) {
-      run = stateDb.prepare('SELECT * FROM runs WHERE project_id = ? ORDER BY started_at DESC LIMIT 1').get(this._projectId) as any;
+      run = stateDb.prepare(LATEST_RUN_FOR_PROJECT_SQL).get(this._projectId) as any;
     }
     if (!run) {
-      run = stateDb.prepare('SELECT * FROM runs WHERE LOWER(project_id) = LOWER(?) ORDER BY started_at DESC LIMIT 1').get(this._projectId) as any;
+      run = stateDb.prepare(LATEST_RUN_FOR_PROJECT_CI_SQL).get(this._projectId) as any;
       if (run) {
         this._projectId = run.project_id;
       }

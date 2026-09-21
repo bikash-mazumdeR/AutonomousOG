@@ -12,6 +12,7 @@ import { DISCOVERY_SETTINGS } from '../constants';
 import { ChatFn } from '../types';
 import { TraceRecorder, traceLabel } from '../../../core/llm/stagePromptTrace';
 import { AutomationTestCase } from '../contracts/automationTestCase';
+import { authenticateSession } from './authBootstrap';
 import { MissingItem } from '../../../core/readiness/readinessTypes';
 import { ResolvedAutProfile } from '../../../core/aut/AutProfile';
 import { parseJsonObject } from '../sub-agents/shared/generation-utils';
@@ -35,6 +36,12 @@ export interface DiscoverFeatureParams {
   chat: ChatFn;
   logger: any;
   headless?: boolean;
+  /**
+   * Sign in with the profile's declared credentials before crawling, so states behind the login
+   * form are discoverable. Off by default: a feature that exercises the login form itself must meet
+   * the application signed out.
+   */
+  authenticate?: boolean;
   /** Records each navigation-plan request and its attempts for the prompt trace (optional). */
   trace?: TraceRecorder;
 }
@@ -150,6 +157,14 @@ async function crawlTestCase(
     const entryPath = discovery.entryPaths[0];
     await session.goto(entryPath);
     let current = await captureAndMerge(session, map, entryPath);
+    // reset() isolates each test case by clearing the session, which also signs the browser out.
+    // A requirement that lives behind the login form must therefore sign in again here, or every
+    // test case is planned from the login page and none of its preconditions can be met.
+    if (params.authenticate) {
+      const { state, reason } = await signIn(session, map, params, current);
+      if (!state) return fail({ kind: 'AUTH', detail: `Discovery could not sign in to reach the state this test case starts from: ${reason}` });
+      current = state;
+    }
     let fromStep = 1;
     const executed: PlannedAction[] = [];
     for (let depth = 0; depth <= discovery.maxDepth; depth += 1) {
@@ -182,6 +197,29 @@ async function crawlTestCase(
 }
 
 /**
+ * Signs in and captures the state that follows, so the crawl starts from an authenticated session.
+ *
+ * A failure to sign in is recorded as a warning rather than raised: the crawl still runs, and each
+ * test case that needed the authenticated state reports precisely what it could not reach.
+ *
+ * @param {DiscoverySession} session
+ * @param {PageMap} map
+ * @param {DiscoverFeatureParams} params
+ * @returns {Promise<void>}
+ */
+async function signIn(
+  session: DiscoverySession,
+  map: PageMap,
+  params: DiscoverFeatureParams,
+  from: PageState,
+): Promise<{ state?: PageState; reason?: string }> {
+  const result = await authenticateSession(session, from, params.profile.auth.credentialEnvVars || {});
+  if (!result.signedIn) return { reason: result.reason };
+  const state = await captureAndMerge(session, map, undefined, false);
+  return { state };
+}
+
+/**
  * Discovers verified page states for a feature and persists the page map.
  * @param {DiscoverFeatureParams} params
  * @returns {Promise<DiscoveryResult>}
@@ -211,6 +249,16 @@ export async function discoverFeature(params: DiscoverFeatureParams): Promise<Di
       await session.goto(entryPath);
       // eslint-disable-next-line no-await-in-loop
       await captureAndMerge(session, pageMap, entryPath, true);
+    }
+    if (params.authenticate) {
+      const signedInPath = session.currentPath();
+      const from = pageMap.states.find((state) => state.urlPath === signedInPath) || pageMap.states[0];
+      const bootstrap = from ? await signIn(session, pageMap, params, from) : { reason: 'No entry state was captured.' };
+      if (bootstrap.state) {
+        params.logger?.info?.('Discovery signed in', { featureId: params.featureId, state: bootstrap.state.name, elements: bootstrap.state.elements.length });
+      } else {
+        params.logger?.warn?.('Discovery could not sign in', { featureId: params.featureId, reason: bootstrap.reason });
+      }
     }
     if (profile.discovery.executeTestSteps) {
       for (const tc of params.testCases) {

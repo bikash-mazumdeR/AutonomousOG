@@ -15,6 +15,7 @@ import { memoryEngine } from '../../core/project-memory/MemoryEngine';
 import { approvalGate } from '../../core/approval-gate/ApprovalGate';
 import { Logger } from '../../core/logger/Logger';
 import { FRAMEWORK_CONFIG, GMAIL_CONFIG } from '../../config/framework.config';
+import { LATEST_PROJECT_SQL } from '../../core/state-manager/projectResolver';
 
 const STAGE_ID = '09-report-generator';
 const STAGE_NAME = 'Report Generator & Publisher';
@@ -376,7 +377,7 @@ if (require.main === module) {
     try {
       const { stateDb } = require('../../core/state-manager/Database');
       stateDb.initialize();
-      const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get();
+      const latestRun = stateDb.prepare(LATEST_PROJECT_SQL).get();
       if (latestRun && latestRun.project_id) {
         projectId = latestRun.project_id;
       }

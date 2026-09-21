@@ -23,7 +23,7 @@ import { contextSqueezer } from '../../core/llm/ContextSqueezer';
 import { AgentResult } from '../../core/types';
 import { jiraClient } from '../../mcp/jira/jira-mcp-client';
 import {
-  computeInputFingerprint, findReusableAnalysis, ANALYSIS_SOURCE, ANALYSIS_PROMPT_VERSION,
+  computeInputFingerprint, findReusableAnalysis, requiresIsolatedRun, ANALYSIS_SOURCE, ANALYSIS_PROMPT_VERSION,
 } from './inputFingerprint';
 import { assessAnalysisQuality } from './analysisQuality';
 import { isNonAnswer } from '../../core/clarifications/answerQuality';
@@ -89,6 +89,11 @@ export class RequirementAnalyzerAgent {
         return result;
       }
 
+      // A requirement whose content differs from the one the current run holds gets a run of its own,
+      // so ingesting a second feature never overwrites the first feature's analysis, test cases or
+      // scripts. Re-analysing the same requirement stays in its run and invalidates downstream below.
+      const isolatedRun = await this._openRunForRequirement(requirementFingerprint);
+
       await stateManager.markStageRunning(STAGE_ID);
       // Fingerprint before squeezing: squeeze is itself an LLM call and not reproducible.
       const inputFingerprint = computeInputFingerprint({
@@ -125,40 +130,9 @@ export class RequirementAnalyzerAgent {
       const usage = llmClient.getStageUsage(STAGE_ID);
       await stateManager.setPipelineArtifact('analyzedRequirements', analysisReport);
 
-      // Invalidate any downstream stages and artifacts from prior requirement analyses
-      await stateManager.update((state) => {
-        const downstreamStages = [
-          '02-test-case-generator', '03-test-case-reviewer', '04-test-data-generator',
-          '05-playwright-script-generator', '06-automation-reviewer', '07-test-runner',
-          '08-bug-reporter', '09-report-generator', '10-auto-healer', '11-retest-agent'
-        ];
-        downstreamStages.forEach(sId => {
-          if (state.stages[sId]) {
-            state.stages[sId].status = STAGE_STATUS.PENDING;
-            state.stages[sId].output = null;
-            state.stages[sId].approval = APPROVAL_STATUS.PENDING;
-            state.stages[sId].completedAt = null;
-            state.stages[sId].approvedAt = null;
-          }
-        });
-        state.pipeline.testCases = null;
-        state.pipeline.reviewedTestCases = null;
-        state.pipeline.testData = null;
-        state.pipeline.playwrightScripts = null;
-        state.pipeline.reviewedScripts = null;
-        state.pipeline.executionResults = null;
-        state.pipeline.bugReports = null;
-        state.pipeline.publishedReports = null;
-        state.pipeline.healingPatches = null;
-        state.pipeline.retestResults = null;
-        try {
-          // stateDb, not stateManager: StateManager exposes no database accessor, so the call that
-          // used to live here threw on every run and stale downstream artifacts were never purged.
-          stateDb.initialize();
-          stateDb.prepare("DELETE FROM artifacts WHERE run_id = ? AND key NOT IN ('requirements', 'analyzedRequirements')").run(state.runId);
-        } catch (_) {}
-        return state;
-      });
+      // Downstream artifacts describe the previous analysis of THIS requirement. An isolated run
+      // starts empty, and wiping there would reach into the run it was branched from.
+      if (!isolatedRun) await this._invalidateDownstreamOutput();
 
       await stateManager.markStageCompleted(STAGE_ID, analysisReport, usage);
 
@@ -220,6 +194,77 @@ export class RequirementAnalyzerAgent {
     // An empty analysis is not worth preserving — treat it as unprocessed and ingest again.
     if (!Array.isArray(previous.features) || previous.features.length === 0) return null;
     return JSON.parse(JSON.stringify(previous));
+  }
+
+  /**
+   * Clears the stages and artifacts produced from an earlier analysis of the same requirement, so a
+   * re-analysis cannot leave test cases, scripts or results that describe requirements it replaced.
+   * @returns {Promise<void>}
+   * @private
+   */
+  private async _invalidateDownstreamOutput(): Promise<void> {
+    await stateManager.update((state) => {
+      const downstreamStages = [
+        '02-test-case-generator', '03-test-case-reviewer', '04-test-data-generator',
+        '05-playwright-script-generator', '06-automation-reviewer', '07-test-runner',
+        '08-bug-reporter', '09-report-generator', '10-auto-healer', '11-retest-agent'
+      ];
+      downstreamStages.forEach(sId => {
+        if (state.stages[sId]) {
+          state.stages[sId].status = STAGE_STATUS.PENDING;
+          state.stages[sId].output = null;
+          state.stages[sId].approval = APPROVAL_STATUS.PENDING;
+          state.stages[sId].completedAt = null;
+          state.stages[sId].approvedAt = null;
+        }
+      });
+      state.pipeline.testCases = null;
+      state.pipeline.reviewedTestCases = null;
+      state.pipeline.testData = null;
+      state.pipeline.playwrightScripts = null;
+      state.pipeline.reviewedScripts = null;
+      state.pipeline.executionResults = null;
+      state.pipeline.bugReports = null;
+      state.pipeline.publishedReports = null;
+      state.pipeline.healingPatches = null;
+      state.pipeline.retestResults = null;
+      try {
+        // stateDb, not stateManager: StateManager exposes no database accessor, so the call that
+        // used to live here threw on every run and stale downstream artifacts were never purged.
+        stateDb.initialize();
+        stateDb.prepare("DELETE FROM artifacts WHERE run_id = ? AND key NOT IN ('requirements', 'analyzedRequirements')").run(state.runId);
+      } catch (_) {}
+      return state;
+    });
+  }
+
+  /**
+   * Opens the run this requirement belongs to.
+   *
+   * Runs are per requirement, not per project: a project accumulates one run per requirement document
+   * it has ingested. A requirement whose content differs from the one the current run holds therefore
+   * starts a fresh run, leaving the previous requirement's analysis, test cases, test data and scripts
+   * exactly as they were and still addressable. The same requirement analysed again keeps its run.
+   *
+   * @param {string} requirementFingerprint - Content identity of the incoming requirement
+   * @returns {Promise<boolean>} true when a fresh run was started for this requirement
+   * @private
+   */
+  private async _openRunForRequirement(requirementFingerprint: string): Promise<boolean> {
+    const current = await stateManager.get('pipeline.analyzedRequirements');
+    if (!requiresIsolatedRun(current, requirementFingerprint)) return false;
+
+    const projectId = stateManager.getProjectId();
+    const previousRunId = await stateManager.get('runId');
+    const state = await stateManager.startNewRun(projectId);
+    this._logger.info('New requirement — started an isolated run; the previous run is left untouched', {
+      project: projectId,
+      runId: state.runId,
+      previousRunId,
+      requirement: requirementFingerprint.slice(0, 12),
+      previousRequirement: String(current.requirementFingerprint).slice(0, 12),
+    });
+    return true;
   }
 
   /**

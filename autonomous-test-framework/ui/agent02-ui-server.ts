@@ -9,6 +9,7 @@ import { isTestCaseSelected, setTestCaseSelected } from '../core/types';
 import { Logger } from '../core/logger/Logger';
 import path from 'path';
 import * as http from 'http';
+import { LATEST_PROJECT_SQL } from '../core/state-manager/projectResolver';
 
 const app = express();
 const PORT = parseInt(process.env.AGENT02_UI_PORT || '3001', 10);
@@ -40,7 +41,7 @@ app.get('/api/agent02/state', async (req: Request, res: Response) => {
     if (!reqProject) {
       try {
         const stateDb = stateManager.getDatabase();
-        const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get() as any;
+        const latestRun = stateDb.prepare(LATEST_PROJECT_SQL).get() as any;
         if (latestRun?.project_id) reqProject = latestRun.project_id;
       } catch (_) {}
     }
@@ -105,7 +106,7 @@ app.post('/api/agent02/run', async (req: Request, res: Response) => {
   if (!projectName) {
     try {
       const stateDb = stateManager.getDatabase();
-      const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get() as any;
+      const latestRun = stateDb.prepare(LATEST_PROJECT_SQL).get() as any;
       if (latestRun?.project_id) projectName = latestRun.project_id;
     } catch (_) {}
   }
@@ -330,7 +331,7 @@ app.post('/api/agent02/approve', async (req: Request, res: Response) => {
       const requirements = await stateManager.getPipelineArtifact('analyzedRequirements');
       
       // Resync feature files (will add @obsolete to ignored tests)
-      syncFeatureFiles(requirements, allTCs, logger);
+      syncFeatureFiles(stateManager.getProjectId(), requirements, allTCs, logger);
       
       delete testCasesOutput.k6ScenarioIndex; // legacy artifact key — no longer produced or read
       
@@ -523,7 +524,7 @@ const updateTestCaseHandler = async (req: Request, res: Response) => {
     try {
       const requirements = await stateManager.getPipelineArtifact('analyzedRequirements');
       if (requirements) {
-        syncFeatureFiles(requirements, allTCs, logger);
+        syncFeatureFiles(stateManager.getProjectId(), requirements, allTCs, logger);
       }
     } catch (syncErr: any) {
       logger.warn('Failed to resync feature files after test case update', { error: syncErr.message });

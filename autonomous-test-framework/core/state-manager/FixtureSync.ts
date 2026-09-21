@@ -14,8 +14,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-export const FIXTURES_DIR = path.resolve(__dirname, '../../tests/fixtures');
-export const FIXTURES_PATH = path.join(FIXTURES_DIR, 'test-data.json');
 
 interface ManifestInput {
   value?: unknown;
@@ -101,30 +99,51 @@ export function buildFlatTestData(manifest: any, explicitValues?: Record<string,
  * Saves flat test data to a fixture file.
  * @param {any} testDataArtifact - Agent 04 artifact (or its manifest)
  * @param {Record<string, any>} [explicitValues]
- * @param {string} [targetPath]
+ * @param {string} targetPath - The project's fixture file; there is no shared default, because a
+ *   fixture file belongs to exactly one project and must never be written outside it.
  * @returns {Record<string, any>}
  */
 export function syncFixturesFileFromTestData(
   testDataArtifact: any,
-  explicitValues?: Record<string, any>,
-  targetPath: string = FIXTURES_PATH,
+  explicitValues: Record<string, any> | undefined,
+  targetPath: string,
 ): Record<string, any> {
   const manifest = testDataArtifact?.manifest || testDataArtifact || {};
-  const flat = buildFlatTestData(manifest, explicitValues);
+  return writeFixtureFile(targetPath, buildFlatTestData(manifest, explicitValues));
+}
+
+/**
+ * The only writer of a project's fixture file. Merges into what is already there: one file serves
+ * every requirement of the project, and its specs import it by key, so a requirement that defines
+ * fewer keys must not delete the keys another requirement's generated tests depend on.
+ *
+ * @param {string} targetPath - The project's fixture file
+ * @param {Record<string, any>} values - Values this requirement contributes; they win on a clash
+ * @returns {Record<string, any>} The merged contents, as written
+ */
+export function writeFixtureFile(targetPath: string, values: Record<string, any>): Record<string, any> {
+  let existing: Record<string, any> = {};
+  try {
+    const parsed = JSON.parse(fs.readFileSync(targetPath, 'utf-8'));
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) existing = parsed;
+  } catch {
+    // No fixture file yet, or one this framework did not write: start from the given values alone.
+  }
+  const merged = { ...existing, ...values };
   fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-  fs.writeFileSync(targetPath, JSON.stringify(flat, null, 2), 'utf-8');
-  return flat;
+  fs.writeFileSync(targetPath, `${JSON.stringify(merged, null, 2)}\n`, 'utf-8');
+  return merged;
 }
 
 /**
  * Ensures a fixture file exists on disk, rebuilding it from the Agent 04 artifact when missing.
  * @param {any} stateManager
- * @param {string} [targetPath]
+ * @param {string} targetPath - The project's fixture file
  * @returns {Promise<Record<string, any>>}
  */
 export async function ensureFixturesFileSynced(
   stateManager: any,
-  targetPath: string = FIXTURES_PATH,
+  targetPath: string,
 ): Promise<Record<string, any>> {
   if (fs.existsSync(targetPath)) {
     try {

@@ -39,6 +39,7 @@ import { registerAgent09Routes } from './agent09Routes';
 import { registerAgent10Routes } from './agent10Routes';
 import { registerAgent11Routes } from './agent11Routes';
 import { isNonAnswer, nonAnswerMessage } from '../core/clarifications/answerQuality';
+import { LATEST_PROJECT_SQL, resolveProjectId } from '../core/state-manager/projectResolver';
 
 require('dotenv').config();
 
@@ -157,7 +158,10 @@ app.post('/api/agent01/run', upload.single('file'), async (req: Request, res: Re
     activeProcess = null;
   }
 
-  const projectName = ((req.body?.projectName as string) || 'ARIA Project').trim();
+  // Resolved through the shared resolver, exactly like every other stage: an empty project field
+  // must mean "the project being worked on", never a literal. Diverging here sent an upload to one
+  // project while Agent 02 generated from another, so the new requirement was never picked up.
+  const projectName = resolveProjectId(req.body?.projectName as string);
   const jiraId      = ((req.body?.jiraId      as string) || '').trim();
   const reanalyze   = String(req.body?.reanalyze || '') === 'true';
   const uploadedFile = (req as any).file as Express.Multer.File | undefined;
@@ -507,7 +511,7 @@ function handleApproval(stageId: string, action: 'approve' | 'reject') {
         if (!(stateManager as any)._initialized) {
           try {
             const stateDb = stateManager.getDatabase();
-            const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get() as any;
+            const latestRun = stateDb.prepare(LATEST_PROJECT_SQL).get() as any;
             await stateManager.initialize(latestRun?.project_id || 'ARIA Project');
             await memoryEngine.initialize(latestRun?.project_id || 'ARIA Project');
           } catch (_) {
@@ -586,7 +590,7 @@ app.get('/api/agent02/state', async (req: Request, res: Response) => {
     if (!reqProject) {
       try {
         const stateDb = stateManager.getDatabase();
-        const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get() as any;
+        const latestRun = stateDb.prepare(LATEST_PROJECT_SQL).get() as any;
         if (latestRun?.project_id) reqProject = latestRun.project_id;
       } catch (_) {}
     }
@@ -650,7 +654,7 @@ app.post('/api/agent02/run', async (req: Request, res: Response) => {
   if (!projectName) {
     try {
       const stateDb = stateManager.getDatabase();
-      const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get() as any;
+      const latestRun = stateDb.prepare(LATEST_PROJECT_SQL).get() as any;
       if (latestRun?.project_id) projectName = latestRun.project_id;
     } catch (_) {}
   }
@@ -862,7 +866,7 @@ app.post('/api/agent02/approve', async (req: Request, res: Response) => {
         setTestCaseSelected(tc, !uncheckedTestCaseKeys.includes(tc.key));
       }
       const requirements = await stateManager.getPipelineArtifact('analyzedRequirements');
-      syncFeatureFiles(requirements, allTCs, logger);
+      syncFeatureFiles(stateManager.getProjectId(), requirements, allTCs, logger);
       delete testCasesOutput.k6ScenarioIndex; // legacy artifact key — no longer produced or read
       await stateManager.setPipelineArtifact('testCases', testCasesOutput);
 
@@ -928,7 +932,7 @@ const updateTestCaseHandler = async (req: Request, res: Response) => {
     try {
       const requirements = await stateManager.getPipelineArtifact('analyzedRequirements');
       if (requirements) {
-        syncFeatureFiles(requirements, allTCs, logger);
+        syncFeatureFiles(stateManager.getProjectId(), requirements, allTCs, logger);
       }
     } catch (syncErr: any) {
       logger.warn('Failed to resync feature files after test case update', { error: syncErr.message });
@@ -1004,7 +1008,7 @@ app.post('/api/agent03/run', async (req: Request, res: Response) => {
   if (!projectName) {
     try {
       const stateDb = stateManager.getDatabase();
-      const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get() as any;
+      const latestRun = stateDb.prepare(LATEST_PROJECT_SQL).get() as any;
       if (latestRun?.project_id) projectName = latestRun.project_id;
     } catch (_) {}
   }
@@ -1134,7 +1138,9 @@ registerAgent03ReviewRoutes(app, logger);
 
 let activeProcess04: ChildProcess | null = null;
 const sseClients04: Set<Response> = new Set();
-const FIXTURES_PATH = path.join(FRAMEWORK_DIR, 'tests', 'fixtures', 'test-data.json');
+// Resolved per call, never cached: the fixture file belongs to whichever project the pipeline is
+// on, and generated tests import it from that project's own folder.
+const fixturesPath = () => projectPaths(stateManager.getProjectId()).fixtureFile;
 
 function broadcastSSE04(data: any) {
   const payload = `data: ${JSON.stringify(data)}\n\n`;
@@ -1155,14 +1161,14 @@ app.get('/api/agent04/state', async (_req: Request, res: Response) => {
     const { stage, reviewedTestCases, testData, stored, freshness } = await loadCurrentTestData(stateManager);
 
     let flatTestData: Record<string, any> = {};
-    if (testData && fs.existsSync(FIXTURES_PATH)) {
+    if (testData && fs.existsSync(fixturesPath())) {
       try {
-        flatTestData = JSON.parse(fs.readFileSync(FIXTURES_PATH, 'utf-8'));
+        flatTestData = JSON.parse(fs.readFileSync(fixturesPath(), 'utf-8'));
       } catch (_) {}
     }
     if (Object.keys(flatTestData).length === 0 && testData) {
       try {
-        flatTestData = syncFixturesFileFromTestData(testData, undefined, FIXTURES_PATH);
+        flatTestData = syncFixturesFileFromTestData(testData, undefined, fixturesPath());
       } catch (_) {}
     }
 
@@ -1194,7 +1200,7 @@ app.post('/api/agent04/run', async (req: Request, res: Response) => {
   if (!projectName) {
     try {
       const stateDb = stateManager.getDatabase();
-      const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get() as any;
+      const latestRun = stateDb.prepare(LATEST_PROJECT_SQL).get() as any;
       if (latestRun?.project_id) projectName = latestRun.project_id;
     } catch (_) {}
   }
@@ -1266,8 +1272,8 @@ app.post('/api/agent04/approve', async (req: Request, res: Response) => {
       return res.status(409).json({ error: `Cannot approve Agent 04: ${freshness.reason} Run Agent 04 first.` });
     }
     // Only sync the fixture — never copy the artifact into the current run (that is how stale data spread)
-    syncFixturesFileFromTestData(testData, undefined, FIXTURES_PATH);
-    logger.info('Synchronized fixtures to disk on Agent 04 approval', { fixturesPath: FIXTURES_PATH });
+    syncFixturesFileFromTestData(testData, undefined, fixturesPath());
+    logger.info('Synchronized fixtures to disk on Agent 04 approval', { fixturesPath: fixturesPath() });
   } catch (err: any) {
     logger.error('Agent 04 approval pre-check failed', { error: err.message });
     return res.status(500).json({ error: err.message });
@@ -1334,7 +1340,7 @@ app.post('/api/agent04/chat', async (req: Request, res: Response) => {
 });
 
 // ── PUT / POST /api/agent04/data (Human Test Data Override) ─────────────────
-registerAgent04DataRoutes(app, logger, FIXTURES_PATH);
+registerAgent04DataRoutes(app, logger, fixturesPath);
 
 // ── Agents 06-11 ────────────────────────────────────────────────────────────
 // Registrars rather than inline routes: each owns its own runner, SSE stream and approval proxy,
@@ -1449,7 +1455,7 @@ app.post('/api/agent05/run', async (req: Request, res: Response) => {
   if (!projectName) {
     try {
       const stateDb = stateManager.getDatabase();
-      const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get() as any;
+      const latestRun = stateDb.prepare(LATEST_PROJECT_SQL).get() as any;
       if (latestRun?.project_id) projectName = latestRun.project_id;
     } catch (_) {}
   }

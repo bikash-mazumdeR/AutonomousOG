@@ -13,10 +13,12 @@ import fs from 'fs';
 import { execSync, spawn } from 'child_process';
 
 import { stateManager, STAGE_STATUS } from '../../core/state-manager/StateManager';
+import { projectPaths } from '../../core/aut/projectPaths';
 import { memoryEngine } from '../../core/project-memory/MemoryEngine';
 import { approvalGate } from '../../core/approval-gate/ApprovalGate';
 import { Logger } from '../../core/logger/Logger';
 import { FRAMEWORK_CONFIG } from '../../config/framework.config';
+import { LATEST_PROJECT_SQL } from '../../core/state-manager/projectResolver';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -814,7 +816,7 @@ function resolveProjectId(opts: Record<string, any>): string {
   try {
     const { stateDb } = require('../../core/state-manager/Database');
     stateDb.initialize();
-    const latestRun = stateDb.prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1").get();
+    const latestRun = stateDb.prepare(LATEST_PROJECT_SQL).get();
     if (latestRun?.project_id) return latestRun.project_id;
   } catch {
     // fall back to configuration
@@ -863,7 +865,7 @@ if (require.main === module) {
     // Disk fallback for testData if not present in state
     if (!testData) {
       try {
-        const fixturePath = path.resolve(__dirname, '../../tests/fixtures/test-data.json');
+        const fixturePath = projectPaths(stateManager.getProjectId()).fixtureFile;
         if (fs.existsSync(fixturePath)) {
           testData = JSON.parse(fs.readFileSync(fixturePath, 'utf-8'));
         }

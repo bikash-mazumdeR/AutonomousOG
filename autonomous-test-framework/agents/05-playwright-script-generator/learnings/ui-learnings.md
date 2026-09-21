@@ -73,3 +73,39 @@ An expected result in which several assertions are joined without a separator (e
 message container …") has lost its line breaks. Treat each clause as a separate expected result only when its
 boundaries are unmistakable; otherwise return NEEDS_CONTEXT `{ "kind": "EXPECTED_RESULT" }` asking for one
 expected result per line.
+
+## 13. A credential given as a bare literal is not a bound value
+When a step supplies the value the application must accept — the text calls it a valid, registered or working
+email, password, token or key — but gives it as literal text instead of a data binding, do NOT inline the literal.
+Return NEEDS_CONTEXT `{ "kind": "DATA" }` naming the test case, the step and the field. Two things go wrong when
+such a literal is inlined: a real credential is written into the repository, and the test silently stops covering
+what its title claims — a "valid" password that is not the account's password turns a one-invalid-field case into
+an all-invalid case, so it duplicates another test case and its acceptance criterion loses coverage.
+```ts
+// Step: "the user enters 'someone@example.com' in the Email field and {{invalidPassword}} in the Password field",
+// where the same step calls that address the registered one.
+// Wrong: await featurePage.signInFlow({ email: "someone@example.com", password: data.invalidPassword });
+// Right: NEEDS_CONTEXT { "kind": "DATA", "detail": "TC-0xx step 2 gives the registered email as a literal; bind it" }
+```
+A literal the test case presents as invalid, throwaway or arbitrary ("enters 'abc' in the Search field") is ordinary
+test text — use it verbatim as before.
+
+## 14. "Remains on / is not redirected" is observable only after the application has answered
+`await expect(page).toHaveURL(...)` placed straight after a submit passes on its first poll, before the request that
+could redirect has answered, so it holds whichever way the submission goes. Assert it only after an assertion in the
+same test has observed the application's answer to that submission — the message the step expects, or the state
+discovery verified for that step. When the step's expected results name no such signal, return NEEDS_CONTEXT
+`{ "kind": "EXPECTED_RESULT" }` asking for the signal that the submission finished.
+```ts
+await featurePage.signInFlow({ email: data.invalidEmail, password: data.invalidPassword });
+await expect(featurePage.loginErrorAlert).toContainText('Login failed');  // the application answered
+await expect(page).toHaveURL('/');                                        // only now does "remains" mean anything
+```
+
+## 15. Assert a URL only when it can tell the outcomes apart
+`verifiedStates[stepIndex].urlPath` says where the step ended, not that a different outcome would have ended
+elsewhere. When the page contract lists the elements of both possible destinations under the SAME state — a
+single-page application that swaps views without changing the address — that path is identical for success and
+failure, so `toHaveURL` can never fail and the assertion proves nothing. Assert the element the expected result
+names, because it belongs to exactly one outcome. If the expected result names only the address, return
+NEEDS_CONTEXT `{ "kind": "EXPECTED_RESULT" }` asking which element proves the state.

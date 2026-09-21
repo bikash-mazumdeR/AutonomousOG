@@ -37,6 +37,7 @@ import { buildGenerationMeta, describeInputChanges, formatInputChanges } from '.
 import { filterByActiveTypes, resolveActiveTypeTags } from './prompts/systemPrompt';
 import { buildPromptTrace } from './generation/promptTrace';
 import { assertTestCasesGenerated } from './generation/emptyResultGuard';
+import { LATEST_PROJECT_SQL } from '../../core/state-manager/projectResolver';
 
 const PROMPT_TRACE_FILE = 'test-case-generation-prompt-trace.json';
 
@@ -140,7 +141,7 @@ export class TestCaseGeneratorAgent {
       const output: TestCasesArtifact = {
         zephyrExport: { totalTestCases: generation.testCases.length, testCases: generation.testCases, generationMeta: generation.meta },
       };
-      const featureFilePaths = syncFeatureFiles(input.analyzedRequirements, generation.testCases, this._logger);
+      const featureFilePaths = syncFeatureFiles(stateManager.getProjectId(), input.analyzedRequirements, generation.testCases, this._logger);
 
       const usage = llmClient.getStageUsage(STAGE_ID);
       await stateManager.setPipelineArtifact('testCases', output);
@@ -376,7 +377,7 @@ function resolveProjectId(opts: Record<string, any>): string {
   if (opts.project) return opts.project;
   try {
     const latestRun = (stateManager as any).getDatabase()
-      .prepare("SELECT project_id FROM runs WHERE project_id NOT LIKE 'test-unit-%' AND project_id NOT LIKE 'test-%' ORDER BY started_at DESC LIMIT 1")
+      .prepare(LATEST_PROJECT_SQL)
       .get() as any;
     if (latestRun?.project_id) return latestRun.project_id;
   } catch (_) { /* fall through to config */ }

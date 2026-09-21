@@ -51,7 +51,7 @@ export class K6ScriptGenerator {
     const fileByTcKey = new Map<string, string>();
     for (const outcome of bodies.filter((o) => o.status === 'GENERATED')) {
       const tc = byKey.get(outcome.tcKey) as AutomationTestCase;
-      const scriptPath = path.join(ctx.paths.k6Dir, `${fileStem(ctx.featureId)}-${fileStem(tc.tcKey)}.k6.js`);
+      const scriptPath = path.join(ctx.paths.k6Dir, `${fileStem(ctx.featureKey)}-${fileStem(tc.tcKey)}.k6.js`);
       files.push({ path: scriptPath, content: renderK6Script(scriptParams(tc, outcome.body as string)), kind: 'k6' });
       fileByTcKey.set(tc.tcKey, scriptPath);
     }
