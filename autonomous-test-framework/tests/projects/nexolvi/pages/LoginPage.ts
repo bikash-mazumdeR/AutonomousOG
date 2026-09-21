@@ -6,9 +6,9 @@ import { BasePage } from '../../../pages/BasePage';
 /**
  * Page object for feature F-01. Every locator resolved to exactly one element during discovery.
  */
-export class F01Page extends BasePage {
+export class LoginPage extends BasePage {
   constructor(page: Page) {
-    super(page, 'F01Page');
+    super(page, 'LoginPage');
   }
 
   /** Navigate to the "start" state. */

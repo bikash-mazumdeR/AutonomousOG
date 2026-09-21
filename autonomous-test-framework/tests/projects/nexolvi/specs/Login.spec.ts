@@ -4,11 +4,11 @@ import { test as base, expect } from '@playwright/test';
 import { requireEnv as env } from '../../../helpers/env';
 import { storedDaysFromNow } from '../../../helpers/storage';
 import fixtureData from '../fixtures/test-data.json';
-import { F01Page } from '../pages/F01Page';
+import { LoginPage } from '../pages/LoginPage';
 
-const test = base.extend<{ featurePage: F01Page; data: typeof fixtureData }>({
+const test = base.extend<{ featurePage: LoginPage; data: typeof fixtureData }>({
   featurePage: async ({ page }, use) => {
-    await use(new F01Page(page));
+    await use(new LoginPage(page));
   },
   // eslint-disable-next-line no-empty-pattern
   data: async ({}, use) => {
@@ -16,7 +16,7 @@ const test = base.extend<{ featurePage: F01Page; data: typeof fixtureData }>({
   },
 });
 
-test.describe("F-01", () => {
+test.describe("Login", () => {
   test.beforeEach(async ({ page, featurePage, data }) => {
     await featurePage.openStart();
     await expect(featurePage.welcomeToNexolviHeading).toBeVisible();

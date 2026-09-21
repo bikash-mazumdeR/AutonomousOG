@@ -37,7 +37,7 @@ Nine test cases ended NEEDS_CONTEXT. Causes and resolutions, so the same gaps ar
 | TC-006, TC-007, TC-008 | LOCATOR — no page contract member for the "Login failed" message | Two causes, both now addressed: the post-response state was never captured (same settle bug), and the alert carries no accessible name, so `candidateLocators` produced no candidate for it | Fixed by the `settle()` change plus the declared locator `loginErrorAlert` (`div[role="alert"]`) in the AUT profile |
 | TC-002 | DATA — `{{placeholder}}` has no resolved value | The approved test case carries the literal token `{{placeholder}}` in its `testData` field — a template artifact from Agent 02 that Agent 03 passed. The step ("enters at least one character in each field") needs no test data | Correct the test case: clear that `testData` field, or give it a real named placeholder |
 
-## Findings from reviewing `tests/projects/nexolvi/specs/F-01.spec.ts` (2026-09-18)
+## Findings from reviewing `tests/projects/nexolvi/specs/Login.spec.ts` (2026-09-18)
 
 7. **The dashboard is served at the same address as the login page.** Signing in successfully leaves the browser at
    `/` — Nexo Desk swaps the view without changing the route. So a URL is never evidence of which state the
@@ -47,7 +47,7 @@ Nine test cases ended NEEDS_CONTEXT. Causes and resolutions, so the same gaps ar
    `loginErrorAlert`, and prove the dashboard with `dashboardHeading`. See generic UI learnings 14 and 15.
 8. **Both states share one entry in the page map.** Because both render at `/`, discovery recorded the login form
    and the post-login shell (`dashboardHeading`, `nexolviLogoImage`, the product buttons, `bButton`) as one state
-   named `start`, so every `(state: start)` comment in `F01Page.ts` is wrong for the dashboard members, and
+   named `start`, so every `(state: start)` comment in `LoginPage.ts` is wrong for the dashboard members, and
    `verifiedStates[*].urlPath` is `/` for every step of every test case. Treat the state annotation of those
    members as unverified; never derive a URL assertion from them.
 9. **Credentials reached the spec as literals, and one of them changed what the test covers.** In the approved
