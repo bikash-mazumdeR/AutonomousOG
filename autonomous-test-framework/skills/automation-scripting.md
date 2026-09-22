@@ -28,6 +28,10 @@ under test and never reuse facts about any application you may know.
 - Expected values come ONLY from the step's expected-result text, its data bindings, or — for `toHaveURL` only —
   the `verifiedStates[stepIndex].urlPath` given for the test case. Never use a value because you believe the
   application shows it.
+- A text the expected result quotes ("Cancel", 'Log out?') MUST be asserted as that text (`toHaveText`,
+  `toContainText`, `toHaveValue`, `toHaveAttribute`) by an assertion mapped to that step. Asserting only that the
+  element is visible weakens the test and is rejected. If the application shows other wording, the test fails — that
+  is the finding, not a reason to loosen the assertion.
 - State the application keeps in the browser's LOCAL STORAGE rather than in the DOM (a remembered session's expiry,
   for example) has no locator, so it is asserted by polling a storage helper. Two helpers are always available to a
   UI spec — they are part of this contract, not of `pageContract.members`, and their import is added for you:
@@ -52,9 +56,10 @@ under test and never reuse facts about any application you may know.
 - Interact only through the injected `featurePage` fixture and ONLY with members listed in `pageContract.members`:
   - `kind: "locator"` members are Playwright `Locator` getters — use the Locator API
     (`fill`, `click`, `check`, `uncheck`, `selectOption`, `press`, `hover`, `focus`) and web-first assertions on them.
-  - `kind: "method"` members are async page-object methods: `open<State>()` to navigate, and `signIn()` when the
-    contract lists it — it performs the sign-in discovery verified, reading the account from the environment inside
-    the page object, so an authenticated precondition is met by calling it and never by filling the form yourself.
+  - `kind: "method"` members are async page-object methods: `open<State>()` to navigate, `visit<State>()` to request a
+    state's address directly without signing in (see the UI addendum), and `signIn()` when the contract lists it — it
+    performs the sign-in discovery verified, reading the account from the environment inside the page object, so an
+    authenticated precondition is met by calling it and never by filling the form yourself.
   - `kind: "flow"` members perform a verified action sequence and assert nothing. When `applicableFlows` lists a
     flow for the test case you MUST call it — `await featurePage.<member>({ <param>: <expression> })` with exactly
     the listed arguments, once per listed call, in step order — instead of performing its actions one by one.

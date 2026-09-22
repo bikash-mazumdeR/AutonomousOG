@@ -17,7 +17,7 @@ import { PageContract } from '../rendering/pomRenderer';
 import {
   DiscoveryProvenance, GeneratedTest, StepAssertionMap, ValidationContext, discoveryProvenance, validateGeneratedTest,
 } from '../validation/integrityValidator';
-import { FlowUsage } from '../discovery/flowExtractor';
+import { FlowUsage, PreconditionAction } from '../discovery/flowExtractor';
 import { chunkArray, parseJsonObject } from '../sub-agents/shared/generation-utils';
 import { TraceRecorder, traceLabel } from '../../../core/llm/stagePromptTrace';
 
@@ -40,6 +40,10 @@ export interface BodyGenerationRequest {
   flowsByTcKey?: Map<string, FlowUsage[]>;
   /** UI: states discovery verified after each step (by tcKey). */
   verifiedStatesByTcKey?: Map<string, Record<number, { state: string; urlPath: string }>>;
+  /** UI: the actions discovery performed to establish each test case's precondition (by tcKey). */
+  preconditionActionsByTcKey?: Map<string, PreconditionAction[]>;
+  /** Credential environment variables and their values: a body may never contain one of the values as a literal. */
+  secrets?: Array<{ name: string; value: string }>;
   /** Records each chunk and its validation attempts for the prompt trace (optional). */
   trace?: TraceRecorder;
 }
@@ -66,6 +70,11 @@ function flowPayload(usages: FlowUsage[] | undefined): Array<Record<string, unkn
     coversSteps: usage.stepIndexes,
     calls: usage.calls.map((args) => Object.fromEntries(Object.entries(args).map(([param, arg]) => [param, arg.expression]))),
   }));
+}
+
+function preconditionPayload(actions: PreconditionAction[] | undefined): Array<Record<string, unknown>> | undefined {
+  if (!actions || actions.length === 0) return undefined;
+  return actions.map((action) => ({ member: action.member, op: action.op, ...(action.value ? { value: action.value.expression } : {}) }));
 }
 
 function statesPayload(req: BodyGenerationRequest, tcKey: string): Record<number, { state: string; urlPath: string }> | undefined {
@@ -101,6 +110,7 @@ export function buildGenerationPayload(
         data: step.data.map(({ token, fixtureKey, envVar }) => ({ token, fixtureKey, envVar })),
       })),
       applicableFlows: flowPayload(req.flowsByTcKey?.get(tc.tcKey)),
+      preconditionActions: preconditionPayload(req.preconditionActionsByTcKey?.get(tc.tcKey)),
       verifiedStates: statesPayload(req, tc.tcKey),
     })),
     priorReviewFindings: req.priorReviewFindings.length > 0 ? req.priorReviewFindings : undefined,
@@ -191,7 +201,14 @@ async function generateChunk(req: BodyGenerationRequest, chunk: AutomationTestCa
       const entry = entries.get(tc.tcKey);
       const harness = entry?.status === 'GENERATED' && entry.body ? req.renderHarness(tc, entry.body) : '';
       const ctx: ValidationContext = {
-        mode: req.mode, tc, contract: req.contract, harness, flows: req.flowsByTcKey?.get(tc.tcKey), verifiedStates: req.verifiedStatesByTcKey?.get(tc.tcKey),
+        mode: req.mode,
+        tc,
+        contract: req.contract,
+        harness,
+        flows: req.flowsByTcKey?.get(tc.tcKey),
+        verifiedStates: req.verifiedStatesByTcKey?.get(tc.tcKey),
+        preconditionActions: req.preconditionActionsByTcKey?.get(tc.tcKey),
+        secrets: req.secrets,
       };
       const errors = entry ? validateGeneratedTest(entry, ctx) : [error || `No entry was returned for ${tc.tcKey}.`];
       if (entry && errors.length === 0) {

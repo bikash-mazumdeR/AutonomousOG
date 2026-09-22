@@ -10,7 +10,8 @@ import {
   chromium, selectors, Browser, BrowserContext, Page, Locator,
 } from '@playwright/test';
 import {
-  CONTAINER_ROLES, CONTENT_NAMED_ROLES, DISCOVERY_MARK_ATTRIBUTE, DISCOVERY_SETTINGS, DYNAMIC_ID_HEURISTICS, OVERLAY_ROLES,
+  ACCOUNT_IDENTIFIER_MEMBER, CONTAINER_ROLES, CONTENT_NAMED_ROLES, DISCOVERY_MARK_ATTRIBUTE, DISCOVERY_SETTINGS, DYNAMIC_ID_HEURISTICS,
+  OVERLAY_ROLES,
 } from '../constants';
 import { ExtraLocator } from '../../../core/aut/AutProfile';
 import {
@@ -158,9 +159,34 @@ export function cssEscape(value: string): string {
  * @param {Candidate} candidate
  * @returns {Locator}
  */
-export function toLocator(page: Page, candidate: Candidate): Locator {
+/**
+ * The account the session signed in with, as discovery knows it: the environment variable and, for the live probe
+ * only, its value.
+ */
+export interface AccountIdentifier {
+  envName: string;
+  value: string;
+}
+
+/**
+ * What the page contract says about the account identifier element, so the body generator asserts its presence and
+ * never its literal value.
+ * @param {string} envName
+ * @returns {string}
+ */
+export function describeAccountIdentifier(envName: string): string {
+  return `the account identifier the session signed in with (email or username) as the page shows it, read from `
+    + `${envName} at runtime — assert that it is visible; never assert, type or bind its literal value`;
+}
+
+export function toLocator(page: Page, candidate: Candidate, env: NodeJS.ProcessEnv = process.env): Locator {
   const [first, second] = candidate.args;
   switch (candidate.strategy) {
+    case 'env': {
+      const value = env[first];
+      if (!value) throw new Error(`Environment variable ${first} is not set; the account identifier locator cannot be resolved.`);
+      return page.getByText(value, { exact: true });
+    }
     case 'testId': return page.getByTestId(first);
     case 'role': return second === undefined ? page.getByRole(first as any) : page.getByRole(first as any, { name: second, exact: true });
     case 'label': return page.getByLabel(first, { exact: true });
@@ -334,6 +360,7 @@ export class DiscoverySession {
 
   /** Requests the current page has started but not finished. */
   private _inFlight = 0;
+  private _accountIdentifier?: AccountIdentifier;
 
   private constructor(private readonly _options: DiscoveryOptions, private readonly _browser: Browser, context: BrowserContext, page: Page) {
     this._context = context;
@@ -358,6 +385,16 @@ export class DiscoverySession {
     context.setDefaultTimeout(DISCOVERY_SETTINGS.ACTION_TIMEOUT_MS);
     context.setDefaultNavigationTimeout(DISCOVERY_SETTINGS.NAVIGATION_TIMEOUT_MS);
     return { context, page: await context.newPage() };
+  }
+
+  /**
+   * Tells discovery which account the session signed in with, so a state that shows that identifier (a user menu,
+   * an account header) gets a locator for it. The locator reads the variable at runtime; the value never enters
+   * the page map.
+   * @param {AccountIdentifier | undefined} identifier
+   */
+  setAccountIdentifier(identifier: AccountIdentifier | undefined): void {
+    this._accountIdentifier = identifier;
   }
 
   /** Starts a fresh browser context (clean cookies/storage). */
@@ -480,6 +517,7 @@ export class DiscoverySession {
     const overlay = detectOverlay(raws);
     let elements = await this._verifyElements(raws, overlay !== undefined);
     elements = [...elements, ...await this._verifyExtraLocators(elements)];
+    elements = [...elements, ...await this._verifyAccountIdentifier(elements)];
     if (reloadVerify) {
       await this.page.reload({ waitUntil: 'commit' });
       await this._waitForInteractiveDom();
@@ -503,6 +541,25 @@ export class DiscoverySession {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * The element whose text is the account identifier the session signed in with, when the current state shows it
+   * exactly once and no verified element already addresses it by that text (a link named by the email, say).
+   * @param {PageElement[]} found
+   * @returns {Promise<PageElement[]>}
+   */
+  private async _verifyAccountIdentifier(found: PageElement[]): Promise<PageElement[]> {
+    const identifier = this._accountIdentifier;
+    if (!identifier) return [];
+    if (found.some((element) => element.accessibleName === identifier.value || element.args.includes(identifier.value))) return [];
+    const candidate: Candidate = { strategy: 'env', args: [identifier.envName] };
+    if (!(await this._isUnique(candidate))) return [];
+    const tag = await toLocator(this.page, candidate).evaluate((el: any) => el.tagName.toLowerCase()).catch(() => 'element');
+    const name = uniqueName(ACCOUNT_IDENTIFIER_MEMBER, new Set(found.map((element) => element.name)));
+    return [{
+      name, strategy: 'env', args: [identifier.envName], tag, description: describeAccountIdentifier(identifier.envName),
+    }];
   }
 
   /** Profile-declared locators that match exactly one element in the current state (absent ones are skipped). */

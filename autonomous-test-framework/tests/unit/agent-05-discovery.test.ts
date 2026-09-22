@@ -38,6 +38,21 @@ const AUTH_PAGE = `<!doctype html><html><body>
   <button type="submit">Sign in</button>
 </form></body></html>`;
 
+/** A sign-in form that lands on an account page showing the signed-in email. */
+const ACCOUNT_AUTH_PAGE = `<!doctype html><html><body>
+<form onsubmit="event.preventDefault(); location.href = '/account.html';">
+  <label for="email">Email</label><input id="email" type="email" />
+  <label for="password">Password</label><input id="password" type="password" />
+  <button type="submit">Sign in</button>
+</form></body></html>`;
+
+/** The account page: the email is a role-less text node, as a user menu or account header shows it. */
+const ACCOUNT_PAGE = `<!doctype html><html><body>
+<h1>Account</h1>
+<div>Signed in as <span>qa@example.test</span></div>
+<button type="button">Sign out</button>
+</body></html>`;
+
 /**
  * The same sign-in form, mounted by script well after the page is interactive — the way a client-rendered login
  * page appears: a control is there at once, the form a beat later. The delay exceeds the DOM-quiet window, so the
@@ -182,6 +197,8 @@ describe('Agent 05 live DOM discovery', () => {
       if (req.url?.startsWith('/dashboard')) res.end(DASHBOARD_PAGE);
       else if (req.url?.startsWith('/menu')) res.end(MENU_PAGE);
       else if (req.url?.startsWith('/late-auth')) res.end(LATE_AUTH_PAGE);
+      else if (req.url?.startsWith('/account-auth')) res.end(ACCOUNT_AUTH_PAGE);
+      else if (req.url?.startsWith('/account')) res.end(ACCOUNT_PAGE);
       else if (req.url?.startsWith('/auth')) res.end(AUTH_PAGE);
       else res.end(START_PAGE);
     });
@@ -342,6 +359,105 @@ describe('Agent 05 live DOM discovery', () => {
     expect(result.pageMap.auth).toMatchObject({ loginState: 'lateAuth', signedInState: 'dashboard', identifier: 'emailInput', password: 'passwordInput', submit: 'signInButton' });
     const login = result.pageMap.states.find((s) => s.name === 'lateAuth');
     expect(login?.elements.map((e) => e.name)).toEqual(expect.arrayContaining(['helpButton', 'emailInput', 'passwordInput', 'signInButton']));
+  });
+
+  it('establishes a precondition as step 0 and records the actions and the state it led to', async () => {
+    const menuCase: AutomationTestCase = {
+      ...signInCase('TC-006'),
+      precondition: 'the user menu is open',
+      steps: [{
+        index: 1, keyword: 'When', action: 'the user clicks Logout in the user menu', expected: ['The "Log out?" dialog is displayed'], testData: '', data: [],
+      }],
+    };
+    const plans = [
+      { actions: [{ stepIndex: 0, element: 'bButton', op: 'click' }], stopReason: 'NEEDS_NEW_STATE', nextStep: 1 },
+      { actions: [{ stepIndex: 1, element: 'logoutMenuItem', op: 'click' }], stopReason: 'COMPLETE' },
+    ];
+    const chat: ChatFn = jest.fn(async (messages) => {
+      // The planner is handed the precondition as step 0.
+      const request = JSON.parse(String(messages[messages.length - 1].content));
+      expect(request.testCase.steps[0]).toMatchObject({ index: 0, action: 'Precondition: the user menu is open', expected: [] });
+      return JSON.stringify(plans.shift());
+    });
+    const result = await discoverFeature({
+      featureId: 'F-07',
+      testCases: [menuCase],
+      profile: { ...profile(), testIdAttribute: undefined, discovery: { entryPaths: ['/menu.html'], maxDepth: 1, executeTestSteps: true } },
+      pageMapFile: path.join(tmp, 'F-07.json'),
+      fixtureValues: {},
+      plannerSystemPrompt: 'planner',
+      chat,
+      logger: console,
+    });
+
+    expect(result.issues.size).toBe(0);
+    expect(result.pageMap.traces).toEqual([{
+      tcKey: 'TC-006',
+      runs: [
+        { state: 'menu', reachedState: 'menuMenu', actions: [{ stepIndex: 0, state: 'menu', element: 'bButton', op: 'click' }] },
+        { state: 'menuMenu', reachedState: 'menuLogOutDialog', actions: [{ stepIndex: 1, state: 'menuMenu', element: 'logoutMenuItem', op: 'click' }] },
+      ],
+      stateAfterStep: { 0: 'menuMenu', 1: 'menuLogOutDialog' },
+    }]);
+    expect(result.pageMap.flows).toEqual([]);
+  });
+
+  it('performs a goto step by requesting the known state\'s address and records its target', async () => {
+    const gotoCase: AutomationTestCase = {
+      ...signInCase('TC-011'),
+      precondition: '',
+      steps: [{
+        index: 1, keyword: 'When', action: 'the user navigates to the dashboard address', expected: ['The Welcome heading is displayed'], testData: '', data: [],
+      }],
+    };
+    const plans = [{ actions: [{ stepIndex: 1, op: 'goto', state: 'dashboard' }], stopReason: 'COMPLETE' }];
+    const chat: ChatFn = jest.fn(async () => JSON.stringify(plans.shift()));
+    const result = await discoverFeature({
+      featureId: 'F-09',
+      testCases: [gotoCase],
+      profile: { ...profile(), discovery: { entryPaths: ['/', '/dashboard.html'], maxDepth: 1, executeTestSteps: true } },
+      pageMapFile: path.join(tmp, 'F-09.json'),
+      fixtureValues: {},
+      plannerSystemPrompt: 'planner',
+      chat,
+      logger: console,
+    });
+
+    expect(result.issues.size).toBe(0);
+    expect(result.pageMap.traces).toEqual([{
+      tcKey: 'TC-011',
+      runs: [{ state: 'start', reachedState: 'dashboard', actions: [{ stepIndex: 1, state: 'start', op: 'goto', target: 'dashboard' }] }],
+      stateAfterStep: { 1: 'dashboard' },
+    }]);
+  });
+
+  it('addresses the signed-in account identifier through its environment variable, never its value', async () => {
+    process.env.SAMPLE_EMAIL = 'qa@example.test';
+    process.env.SAMPLE_PASSWORD = 's3cret';
+    const result = await discoverFeature({
+      featureId: 'F-08',
+      testCases: [],
+      profile: {
+        ...profile(),
+        testIdAttribute: undefined,
+        discovery: { entryPaths: ['/account-auth.html'], maxDepth: 1, executeTestSteps: false },
+        auth: { strategy: 'form', credentialEnvVars: { validEmail: 'SAMPLE_EMAIL', validPassword: 'SAMPLE_PASSWORD' } },
+      },
+      pageMapFile: path.join(tmp, 'F-08.json'),
+      fixtureValues: {},
+      plannerSystemPrompt: 'planner',
+      chat: jest.fn(),
+      logger: console,
+      authenticate: true,
+    });
+
+    const account = result.pageMap.states.find((s) => s.name === 'account');
+    expect(account?.elements.find((e) => e.name === 'accountIdentifierText')).toMatchObject({
+      strategy: 'env', args: ['SAMPLE_EMAIL'], tag: 'span', description: expect.stringContaining('read from SAMPLE_EMAIL at runtime'),
+    });
+    // The login state shows no identifier, and no page-map text carries the account's email.
+    expect(result.pageMap.states.find((s) => s.name === 'accountAuth')?.elements.some((e) => e.strategy === 'env')).toBe(false);
+    expect(JSON.stringify(result.pageMap)).not.toContain('qa@example.test');
   });
 
   it('reports unreachable applications as NEEDS_CONTEXT instead of guessing', async () => {

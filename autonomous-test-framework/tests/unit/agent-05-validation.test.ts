@@ -127,6 +127,15 @@ describe('Agent 05 integrity validator', () => {
     expect(validate(withBody(validBody.replace('data.validPin', 'data.adminPin'))).join('\n')).toContain('data.adminPin is not a fixture key');
   });
 
+  it('requires a text the expected result quotes to be asserted, not just the element\'s presence', () => {
+    const weakened = withBody(validBody.replace("toHaveText('Access code is required')", 'toBeVisible()'), [
+      validEntry.stepAssertions![0],
+      { stepIndex: 2, assertions: ['await expect(featurePage.errorBanner).toBeVisible();', "await expect(featurePage.errorBanner).toHaveCSS('background-color', 'rgb(255, 0, 0)');"] },
+    ]);
+    expect(validate(weakened)).toEqual([expect.stringContaining('Step 2: the expected result quotes "Access code is required" but no assertion mapped to the step checks that text')]);
+    expect(validate(validEntry)).toEqual([]);
+  });
+
   it('requires every expected result to be mapped and every assertion to be listed', () => {
     const errors = validate(withBody(validBody, [validEntry.stepAssertions![0]])).join('\n');
     expect(errors).toContain('Step 2 has 2 expected result(s)');

@@ -19,10 +19,10 @@ import {
 } from '../../../core/automation-reviewer/IntegrityRules';
 import { AutomationTestCase } from '../contracts/automationTestCase';
 import { MISSING_KINDS, MissingItem } from '../../../core/readiness/readinessTypes';
-import { FlowArg, FlowUsage } from '../discovery/flowExtractor';
+import { FlowArg, FlowUsage, PreconditionAction } from '../discovery/flowExtractor';
 import { MEMBER_KIND, PageContract } from '../rendering/pomRenderer';
 import {
-  DATA_FIXTURE, ENV_FUNCTION, GenerationMode, K6_ENV_FUNCTION, MIN_STATE_WORD_LENGTH, PAGE_FIXTURE, UI_PAGE_API,
+  DATA_FIXTURE, ENV_FUNCTION, GOTO_OPERATION, GenerationMode, K6_ENV_FUNCTION, MIN_STATE_WORD_LENGTH, PAGE_FIXTURE, UI_PAGE_API,
 } from '../constants';
 
 /** Assertions the LLM claims verify a step. */
@@ -51,6 +51,10 @@ export interface ValidationContext {
   flows?: FlowUsage[];
   /** UI: states discovery verified after each step (step index → state name, URL path and the overlay open there). */
   verifiedStates?: Record<number, { state: string; urlPath: string; overlay?: string }>;
+  /** UI: the actions discovery performed to establish the precondition; the body must perform exactly these before step 1. */
+  preconditionActions?: PreconditionAction[];
+  /** Credential environment variables and their values; a body may never contain one of the values as a literal. */
+  secrets?: Array<{ name: string; value: string }>;
 }
 
 interface AssertionStatement {
@@ -212,6 +216,30 @@ function collectBodyFacts(ast: any, ctx: ValidationContext): { statements: Asser
   return { statements, errors };
 }
 
+/** A text an expected result quotes — "Cancel", 'Log out?' — which an assertion of that step must check. */
+const QUOTED_TEXT = /"([^"\n]{1,160})"|(?:^|[\s(])'([^'\n]{1,160})'(?=$|[\s).,;:])/g;
+
+/**
+ * The texts an expected result quotes, minus data-binding tokens. A quoted text is the one part of an expected
+ * result that is unambiguous, so a body that asserts the element's presence but not that text has weakened the test.
+ * @param {string} expected
+ * @returns {string[]}
+ */
+export function quotedTexts(expected: string): string[] {
+  const texts: string[] = [];
+  for (const match of String(expected).matchAll(QUOTED_TEXT)) {
+    const text = (match[1] ?? match[2] ?? '').trim();
+    if (text && !/^\{\{.*\}\}$/.test(text)) texts.push(text);
+  }
+  return [...new Set(texts)];
+}
+
+function quotedTextErrors(step: AutomationTestCase['steps'][number], mappedCode: string): string[] {
+  return quotedTexts(step.expected.join('\n'))
+    .filter((text) => !mappedCode.includes(text) && !hexToRgbVariants(text).some((variant) => mappedCode.includes(variant)))
+    .map((text) => `Step ${step.index}: the expected result quotes "${snippet(text)}" but no assertion mapped to the step checks that text (toHaveText / toContainText / toHaveValue / toHaveAttribute).`);
+}
+
 function checkStepMapping(gen: GeneratedTest, statements: AssertionStatement[], tc: AutomationTestCase): string[] {
   const errors: string[] = [];
   const entries = Array.isArray(gen.stepAssertions) ? gen.stepAssertions : [];
@@ -230,10 +258,12 @@ function checkStepMapping(gen: GeneratedTest, statements: AssertionStatement[], 
     }
   }
   for (const step of tc.steps.filter((s) => s.expected.length > 0)) {
-    const count = entries.filter((e) => e.stepIndex === step.index).reduce((sum, e) => sum + (e.assertions || []).length, 0);
+    const own = entries.filter((e) => e.stepIndex === step.index);
+    const count = own.reduce((sum, e) => sum + (e.assertions || []).length, 0);
     if (count < step.expected.length) {
       errors.push(`Step ${step.index} has ${step.expected.length} expected result(s) ("${snippet(step.expected.join('; '))}") but ${count} mapped assertion(s).`);
     }
+    errors.push(...quotedTextErrors(step, own.flatMap((e) => e.assertions || []).join('\n')));
   }
   statements.filter((s) => !mapped.has(s.norm)).forEach((s) => errors.push(`Assertion is not mapped to any step: ${snippet(s.code)}`));
   return errors;
@@ -456,13 +486,24 @@ function flowCallErrors(ast: any, ctx: ValidationContext): string[] {
   return errors;
 }
 
+/**
+ * Identity of a top-level action statement: `member:op` for `featurePage.member.op()`, `page:op` for `page.op()`,
+ * and the bare method name for `featurePage.method()` (a navigation method, as a `goto` action renders).
+ */
 function actionToken(statement: any): string | null {
   const expression = statement.type === 'ExpressionStatement' ? statement.expression : null;
   const call = expression?.type === 'AwaitExpression' ? expression.argument : expression;
   if (call?.type !== 'CallExpression' || call.callee.type !== 'MemberExpression') return null;
   const target = call.callee.object;
   if (target.type === 'Identifier' && target.name === 'page') return `page:${propName(call.callee)}`;
+  if (target.type === 'Identifier' && target.name === PAGE_FIXTURE) return propName(call.callee);
   return target.type === 'MemberExpression' ? `${propName(target)}:${propName(call.callee)}` : null;
+}
+
+/** The token a verified action (of a flow or a precondition) must appear as in a body. */
+function expectedToken(action: { member?: string; op: string }): string {
+  if (action.op === GOTO_OPERATION) return action.member ?? '';
+  return `${action.member ?? 'page'}:${action.op}`;
 }
 
 function inlineFlowErrors(ast: any, ctx: ValidationContext): string[] {
@@ -470,10 +511,79 @@ function inlineFlowErrors(ast: any, ctx: ValidationContext): string[] {
   const tokens = (ast.program.body[0].body.body as any[]).map(actionToken);
   return ctx.flows
     .filter((usage) => {
-      const sequence = usage.actions.map((action) => `${action.member ?? 'page'}:${action.op}`);
+      const sequence = usage.actions.map(expectedToken);
       return tokens.some((_, start) => sequence.every((token, offset) => tokens[start + offset] === token));
     })
     .map((usage) => `The body performs the actions of verified flow ${usage.member} one by one; call featurePage.${usage.member}(...) instead.`);
+}
+
+/** The call a top-level statement makes (`await x.y()` or `x.y()`), or null. */
+function statementCall(statement: any): any | null {
+  const expression = statement?.type === 'ExpressionStatement' ? statement.expression : null;
+  const call = expression?.type === 'AwaitExpression' ? expression.argument : expression;
+  return call?.type === 'CallExpression' ? call : null;
+}
+
+function describePrecondition(actions: PreconditionAction[]): string {
+  return actions
+    .map((action) => {
+      if (action.op === GOTO_OPERATION) return `${PAGE_FIXTURE}.${action.member}()`;
+      return `${action.member ? `${PAGE_FIXTURE}.${action.member}` : 'page'}.${action.op}(${action.value?.expression ?? ''})`;
+    })
+    .join('; ');
+}
+
+/** Whether the statements from `start` perform the precondition actions with exactly their arguments. */
+function preconditionMatchesAt(statements: any[], start: number, actions: PreconditionAction[]): boolean {
+  return actions.every((action, offset) => {
+    const args = statementCall(statements[start + offset])?.arguments ?? [];
+    return action.value ? args.length === 1 && argMatches(args[0], action.value) : args.length === 0;
+  });
+}
+
+/**
+ * The body must establish the precondition exactly as discovery did: the verified actions, contiguous, in order,
+ * with their arguments, and before any assertion — the precondition is the situation the steps start from.
+ */
+function preconditionErrors(ast: any, statements: AssertionStatement[], ctx: ValidationContext): string[] {
+  const actions = ctx.preconditionActions || [];
+  if (ctx.mode !== 'UI' || actions.length === 0) return [];
+  const topLevel = ast.program.body[0].body.body as any[];
+  const tokens = topLevel.map(actionToken);
+  const sequence = actions.map(expectedToken);
+  const starts = tokens.map((_, index) => index).filter((start) => sequence.every((token, offset) => tokens[start + offset] === token));
+  const expected = `The precondition of ${ctx.tc.tcKey} is established by the actions discovery verified, in order and before step 1: ${describePrecondition(actions)}.`;
+  if (starts.length === 0) return [`${expected} The body does not perform them.`];
+  if (!starts.some((start) => preconditionMatchesAt(topLevel, start, actions))) return [`${expected} The body performs them with different arguments.`];
+  const assertionNodes = new Set(statements.map((s) => s.node));
+  const firstAssertion = topLevel.findIndex((statement) => assertionNodes.has(statement));
+  const endsBeforeAssertions = starts.some((start) => preconditionMatchesAt(topLevel, start, actions) && (firstAssertion === -1 || start + actions.length <= firstAssertion));
+  return endsBeforeAssertions ? [] : [`${expected} The body asserts before they are complete.`];
+}
+
+/** A body may never contain the value of a credential environment variable: it is account data the environment provides. */
+function secretLiteralErrors(ast: any, ctx: ValidationContext): string[] {
+  const secrets = (ctx.secrets || []).filter((secret) => secret.value);
+  if (secrets.length === 0) return [];
+  const errors = new Set<string>();
+  const check = (text: string) => {
+    const hit = secrets.find((secret) => text.includes(secret.value));
+    if (hit) {
+      errors.add(`A string literal contains the value of the credential environment variable ${hit.name}; it must never appear in a test — `
+        + 'assert the contract member that shows it (toBeVisible) or use env().');
+    }
+  };
+  recast.visit(ast, {
+    visitLiteral(path: any) {
+      if (typeof path.node.value === 'string') check(path.node.value);
+      return false;
+    },
+    visitTemplateLiteral(path: any) {
+      path.node.quasis.forEach((quasi: any) => check(String(quasi.value?.cooked ?? '')));
+      this.traverse(path);
+    },
+  });
+  return [...errors];
 }
 
 function checkProvenance(gen: GeneratedTest, ast: any, statements: AssertionStatement[], ctx: ValidationContext): string[] {
@@ -493,12 +603,28 @@ function checkProvenance(gen: GeneratedTest, ast: any, statements: AssertionStat
 }
 
 /**
+ * Errors are logged, traced and fed back to the LLM, so a credential value a body leaked must not travel with them.
+ * @param {string[]} errors
+ * @param {ValidationContext} ctx
+ * @returns {string[]}
+ */
+function redactSecrets(errors: string[], ctx: ValidationContext): string[] {
+  const secrets = (ctx.secrets || []).filter((secret) => secret.value);
+  if (secrets.length === 0) return errors;
+  return errors.map((error) => secrets.reduce((text, secret) => text.split(secret.value).join(`<value of ${secret.name}>`), error));
+}
+
+/**
  * Validates one generated test entry.
  * @param {GeneratedTest} gen
  * @param {ValidationContext} ctx
  * @returns {string[]} Errors; empty when the entry is acceptable
  */
 export function validateGeneratedTest(gen: GeneratedTest, ctx: ValidationContext): string[] {
+  return redactSecrets(validateEntry(gen, ctx), ctx);
+}
+
+function validateEntry(gen: GeneratedTest, ctx: ValidationContext): string[] {
   if (gen.status === 'NEEDS_CONTEXT') return validateNeedsContext(gen);
   if (gen.status !== 'GENERATED') return ['status must be GENERATED or NEEDS_CONTEXT.'];
   if (!gen.body || !gen.body.trim()) return ['GENERATED requires a non-empty body.'];
@@ -515,6 +641,8 @@ export function validateGeneratedTest(gen: GeneratedTest, ctx: ValidationContext
     ...facts.errors,
     ...flowCallErrors(ast, ctx),
     ...inlineFlowErrors(ast, ctx),
+    ...preconditionErrors(ast, facts.statements, ctx),
+    ...secretLiteralErrors(ast, ctx),
     ...checkStepMapping(gen, facts.statements, ctx.tc),
     ...checkProvenance(gen, ast, facts.statements, ctx),
   ];

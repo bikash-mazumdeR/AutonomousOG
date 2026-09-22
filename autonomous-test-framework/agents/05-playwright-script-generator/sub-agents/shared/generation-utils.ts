@@ -54,10 +54,48 @@ export function partitionByType(testCases: any[] = []): { uiTCs: any[]; apiTCs: 
  */
 export function parseJsonObject(text: string): any {
   const cleaned = String(text || '').replace(/```(?:json)?/gi, '').trim();
-  const start = cleaned.indexOf('{');
-  const end = cleaned.lastIndexOf('}');
-  if (start === -1 || end <= start) throw new Error('no JSON object found');
-  return JSON.parse(cleaned.slice(start, end + 1));
+  const candidates = balancedObjects(cleaned);
+  if (candidates.length === 0) throw new Error('no JSON object found');
+  // A model that reconsiders mid-answer emits an object, prose, then its corrected object: the last one is its answer.
+  let lastError: Error | null = null;
+  for (const candidate of [...candidates].reverse()) {
+    try {
+      return JSON.parse(candidate);
+    } catch (err: any) {
+      lastError = err;
+    }
+  }
+  throw lastError as Error;
+}
+
+/**
+ * Every top-level `{ … }` span of a text, found by brace depth with string literals (and their escapes) respected,
+ * so a brace inside a JSON string never opens or closes a span.
+ * @param {string} text
+ * @returns {string[]}
+ */
+function balancedObjects(text: string): string[] {
+  const spans: string[] = [];
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (inString) {
+      if (ch === '\\') i += 1;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"' && depth > 0) inString = true;
+    else if (ch === '{') {
+      if (depth === 0) start = i;
+      depth += 1;
+    } else if (ch === '}' && depth > 0) {
+      depth -= 1;
+      if (depth === 0) spans.push(text.slice(start, i + 1));
+    }
+  }
+  return spans;
 }
 
 function readRequired(file: string): string {

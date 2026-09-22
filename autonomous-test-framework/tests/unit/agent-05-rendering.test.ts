@@ -64,7 +64,7 @@ describe('Agent 05 rendering', () => {
     expect(code).toContain("get codeInput(): Locator {\n    return this.page.getByTestId(\"code\");");
     expect(code).toContain('this.page.getByRole("button", { name: "Sign in", exact: true })');
     expect(code).toContain('async openStart(): Promise<void>');
-    expect(contract.members.map((m) => m.name)).toEqual(['openStart', 'codeInput', 'submitButton', 'startNavigate', 'dashboardCodeInput', 'welcomeHeading']);
+    expect(contract.members.map((m) => m.name)).toEqual(['openStart', 'visitDashboard', 'codeInput', 'submitButton', 'startNavigate', 'dashboardCodeInput', 'welcomeHeading']);
     expect(analyzeWithAST(code, FILE_TYPE.POM).findings.filter((f) => f.severity === FINDING_SEVERITY.BLOCKER)).toEqual([]);
   });
 
@@ -101,6 +101,8 @@ describe('Agent 05 rendering', () => {
   });
 });
 
+const methodsOf = (contract: { members: Array<{ name: string; description: string }> }, name: string) => contract.members.find((member) => member.name === name)!;
+
 describe('Agent 05 verified sign-in in page objects', () => {
   const authMap: PageMap = {
     version: 2,
@@ -131,16 +133,20 @@ describe('Agent 05 verified sign-in in page objects', () => {
     expect(code).toContain("import { requireEnv } from '../../../helpers/env';");
     expect(code).toContain('  async signIn(): Promise<void> {\n    await this.navigate("/login");\n'
       + '    await this.emailInput.fill(requireEnv("APP_EMAIL"));\n    await this.passwordInput.fill(requireEnv("APP_PASSWORD"));\n'
-      + '    await this.signInButton.click();\n  }');
+      + '    await this.signInButton.click();\n    await this.waitForVisible(this.dashboardHeading);\n  }');
     expect(code).toContain('  async openDashboard(): Promise<void> {\n    await this.signIn();\n  }');
+    expect(methodsOf(contract, 'signIn').description).toContain('returning once dashboardHeading is visible');
     expect(code).not.toContain('process.env');
     expect(analyzeWithAST(code, FILE_TYPE.POM).findings.filter((f) => f.severity === FINDING_SEVERITY.BLOCKER)).toEqual([]);
 
     const methods = contract.members.filter((member) => member.kind === MEMBER_KIND.METHOD);
-    expect(methods.map((member) => [member.name, member.state])).toEqual([['openLogin', 'login'], ['openDashboard', 'dashboard'], ['signIn', 'dashboard']]);
-    expect(methods[1].description).toContain('by signing in');
-    expect(methods[2].description).toContain('APP_EMAIL, APP_PASSWORD');
-    expect(methods[2].description).toContain('never fill the sign-in form');
+    expect(methods.map((member) => [member.name, member.state])).toEqual([
+      ['openLogin', 'login'], ['openDashboard', 'dashboard'], ['visitDashboard', 'dashboard'], ['signIn', 'dashboard'],
+    ]);
+    expect(methodsOf(contract, 'openDashboard').description).toContain('by signing in');
+    expect(methodsOf(contract, 'visitDashboard').description).toContain('directly — no sign-in, no action');
+    expect(methodsOf(contract, 'signIn').description).toContain('APP_EMAIL, APP_PASSWORD');
+    expect(methodsOf(contract, 'signIn').description).toContain('never fill the sign-in form');
   });
 
   it('drops a sign-in whose members are no longer verified, and refuses to render one without the env helper', () => {

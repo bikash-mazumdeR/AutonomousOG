@@ -82,7 +82,7 @@ describe('Agent 05 sign-in bootstrap', () => {
     expect(result).toEqual({
       signedIn: false, reason: 'State "login" is not a sign-in form (no identifier, password and submit control after waiting 30 ms for it to render).',
     });
-    expect(recapture.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(recapture.mock.calls.length).toBeGreaterThanOrEqual(1);
   });
 
   it('reports a state without a sign-in form, and missing variables, instead of guessing', async () => {

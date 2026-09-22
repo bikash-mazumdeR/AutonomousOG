@@ -7,14 +7,25 @@
 
 import { AutomationTestCase } from '../contracts/automationTestCase';
 import { MissingItem } from '../../../core/readiness/readinessTypes';
+import { GOTO_OPERATION } from '../constants';
 import { PageState, overlayLabel } from './pageMap';
 
 /** Operations on the page itself; they take no element. */
 export const PAGE_OPERATIONS: readonly string[] = Object.freeze(['reload', 'goBack', 'goForward']);
 /** Operations on an element. `hover` and `dblclick` reveal what a pointer does — a menu that opens on hover, a row that opens on double click. */
 export const ELEMENT_OPERATIONS: readonly string[] = Object.freeze(['fill', 'click', 'dblclick', 'hover', 'check', 'uncheck', 'selectOption', 'press']);
-export const PLAN_OPERATIONS: readonly string[] = Object.freeze([...ELEMENT_OPERATIONS, ...PAGE_OPERATIONS]);
+export const PLAN_OPERATIONS: readonly string[] = Object.freeze([...ELEMENT_OPERATIONS, ...PAGE_OPERATIONS, GOTO_OPERATION]);
 const STOP_REASONS = ['COMPLETE', 'NEEDS_NEW_STATE', 'NOT_ACHIEVABLE'];
+
+/**
+ * A step whose action is a navigation: the user navigates / goes to an address, or opens, visits, enters or types a
+ * URL or address. Such a step is performed by a `goto` (or a page operation) — being at the address already does not
+ * perform it, and the state after the step is only known once the request has been made.
+ */
+const NAVIGATION_STEP = /\bnavigat(?:e|es|ed|ing)\b|\b(?:go|goes|going|went)\s+to\b|\b(?:open|opens|visit|visits|enter|enters|type|types)\b[^.]*\b(?:url|address|link)\b/i;
+
+/** Operations that perform a navigation step. */
+const NAVIGATION_OPERATIONS: readonly string[] = Object.freeze([GOTO_OPERATION, ...PAGE_OPERATIONS]);
 
 /** One planned discovery action. */
 export interface PlannedAction {
@@ -22,6 +33,8 @@ export interface PlannedAction {
   element: string;
   op: string;
   value?: { binding?: string; literal?: string };
+  /** `goto` only: the known state whose address is requested. */
+  state?: string;
 }
 
 /** Planner output. */
@@ -76,14 +89,26 @@ export function buildPlannerRequest(
   }, null, 2);
 }
 
-function validateAction(action: any, index: number, currentState: PageState, tc: AutomationTestCase): string[] {
+function validateGoto(action: any, label: string, knownStates: PageState[]): string[] {
+  const errors: string[] = [];
+  if (action?.element !== undefined) errors.push(`${label}.element must be omitted for "${GOTO_OPERATION}"; give the state whose address is requested in "state"`);
+  const target = knownStates.find((state) => state.name === action?.state);
+  const addressable = knownStates.filter((state) => !state.overlay).map((state) => state.name);
+  if (!target) errors.push(`${label}.state "${action?.state}" is not a known state (one of ${addressable.join(', ') || 'none'})`);
+  else if (target.overlay) errors.push(`${label}.state "${action.state}" is a menu or dialog state: it shares its page's address and cannot be requested`);
+  return errors;
+}
+
+function validateAction(action: any, index: number, currentState: PageState, tc: AutomationTestCase, knownStates: PageState[]): string[] {
   const errors: string[] = [];
   const label = `actions[${index}]`;
   const step = tc.steps.find((s) => s.index === Number(action?.stepIndex));
   if (!step) errors.push(`${label}.stepIndex must reference a test case step`);
   const isPageOp = PAGE_OPERATIONS.includes(action?.op);
+  const isGoto = action?.op === GOTO_OPERATION;
   if (isPageOp && action?.element !== undefined) errors.push(`${label}.element must be omitted for page operation "${action.op}"`);
-  if (!isPageOp && !currentState.elements.some((e) => e.name === action?.element)) errors.push(`${label}.element "${action?.element}" is not in currentState.elements`);
+  if (isGoto) errors.push(...validateGoto(action, label, knownStates));
+  if (!isPageOp && !isGoto && !currentState.elements.some((e) => e.name === action?.element)) errors.push(`${label}.element "${action?.element}" is not in currentState.elements`);
   if (!PLAN_OPERATIONS.includes(action?.op)) errors.push(`${label}.op must be one of ${PLAN_OPERATIONS.join(', ')}`);
   const value = action?.value;
   if (value?.binding !== undefined && !(step?.data || []).some((b) => b.token === value.binding)) {
@@ -105,14 +130,38 @@ function validateAction(action: any, index: number, currentState: PageState, tc:
  * @param {any} raw
  * @param {PageState} currentState
  * @param {AutomationTestCase} tc
+ * @param {PageState[]} [knownStates] - States a `goto` action may request
+ * @param {number} [fromStep] - First step the plan covers; a covered navigation step must be performed by a navigation action
  * @returns {{ plan?: NavigationPlan, errors: string[] }}
  */
-export function validateNavigationPlan(raw: any, currentState: PageState, tc: AutomationTestCase): { plan?: NavigationPlan; errors: string[] } {
+/**
+ * The steps a plan claims to have covered: from `fromStep` up to the last step (COMPLETE) or the step before
+ * `nextStep`. A covered navigation step must have been performed by a navigation action.
+ */
+function navigationStepErrors(raw: any, tc: AutomationTestCase, fromStep: number | undefined): string[] {
+  if (fromStep === undefined || !Array.isArray(raw?.actions)) return [];
+  const last = Math.max(...tc.steps.map((step) => step.index));
+  const lastCovered = raw.stopReason === 'COMPLETE' ? last : Number(raw.nextStep) - 1;
+  return tc.steps
+    .filter((step) => step.index >= fromStep && step.index <= lastCovered && NAVIGATION_STEP.test(step.action))
+    .filter((step) => !raw.actions.some((action: any) => Number(action?.stepIndex) === step.index && NAVIGATION_OPERATIONS.includes(action?.op)))
+    .map((step) => `step ${step.index} says the user navigates to an address; perform it with "${GOTO_OPERATION}" to the known state at that address `
+      + '(or a page operation) — being there already does not perform the step. If no known state has that address, stop with NOT_ACHIEVABLE.');
+}
+
+export function validateNavigationPlan(
+  raw: any,
+  currentState: PageState,
+  tc: AutomationTestCase,
+  knownStates: PageState[] = [],
+  fromStep?: number,
+): { plan?: NavigationPlan; errors: string[] } {
   const errors: string[] = [];
   if (!raw || !Array.isArray(raw.actions)) errors.push('actions must be an array');
   if (!STOP_REASONS.includes(raw?.stopReason)) errors.push(`stopReason must be one of ${STOP_REASONS.join(', ')}`);
   if (raw?.stopReason === 'NEEDS_NEW_STATE' && !Number.isInteger(raw?.nextStep)) errors.push('nextStep is required when stopReason is NEEDS_NEW_STATE');
-  (raw?.actions || []).forEach((action: any, idx: number) => errors.push(...validateAction(action, idx, currentState, tc)));
+  (raw?.actions || []).forEach((action: any, idx: number) => errors.push(...validateAction(action, idx, currentState, tc, knownStates)));
+  if (STOP_REASONS.includes(raw?.stopReason)) errors.push(...navigationStepErrors(raw, tc, fromStep));
   if (errors.length > 0) return { errors };
   return {
     errors,

@@ -12,8 +12,10 @@ import * as path from 'path';
 /**
  * `role` takes `[role, name]`, or `[role]` alone for a container (dialog, menu, landmark) the page holds exactly one of.
  * `css` is used only for locators the AUT profile declares (discovery.extraLocators), never inferred.
+ * `env` takes `[ENV_VAR]`: the element whose text equals that environment variable's value — the account identifier
+ * discovery signed in with. The page map, page object and tests hold the variable's name only, never its value.
  */
-export type LocatorStrategy = 'testId' | 'role' | 'label' | 'placeholder' | 'text' | 'id' | 'css';
+export type LocatorStrategy = 'testId' | 'role' | 'label' | 'placeholder' | 'text' | 'id' | 'css' | 'env';
 
 /** A verified element (its locator resolved to exactly one element when discovered). */
 export interface PageElement {
@@ -59,6 +61,8 @@ export interface TraceAction {
   element?: string;
   op: string;
   value?: { binding?: string; literal?: string };
+  /** `goto` only: the state whose address was requested. */
+  target?: string;
 }
 
 /** Consecutive actions a test case performed in one state, and the state they led to. */
@@ -81,6 +85,8 @@ export interface FlowAction {
   element?: string;
   op: string;
   param?: string;
+  /** `goto` only: the state whose address is requested. */
+  target?: string;
 }
 
 /** An action run that several test cases performed identically during discovery. */

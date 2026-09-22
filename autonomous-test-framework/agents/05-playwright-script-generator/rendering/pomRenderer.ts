@@ -8,7 +8,7 @@
  */
 
 import {
-  GENERATED_MARKER, PAGE_FIXTURE, POM_ENV_FUNCTION, SIGN_IN_METHOD,
+  GENERATED_MARKER, GOTO_OPERATION, PAGE_FIXTURE, POM_ENV_FUNCTION, SIGN_IN_METHOD,
 } from '../constants';
 import {
   PageElement, PageMap, PageMapAuth, PageState, VerifiedFlow, locatorSignature, overlayLabel, toPascal, uniqueName,
@@ -48,6 +48,10 @@ export interface PageContract {
 export interface PomRenderResult {
   contract: PageContract;
   code: string;
+  /** Locator signature of every verified element → the page-object member that addresses it. */
+  memberBySignature: Map<string, string>;
+  /** State name → the method that requests its address directly (`open<State>` for an entry state, `visit<State>` otherwise). */
+  navigationByState: Map<string, string>;
 }
 
 /** Page-object rendering options. */
@@ -89,13 +93,23 @@ interface RenderedSignIn {
   submit: string;
   identifierEnv: string;
   passwordEnv: string;
+  /**
+   * A member of the signed-in state that the login state does not have: the sign-in waits until it is visible, so
+   * it returns only once the application has rendered the state it lands on — not when the submit was clicked.
+   */
+  landmark?: string;
 }
 
-/** A navigation method: opens an entry state directly, or a state behind the login form by signing in. */
+/**
+ * A navigation method: opens an entry state directly, a state behind the login form by signing in, or — `direct` —
+ * requests any other state's address as it is, without signing in or acting, for a step that says the user
+ * navigates to that address.
+ */
 interface OpenMethod {
   name: string;
   state: PageState;
   viaSignIn?: boolean;
+  direct?: boolean;
 }
 
 interface PomParts {
@@ -132,6 +146,7 @@ export function locatorExpression(element: Pick<PageElement, 'strategy' | 'args'
     case 'label': return `this.page.getByLabel(${first}, { exact: true })`;
     case 'placeholder': return `this.page.getByPlaceholder(${first}, { exact: true })`;
     case 'text': return `this.page.getByText(${first}, { exact: true })`;
+    case 'env': return `this.page.getByText(${POM_ENV_FUNCTION}(${first}), { exact: true })`;
     case 'css': return `this.page.locator(${first})`;
     default: return `this.page.locator(${JSON.stringify(cssIdSelector(element.args[0]))})`;
   }
@@ -148,6 +163,21 @@ function openMethods(map: PageMap, taken: Set<string>): OpenMethod[] {
     const name = uniqueName(`open${toPascal(state.name)}`, taken);
     taken.add(name);
     return { name, state };
+  });
+}
+
+/**
+ * Direct navigation for every state that is neither an entry state (its `open` already navigates) nor an overlay
+ * (a menu or dialog shares its page's address): the address was verified, so requesting it is a verified action.
+ * @param {PageMap} map
+ * @param {Set<string>} taken
+ * @returns {OpenMethod[]}
+ */
+function visitMethods(map: PageMap, taken: Set<string>): OpenMethod[] {
+  return map.states.filter((state) => !state.entryPath && !state.overlay).map((state) => {
+    const name = uniqueName(`visit${toPascal(state.name)}`, new Set([...taken, ...RESERVED_MEMBERS]));
+    taken.add(name);
+    return { name, state, direct: true };
   });
 }
 
@@ -173,8 +203,28 @@ function resolveSignIn(auth: PageMapAuth | undefined, map: PageMap, elements: As
   const [identifier, password, submit] = [memberOf(auth.identifier), memberOf(auth.password), memberOf(auth.submit)];
   if (!identifier || !password || !submit) return undefined;
   return {
-    name, loginState, signedInState, identifier, password, submit, identifierEnv: auth.identifierEnv, passwordEnv: auth.passwordEnv,
+    name,
+    loginState,
+    signedInState,
+    identifier,
+    password,
+    submit,
+    identifierEnv: auth.identifierEnv,
+    passwordEnv: auth.passwordEnv,
+    landmark: signInLandmark(loginState, signedInState, memberBySignature),
   };
+}
+
+/**
+ * The member the sign-in waits for: an element of the signed-in state that the login state does not have, a heading
+ * when there is one. Every element of the signed-in state was verified after the sign-in, so any of them proves the
+ * state has rendered; a heading is the least likely to move.
+ */
+function signInLandmark(loginState: PageState, signedInState: PageState, memberBySignature: Map<string, string>): string | undefined {
+  const onLogin = new Set(loginState.elements.map((element) => locatorSignature(element)));
+  const candidates = signedInState.elements.filter((element) => !onLogin.has(locatorSignature(element)) && memberBySignature.has(locatorSignature(element)));
+  const chosen = candidates.find((element) => element.role === 'heading') || candidates[0];
+  return chosen ? memberBySignature.get(locatorSignature(chosen)) : undefined;
 }
 
 /**
@@ -193,13 +243,19 @@ function openViaSignIn(signIn: RenderedSignIn, methods: OpenMethod[], taken: Set
 }
 
 function describeSignIn(signIn: RenderedSignIn): string {
+  const landmark = signIn.landmark ? `, returning once ${signIn.landmark} is visible` : '';
   return `Signs in on the "${signIn.loginState.name}" state with the account the environment provides `
     + `(${signIn.identifierEnv}, ${signIn.passwordEnv}) and lands on the "${signIn.signedInState.name}" state `
-    + `(${signIn.signedInState.urlPath}). Verified by discovery; performs actions only and asserts nothing. `
+    + `(${signIn.signedInState.urlPath})${landmark}. Verified by discovery; performs actions only and asserts nothing. `
     + 'Call it before any step that needs an authenticated session — never fill the sign-in form with credentials yourself.';
 }
 
 function describeOpen(method: OpenMethod): string {
+  if (method.direct) {
+    return `Requests the address of the "${method.state.name}" state (${method.state.urlPath}) directly — no sign-in, no action. `
+      + 'What the application shows for that request (the state itself, or a redirect to the login page) is what the step '
+      + 'then asserts. Use it only for a step that says the user opens or navigates to that address.';
+  }
   return method.viaSignIn
     ? `Navigate to the "${method.state.name}" state (${method.state.urlPath}) by signing in — it sits behind the login form (see ${SIGN_IN_METHOD}).`
     : `Navigate to the "${method.state.name}" state (${method.state.urlPath}).`;
@@ -222,17 +278,21 @@ function assignElements(map: PageMap, taken: Set<string>): AssignedElement[] {
   return assigned;
 }
 
-/** Resolves each flow action to the page-object member of its verified element; flows with unverified elements are dropped. */
-function resolveFlows(map: PageMap, elements: AssignedElement[], taken: Set<string>): RenderedFlow[] {
+/**
+ * Resolves each flow action to the page-object member of its verified element (or, for `goto`, the navigation method
+ * of its target state); flows with unverified elements or targets are dropped.
+ */
+function resolveFlows(map: PageMap, elements: AssignedElement[], navigationByState: Map<string, string>, taken: Set<string>): RenderedFlow[] {
   const memberBySignature = new Map(elements.map((a) => [locatorSignature(a.element), a.memberName]));
   const rendered: RenderedFlow[] = [];
   for (const flow of map.flows || []) {
     const state = map.states.find((candidate) => candidate.name === flow.state);
     const actions = flow.actions.map((action) => {
+      if (action.op === GOTO_OPERATION) return { op: action.op, param: action.param, member: action.target ? navigationByState.get(action.target) : undefined };
       const element = action.element ? state?.elements.find((candidate) => candidate.name === action.element) : undefined;
       return { op: action.op, param: action.param, member: element ? memberBySignature.get(locatorSignature(element)) : undefined };
     });
-    if (actions.some((action, idx) => flow.actions[idx].element && !action.member)) continue;
+    if (actions.some((action, idx) => (flow.actions[idx].element || flow.actions[idx].op === GOTO_OPERATION) && !action.member)) continue;
     const name = uniqueName(flow.name, new Set([...taken, ...RESERVED_MEMBERS]));
     taken.add(name);
     rendered.push({ name, flow, actions });
@@ -279,6 +339,7 @@ function buildContract(map: PageMap, className: string, parts: PomParts): PageCo
 }
 
 function flowActionLine(action: RenderedFlow['actions'][number]): string {
+  if (action.op === GOTO_OPERATION) return `    await this.${action.member}();`;
   const target = action.member ? `this.${action.member}` : 'this.page';
   return `    await ${target}.${action.op}(${action.param ? `values.${action.param}` : ''});`;
 }
@@ -299,7 +360,8 @@ function renderFlowMethod(flow: RenderedFlow): string[] {
 }
 
 function renderOpenMethod(method: OpenMethod): string[] {
-  const body = method.viaSignIn ? `    await this.${SIGN_IN_METHOD}();` : `    await this.navigate(${JSON.stringify(method.state.entryPath)});`;
+  const address = method.direct ? method.state.urlPath : method.state.entryPath;
+  const body = method.viaSignIn ? `    await this.${SIGN_IN_METHOD}();` : `    await this.navigate(${JSON.stringify(address)});`;
   return ['', `  /** ${describeOpen(method)} */`, `  async ${method.name}(): Promise<void> {`, body, '  }'];
 }
 
@@ -316,8 +378,14 @@ function renderSignInMethod(signIn: RenderedSignIn): string[] {
     `    await this.${signIn.identifier}.fill(${POM_ENV_FUNCTION}(${JSON.stringify(signIn.identifierEnv)}));`,
     `    await this.${signIn.password}.fill(${POM_ENV_FUNCTION}(${JSON.stringify(signIn.passwordEnv)}));`,
     `    await this.${signIn.submit}.click();`,
+    ...(signIn.landmark ? [`    await this.waitForVisible(this.${signIn.landmark});`] : []),
     '  }',
   ];
+}
+
+/** Whether the page object reads the environment: a verified sign-in, or a locator built from an environment variable. */
+function readsEnvironment(parts: PomParts): boolean {
+  return !!parts.signIn || parts.elements.some((assigned) => assigned.element.strategy === 'env');
 }
 
 function renderPomCode(map: PageMap, options: PomOptions, parts: PomParts): string {
@@ -326,7 +394,7 @@ function renderPomCode(map: PageMap, options: PomOptions, parts: PomParts): stri
     '// Rendered from the verified page map by ARIA Agent 05. Do not edit by hand; regenerate instead.',
     "import { Page, Locator } from '@playwright/test';",
     `import { BasePage } from '${options.basePageImport}';`,
-    ...(parts.signIn ? [`import { ${POM_ENV_FUNCTION} } from '${options.envHelperImport}';`] : []),
+    ...(readsEnvironment(parts) ? [`import { ${POM_ENV_FUNCTION} } from '${options.envHelperImport}';`] : []),
     '',
     '/**',
     ` * Page object for feature ${map.featureId}. Every locator resolved to exactly one element during discovery.`,
@@ -355,6 +423,9 @@ function renderPomCode(map: PageMap, options: PomOptions, parts: PomParts): stri
  */
 export function renderPom(map: PageMap, options: PomOptions): PomRenderResult {
   if (map.auth && !options.envHelperImport) throw new Error('envHelperImport is required to render the sign-in the page map records.');
+  if (!options.envHelperImport && map.states.some((state) => state.elements.some((element) => element.strategy === 'env'))) {
+    throw new Error('envHelperImport is required to render a locator that reads an environment variable.');
+  }
   const taken = new Set<string>();
   const methods = openMethods(map, taken);
   const signInName = uniqueName(SIGN_IN_METHOD, taken);
@@ -362,8 +433,15 @@ export function renderPom(map: PageMap, options: PomOptions): PomRenderResult {
   const elements = assignElements(map, taken);
   const signIn = resolveSignIn(map.auth, map, elements, signInName);
   const viaSignIn = signIn ? openViaSignIn(signIn, methods, taken) : undefined;
+  const visits = visitMethods(map, taken);
+  const navigationByState = new Map([...methods, ...visits].map((method) => [method.state.name, method.name]));
   const parts: PomParts = {
-    methods: viaSignIn ? [...methods, viaSignIn] : methods, signIn, elements, flows: resolveFlows(map, elements, taken),
+    methods: [...methods, ...(viaSignIn ? [viaSignIn] : []), ...visits], signIn, elements, flows: resolveFlows(map, elements, navigationByState, taken),
   };
-  return { contract: buildContract(map, options.className, parts), code: renderPomCode(map, options, parts) };
+  return {
+    contract: buildContract(map, options.className, parts),
+    code: renderPomCode(map, options, parts),
+    memberBySignature: new Map(elements.map((assigned) => [locatorSignature(assigned.element), assigned.memberName])),
+    navigationByState,
+  };
 }

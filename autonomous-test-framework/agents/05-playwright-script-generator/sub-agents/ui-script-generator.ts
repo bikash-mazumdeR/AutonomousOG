@@ -8,7 +8,10 @@
 import * as path from 'path';
 import { AutomationTestCase } from '../contracts/automationTestCase';
 import { DiscoveryResult, discoverFeature } from '../discovery/discoverFeature';
-import { FlowUsage, applicableFlows, verifiedStatesFor } from '../discovery/flowExtractor';
+import {
+  FlowUsage, PreconditionAction, applicableFlows, preconditionActionsFor, verifiedStatesFor,
+} from '../discovery/flowExtractor';
+import { ResolvedAutProfile } from '../../../core/aut/AutProfile';
 import {
   MEMBER_KIND, PomRenderResult, pageObjectClassName, renderPom,
 } from '../rendering/pomRenderer';
@@ -28,9 +31,39 @@ type SpecBase = Omit<UiSpecParams, 'tests' | 'hook'>;
 interface DiscoveryBindings {
   flowsByTcKey: Map<string, FlowUsage[]>;
   verifiedStatesByTcKey: Map<string, Record<number, { state: string; urlPath: string }>>;
+  preconditionActionsByTcKey: Map<string, PreconditionAction[]>;
 }
 
-function discoveryBindings(discovery: DiscoveryResult, pom: PomRenderResult, testCases: AutomationTestCase[]): DiscoveryBindings {
+/**
+ * The actions each test case's precondition was established with. A test case whose precondition actions can no
+ * longer be rendered faithfully is reported, not generated.
+ */
+function preconditionBindings(discovery: DiscoveryResult, pom: PomRenderResult, testCases: AutomationTestCase[]): {
+  byTcKey: Map<string, PreconditionAction[]>; unrenderable: TestOutcome[];
+} {
+  const traces = new Map((discovery.pageMap.traces || []).map((trace) => [trace.tcKey, trace]));
+  const byTcKey = new Map<string, PreconditionAction[]>();
+  const unrenderable: TestOutcome[] = [];
+  for (const tc of testCases) {
+    const actions = preconditionActionsFor(tc, traces.get(tc.tcKey), discovery.pageMap, pom.memberBySignature, pom.navigationByState);
+    if (actions) byTcKey.set(tc.tcKey, actions);
+    else unrenderable.push(needsContextOutcome(tc.tcKey, [{ kind: 'PRECONDITION', detail: 'The actions discovery performed to establish the precondition use an element or value that is no longer verified.' }]));
+  }
+  return { byTcKey, unrenderable };
+}
+
+/** Credential values the environment holds for this profile; a generated body may never contain one as a literal. */
+function credentialSecrets(profile: ResolvedAutProfile, env: NodeJS.ProcessEnv = process.env): Array<{ name: string; value: string }> {
+  const names = [...new Set([...Object.values(profile.auth.credentialEnvVars || {}), ...(profile.secretsEnvVars || [])])];
+  return names.flatMap((name) => (env[name] ? [{ name, value: env[name] as string }] : []));
+}
+
+function discoveryBindings(
+  discovery: DiscoveryResult,
+  pom: PomRenderResult,
+  testCases: AutomationTestCase[],
+  preconditionActionsByTcKey: Map<string, PreconditionAction[]>,
+): DiscoveryBindings {
   const traces = new Map((discovery.pageMap.traces || []).map((trace) => [trace.tcKey, trace]));
   const flowMembers = pom.contract.members
     .filter((member) => member.kind === MEMBER_KIND.FLOW && member.flowId)
@@ -40,6 +73,7 @@ function discoveryBindings(discovery: DiscoveryResult, pom: PomRenderResult, tes
   return {
     flowsByTcKey: new Map(testCases.map((tc) => [tc.tcKey, applicableFlows(tc, traces.get(tc.tcKey), discovery.pageMap, flowMembers)])),
     verifiedStatesByTcKey: new Map(testCases.map((tc) => [tc.tcKey, verifiedStatesFor(traces.get(tc.tcKey), discovery.pageMap)])),
+    preconditionActionsByTcKey,
   };
 }
 
@@ -97,7 +131,10 @@ export class UIScriptGenerator {
     const blocked: TestOutcome[] = ready
       .filter((tc) => !hasLocators || discovery.issues.has(tc.tcKey))
       .map((tc) => needsContextOutcome(tc.tcKey, missingForTestCase(discovery.issues, tc.tcKey)));
-    const generatable = ready.filter((tc) => hasLocators && !discovery.issues.has(tc.tcKey));
+    const discovered = ready.filter((tc) => hasLocators && !discovery.issues.has(tc.tcKey));
+    const preconditions = preconditionBindings(discovery, pom, discovered);
+    blocked.push(...preconditions.unrenderable);
+    const generatable = discovered.filter((tc) => preconditions.byTcKey.has(tc.tcKey));
     const base = this._specBase(ctx, pageObject, pomPath);
     const bodies = generatable.length === 0 ? [] : await generateTestBodies({
       mode: 'UI',
@@ -110,7 +147,8 @@ export class UIScriptGenerator {
       maxRetries: ctx.maxRetries,
       concurrency: ctx.concurrency,
       trace: ctx.trace,
-      ...discoveryBindings(discovery, pom, generatable),
+      secrets: credentialSecrets(ctx.profile),
+      ...discoveryBindings(discovery, pom, generatable, preconditions.byTcKey),
       renderHarness: (tc, body) => renderUiSpec({ ...base, tests: [{ tc, body }] }),
     }, ctx.chat);
 

@@ -58,6 +58,29 @@ describe('navigation planner page operations', () => {
     expect(result.plan?.actions.map((a) => a.op)).toEqual(['hover', 'dblclick']);
   });
 
+  it('accepts goto for a known page state, and rejects unknown, overlay or element-bearing targets', () => {
+    const known: any[] = [state, { name: 'dashboard', urlPath: '/dashboard.html', elements: [] }, { name: 'startMenu', urlPath: '/', overlay: { role: 'menu' }, elements: [] }];
+    const plan = (action: any) => validateNavigationPlan({ actions: [{ stepIndex: 2, ...action }], stopReason: 'COMPLETE' }, state, tc, known);
+    expect(plan({ op: 'goto', state: 'dashboard' }).errors).toEqual([]);
+    expect(plan({ op: 'goto', state: 'dashboard' }).plan?.actions[0]).toMatchObject({ op: 'goto', state: 'dashboard' });
+    expect(plan({ op: 'goto', state: 'nowhere' }).errors).toEqual([expect.stringContaining('is not a known state (one of start, dashboard)')]);
+    expect(plan({ op: 'goto', state: 'startMenu' }).errors).toEqual([expect.stringContaining('is a menu or dialog state')]);
+    expect(plan({ op: 'goto', state: 'dashboard', element: 'submitButton' }).errors).toEqual([expect.stringContaining('element must be omitted for "goto"')]);
+  });
+
+  it('requires a step that says the user navigates to an address to be performed by a goto', () => {
+    const navTc: any = { ...tc, steps: [tc.steps[0], { index: 2, keyword: 'When', action: 'the user navigates to https://app.example/', testData: '', expected: ['the login page is displayed'], data: [] }] };
+    const known: any[] = [state, { name: 'dashboard', urlPath: '/dashboard.html', elements: [] }];
+    const skipped = validateNavigationPlan({ actions: [], stopReason: 'COMPLETE' }, state, navTc, known, 1);
+    expect(skipped.errors).toEqual([expect.stringContaining('step 2 says the user navigates to an address; perform it with "goto"')]);
+    const performed = validateNavigationPlan({ actions: [{ stepIndex: 2, op: 'goto', state: 'dashboard' }], stopReason: 'COMPLETE' }, state, navTc, known, 1);
+    expect(performed.errors).toEqual([]);
+    // Not covered yet (the plan stops before it), or not a navigation ("is on the page at <url>"): no requirement.
+    expect(validateNavigationPlan({ actions: [], stopReason: 'NEEDS_NEW_STATE', nextStep: 2 }, state, navTc, known, 1).errors).toEqual([]);
+    const givenTc: any = { ...navTc, steps: [{ ...navTc.steps[1], index: 1, action: 'the user is on the login page at https://app.example/' }] };
+    expect(validateNavigationPlan({ actions: [], stopReason: 'COMPLETE' }, state, givenTc, known, 1).errors).toEqual([]);
+  });
+
   it('tells the planner which actions were already executed', () => {
     const request = JSON.parse(buildPlannerRequest(tc, [state], state, 2, [{ stepIndex: 1, element: 'submitButton', op: 'click' }]));
     expect(request.executedActions).toEqual([{ stepIndex: 1, element: 'submitButton', op: 'click' }]);
@@ -86,5 +109,21 @@ describe('generation payload', () => {
     }, [tc]);
     expect(payload.testCases[0].applicableFlows).toEqual([{ member: 'startClickSubmitButtonFlow', coversSteps: [2], calls: [{ codeInput: 'data.validCode' }] }]);
     expect(payload.testCases[0].verifiedStates).toEqual({ 2: { state: 'dashboard', urlPath: '/dashboard.html' } });
+  });
+});
+
+describe('LLM JSON responses', () => {
+  // eslint-disable-next-line global-require
+  const { parseJsonObject } = require('../../agents/05-playwright-script-generator/sub-agents/shared/generation-utils');
+
+  it('takes the corrected object when the model reconsiders after answering', () => {
+    const text = 'Plan:\n```json\n{ "actions": [], "stopReason": "COMPLETE", "detail": "a } in a string" }\n```\n\nWait, let me reconsider.\n\n'
+      + '```json\n{ "actions": [{ "stepIndex": 1, "element": "bButton", "op": "click" }], "stopReason": "NEEDS_NEW_STATE", "nextStep": 1 }\n```';
+    expect(parseJsonObject(text)).toEqual({ actions: [{ stepIndex: 1, element: 'bButton', op: 'click' }], stopReason: 'NEEDS_NEW_STATE', nextStep: 1 });
+  });
+
+  it('still reads a bare object, and reports text with no object', () => {
+    expect(parseJsonObject('  {"a": "x\\"y{"}  ')).toEqual({ a: 'x"y{' });
+    expect(() => parseJsonObject('no json here')).toThrow('no JSON object found');
   });
 });

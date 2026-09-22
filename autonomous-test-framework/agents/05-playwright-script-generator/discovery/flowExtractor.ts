@@ -7,7 +7,9 @@
  */
 
 import * as crypto from 'crypto';
-import { DATA_FIXTURE, ENV_FUNCTION, FLOW_SETTINGS } from '../constants';
+import {
+  DATA_FIXTURE, ENV_FUNCTION, FLOW_SETTINGS, GOTO_OPERATION, PRECONDITION_STEP_INDEX,
+} from '../constants';
 import { AutomationTestCase } from '../contracts/automationTestCase';
 import {
   FlowAction, PageElement, PageMap, TestCaseTrace, TraceAction, TraceRun, VerifiedFlow, locatorSignature, overlayLabel, toPascal, uniqueName,
@@ -25,6 +27,17 @@ export interface FlowMemberRef {
   flowId: string;
   params: string[];
   actions: Array<{ member?: string; op: string }>;
+}
+
+/** One action discovery performed to establish a test case's precondition, resolved to a page-object member. */
+export interface PreconditionAction {
+  /**
+   * Page-object member the action targets; undefined for a page operation (reload, goBack, goForward). For `goto`
+   * it is the navigation method that requests the state's address, called with no arguments.
+   */
+  member?: string;
+  op: string;
+  value?: FlowArg;
 }
 
 /** A flow one test case must call. */
@@ -54,9 +67,14 @@ export function runSignature(map: PageMap, run: TraceRun): string | null {
   for (const action of run.actions) {
     const element = elementIn(map, run.state, action.element);
     if (action.element && !element) return null;
-    parts.push(`${element ? locatorSignature(element) : ''}:${action.op}:${action.value ? 'value' : ''}`);
+    parts.push(`${element ? locatorSignature(element) : (action.target ?? '')}:${action.op}:${action.value ? 'value' : ''}`);
   }
   return `${run.state}|${parts.join('>')}`;
+}
+
+/** Whether a run established the precondition: those runs are performed explicitly by the body, never as a flow. */
+function isPreconditionRun(run: TraceRun): boolean {
+  return run.actions.some((action) => action.stepIndex === PRECONDITION_STEP_INDEX);
 }
 
 function flowId(signature: string): string {
@@ -66,10 +84,13 @@ function flowId(signature: string): string {
 function flowActions(run: TraceRun): FlowAction[] {
   const taken = new Set<string>();
   return run.actions.map((action) => {
-    if (!action.value) return { element: action.element, op: action.op };
+    const target = action.target ? { target: action.target } : {};
+    if (!action.value) return { element: action.element, op: action.op, ...target };
     const param = uniqueName(action.element || action.op, taken);
     taken.add(param);
-    return { element: action.element, op: action.op, param };
+    return {
+      element: action.element, op: action.op, param, ...target,
+    };
   });
 }
 
@@ -111,7 +132,7 @@ export function extractFlows(map: PageMap, testCases?: AutomationTestCase[]): Ve
   for (const trace of map.traces || []) {
     const tc = tcByKey.get(trace.tcKey);
     for (const run of trace.runs) {
-      if (hasRedundantActions(run) || (testCases && (!tc || !assertsOnlyAfterLastStep(run, tc)))) continue;
+      if (isPreconditionRun(run) || hasRedundantActions(run) || (testCases && (!tc || !assertsOnlyAfterLastStep(run, tc)))) continue;
       const signature = run.actions.length >= FLOW_SETTINGS.MIN_ACTIONS ? runSignature(map, run) : null;
       if (!signature) continue;
       const entry = bySignature.get(signature) || { run, users: new Set<string>() };
@@ -169,6 +190,7 @@ function assertsOnlyAfterLastStep(run: TraceRun, tc: AutomationTestCase): boolea
 export function applicableFlows(tc: AutomationTestCase, trace: TestCaseTrace | undefined, map: PageMap, members: FlowMemberRef[]): FlowUsage[] {
   const usages = new Map<string, FlowUsage>();
   for (const run of trace?.runs || []) {
+    if (isPreconditionRun(run)) continue;
     const signature = runSignature(map, run);
     const flow = signature ? (map.flows || []).find((candidate) => candidate.id === flowId(signature)) : undefined;
     const member = flow ? members.find((candidate) => candidate.flowId === flow.id) : undefined;
@@ -182,6 +204,45 @@ export function applicableFlows(tc: AutomationTestCase, trace: TestCaseTrace | u
     usages.set(member.name, usage);
   }
   return [...usages.values()];
+}
+
+/**
+ * The actions discovery performed to establish the test case's precondition, resolved to page-object members and
+ * value expressions, in order. A generated body performs exactly these before step 1.
+ * @param {AutomationTestCase} tc
+ * @param {TestCaseTrace | undefined} trace
+ * @param {PageMap} map
+ * @param {ReadonlyMap<string, string>} memberBySignature - Locator signature → page-object member, from the renderer
+ * @param {ReadonlyMap<string, string>} [navigationByState] - State name → the method that requests its address directly
+ * @returns {PreconditionAction[] | null} null when an action can no longer be rendered faithfully (its element is
+ *   no longer verified, or its value is not bound), so the test case must not be generated
+ */
+export function preconditionActionsFor(
+  tc: AutomationTestCase,
+  trace: TestCaseTrace | undefined,
+  map: PageMap,
+  memberBySignature: ReadonlyMap<string, string>,
+  navigationByState: ReadonlyMap<string, string> = new Map(),
+): PreconditionAction[] | null {
+  const actions: PreconditionAction[] = [];
+  for (const run of trace?.runs || []) {
+    for (const action of run.actions) {
+      if (action.stepIndex !== PRECONDITION_STEP_INDEX) continue;
+      if (action.op === GOTO_OPERATION) {
+        const method = action.target ? navigationByState.get(action.target) : undefined;
+        if (!method) return null;
+        actions.push({ member: method, op: GOTO_OPERATION });
+        continue;
+      }
+      const element = elementIn(map, action.state, action.element);
+      const member = element ? memberBySignature.get(locatorSignature(element)) : undefined;
+      if (action.element && !member) return null;
+      const value = action.value ? argFor(action, tc) : null;
+      if (action.value && !value) return null;
+      actions.push({ ...(member ? { member } : {}), op: action.op, ...(value ? { value } : {}) });
+    }
+  }
+  return actions;
 }
 
 /** A state discovery verified after a step: its name, URL path and, when a dialog or menu was open, that overlay. */

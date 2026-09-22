@@ -68,6 +68,27 @@ export const SIGN_IN_METHOD = 'signIn';
 export const POM_ENV_FUNCTION = 'requireEnv';
 
 /**
+ * Step index discovery gives a test case's precondition. The precondition is the situation the test starts from —
+ * "the user menu is open", "the user has logged out" — so it is planned and performed before step 1, and the actions
+ * that established it are handed to the body generator as `preconditionActions`. It never has expected results.
+ */
+export const PRECONDITION_STEP_INDEX = 0;
+
+/**
+ * Page-object member for the element that shows the account identifier the session signed in with (an email or a
+ * username in a user menu or account header). Its locator reads the identifier's environment variable at runtime, so
+ * the value is never written into the page map, the page object or a test.
+ */
+export const ACCOUNT_IDENTIFIER_MEMBER = 'accountIdentifierText';
+
+/**
+ * Planner operation that requests a known state's address directly — no element, no sign-in, no action — the way a
+ * step that says "the user navigates to the dashboard URL" is performed. In a page object it is the state's
+ * `visit<State>()` method (or `open<State>()` for an entry state).
+ */
+export const GOTO_OPERATION = 'goto';
+
+/**
  * Browser-storage accessors generated tests may call for application state that no locator can observe.
  * A body that uses one gets the helper import; the storage key always comes from the approved test case.
  */

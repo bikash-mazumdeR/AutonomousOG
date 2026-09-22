@@ -23,13 +23,20 @@ describe elements that the input does not list. This skill is application-agnost
    `stopReason: "NOT_ACHIEVABLE"` and explain in `detail`.
 5. If all steps are planned, set `stopReason: "COMPLETE"`.
 6. Only these operations exist: `fill`, `click`, `dblclick`, `hover`, `check`, `uncheck`, `selectOption`, `press` (on an
-   element), and `reload`, `goBack`, `goForward` (on the page — omit `element`). Use `hover` only when a step says the
-   user hovers or points at something; use page operations only when a step asks for them.
+   element); `reload`, `goBack`, `goForward` (on the page — omit `element`); and `goto` (omit `element`, give
+   `"state": "<name>"` from `knownStates`), which requests that state's address directly — no sign-in, no action — for
+   a step that says the user opens or navigates to an address. A menu or dialog state shares its page's address and
+   can never be a `goto` target. Use `hover` only when a step says the user hovers or points at something; use page
+   operations and `goto` only when a step asks for them.
 7. `currentState` is where the browser is right now, after `executedActions` were performed. Never repeat an
    executed action. When `executedActions` already perform everything the remaining steps describe, return
    `stopReason: "COMPLETE"` with an empty `actions` array.
 8. Plan one action per element interaction, in the order the step describes it. Never merge, reorder or add
    interactions — steps that describe the same interactions must produce the same actions.
+9. Step 0, when present, is the test case's precondition: the situation the test starts from ("the user menu is
+   open", "the user has completed the logout flow"). Establish it from `currentState` with verified elements exactly
+   as you perform a step — a menu to open, a dialog to reach, a logout to complete, across as many states as it takes.
+   When `currentState` already satisfies it, plan nothing for it and continue with step 1. It has no expected results.
 
 ## Output — a single JSON object, no prose
 {

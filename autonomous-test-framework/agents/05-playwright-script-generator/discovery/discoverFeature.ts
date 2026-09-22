@@ -8,7 +8,7 @@
  * Anything that cannot be reached or bound is reported per test case as NEEDS_CONTEXT — never guessed.
  */
 
-import { DISCOVERY_SETTINGS } from '../constants';
+import { DISCOVERY_SETTINGS, GOTO_OPERATION, PRECONDITION_STEP_INDEX } from '../constants';
 import { ChatFn } from '../types';
 import { TraceRecorder, traceLabel } from '../../../core/llm/stagePromptTrace';
 import { AutomationTestCase } from '../contracts/automationTestCase';
@@ -85,7 +85,7 @@ async function requestPlan(
       params.trace?.attempt(group, { attempt: attempt + 1, summary: 'plan rejected', errors });
       continue;
     }
-    const result = validateNavigationPlan(raw, current, tc);
+    const result = validateNavigationPlan(raw, current, tc, map.states, fromStep);
     params.trace?.attempt(group, { attempt: attempt + 1, summary: result.plan ? 'plan accepted' : 'plan rejected', errors: result.plan ? [] : result.errors });
     if (result.plan) return { plan: result.plan };
     errors = result.errors;
@@ -99,9 +99,20 @@ async function executePlan(
   current: PageState,
   tc: AutomationTestCase,
   params: DiscoverFeatureParams,
+  map: PageMap,
 ): Promise<{ missing?: MissingItem; performed: TraceAction[] }> {
   const performed: TraceAction[] = [];
   for (const action of plan.actions) {
+    if (action.op === GOTO_OPERATION) {
+      const target = map.states.find((state) => state.name === action.state);
+      if (!target) return { missing: { kind: 'STATE', detail: `State ${action.state} is not in the page map.` }, performed };
+      // eslint-disable-next-line no-await-in-loop -- actions must run in order against the live page
+      await session.goto(target.urlPath);
+      performed.push({
+        stepIndex: action.stepIndex, state: current.name, op: GOTO_OPERATION, target: target.name,
+      });
+      continue;
+    }
     if (PAGE_OPERATIONS.includes(action.op)) {
       // eslint-disable-next-line no-await-in-loop -- actions must run in order against the live page
       await session.performPage(action.op);
@@ -139,6 +150,33 @@ function recordPlan(
   }
 }
 
+/**
+ * The test case as discovery plans it: its precondition, when it has one, is step PRECONDITION_STEP_INDEX, planned
+ * and performed before step 1. The precondition is the situation the test starts from ("the user menu is open",
+ * "the user has logged out"); the planner establishes it with verified elements exactly as it performs a step, or
+ * plans nothing for it when the current state already satisfies it.
+ * @param {AutomationTestCase} tc
+ * @returns {AutomationTestCase}
+ */
+export function withPreconditionStep(tc: AutomationTestCase): AutomationTestCase {
+  const precondition = tc.precondition.trim();
+  if (!precondition) return tc;
+  const step: AutomationTestCase['steps'][number] = {
+    index: PRECONDITION_STEP_INDEX, keyword: 'Given', action: `Precondition: ${precondition}`, expected: [], testData: '', data: [],
+  };
+  return { ...tc, steps: [step, ...tc.steps] };
+}
+
+/** "Precondition" for the precondition step, "Step N" otherwise. */
+function stepLabel(index: number): string {
+  return index === PRECONDITION_STEP_INDEX ? 'Precondition' : `Step ${index}`;
+}
+
+/** The missing kind a failure at a step is reported as: the precondition has its own. */
+function missingKindAt(index: number): MissingItem['kind'] {
+  return index === PRECONDITION_STEP_INDEX ? 'PRECONDITION' : 'STATE';
+}
+
 async function crawlTestCase(
   session: DiscoverySession,
   map: PageMap,
@@ -148,6 +186,7 @@ async function crawlTestCase(
   const { discovery } = params.profile;
   const trace: TestCaseTrace = { tcKey: tc.tcKey, runs: [], stateAfterStep: {} };
   const fail = (missing: MissingItem) => ({ missing, trace });
+  const planned = withPreconditionStep(tc);
   try {
     await session.reset();
     const entryPath = discovery.entryPaths[0];
@@ -161,30 +200,36 @@ async function crawlTestCase(
       if (!state) return fail({ kind: 'AUTH', detail: `Discovery could not sign in to reach the state this test case starts from: ${reason}` });
       current = state;
     }
-    let fromStep = 1;
+    let fromStep = planned.steps[0].index;
     const executed: PlannedAction[] = [];
-    for (let depth = 0; depth <= discovery.maxDepth; depth += 1) {
+    // The precondition may take several states to establish (a menu, then a dialog, then a logout); those rounds
+    // have their own depth budget so they never eat into the one the steps get.
+    const rounds = { [PRECONDITION_STEP_INDEX]: 0, steps: 0 };
+    while (rounds.steps <= discovery.maxDepth && rounds[PRECONDITION_STEP_INDEX] <= discovery.maxDepth) {
+      const startedAt = fromStep;
       // eslint-disable-next-line no-await-in-loop -- each state depends on the previous one
-      const { plan, error } = await requestPlan(params, tc, map, current, fromStep, executed);
-      if (!plan) return fail({ kind: 'STATE', detail: `No valid navigation plan from verified elements: ${error}` });
+      const { plan, error } = await requestPlan(params, planned, map, current, fromStep, executed);
+      if (!plan) return fail({ kind: missingKindAt(fromStep), detail: `No valid navigation plan from verified elements: ${error}` });
       // eslint-disable-next-line no-await-in-loop
-      const { missing, performed } = await executePlan(session, plan, current, tc, params);
+      const { missing, performed } = await executePlan(session, plan, current, planned, params, map);
       if (missing) return fail(missing);
       executed.push(...plan.actions);
       const before = current.name;
       // eslint-disable-next-line no-await-in-loop
       current = await captureAndMerge(session, map);
-      recordPlan(trace, tc, {
+      recordPlan(trace, planned, {
         plan, fromStep, before, after: current.name, performed,
       });
       if (plan.stopReason === 'COMPLETE') return { missing: null, trace };
+      const at = plan.nextStep ?? fromStep;
       if (plan.stopReason === 'NOT_ACHIEVABLE') {
-        return fail({ kind: 'STATE', detail: `Step ${plan.nextStep ?? fromStep}: ${plan.detail || 'not achievable with verified elements'}` });
+        return fail({ kind: missingKindAt(at), detail: `${stepLabel(at)}: ${plan.detail || 'not achievable with verified elements'}` });
       }
       if (plan.actions.length === 0 || (plan.nextStep as number) < fromStep) {
-        return fail({ kind: 'STATE', detail: `Discovery made no progress at step ${fromStep}: ${plan.detail || 'required element not present'}` });
+        return fail({ kind: missingKindAt(fromStep), detail: `Discovery made no progress at ${stepLabel(fromStep).toLowerCase()}: ${plan.detail || 'required element not present'}` });
       }
       fromStep = plan.nextStep as number;
+      if (startedAt === PRECONDITION_STEP_INDEX) rounds[PRECONDITION_STEP_INDEX] += 1; else rounds.steps += 1;
     }
     return fail({ kind: 'STATE', detail: `Required state not reached within discovery.maxDepth=${discovery.maxDepth}.` });
   } catch (err: any) {
@@ -222,6 +267,8 @@ async function signIn(
   };
   const result = await authenticateSession(session, from, params.profile.auth.credentialEnvVars || {}, process.env, wait);
   if (!result.signedIn) return { reason: result.reason };
+  // The states behind the form may show the account's identifier; discovery can now recognise it when they do.
+  if (result.form) session.setAccountIdentifier({ envName: result.form.identifierEnv, value: process.env[result.form.identifierEnv] as string });
   const state = await captureAndMerge(session, map, undefined, false);
   if (!map.auth && result.form) map.auth = { loginState: from.name, signedInState: state.name, ...result.form };
   return { state };
