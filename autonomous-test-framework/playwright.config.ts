@@ -36,10 +36,19 @@ function envInt(name: string, fallback: number): number {
 // link — needs every budget raised together, so these are configurable rather than fixed.
 const ACTION_TIMEOUT = envInt('PLAYWRIGHT_ACTION_TIMEOUT', 10000);
 const NAVIGATION_TIMEOUT = envInt('PLAYWRIGHT_NAVIGATION_TIMEOUT', 15000);
-// A per-test budget smaller than the navigation it must contain fails the test before the page has
-// loaded, reported as a test timeout rather than as the slow page it is. Raising the navigation
-// budget alone therefore raises this floor with it, unless the caller sets an explicit value.
-const TEST_TIMEOUT = envInt('PLAYWRIGHT_TIMEOUT', Math.max(30000, NAVIGATION_TIMEOUT + ACTION_TIMEOUT + 5000));
+// Web-first assertions carry their own budget, and Playwright's built-in default for it is 5s —
+// independent of `actionTimeout`, so raising the action budget for a slow application does nothing
+// for the assertion that waits on the result of that action. An assertion placed right after a
+// submit is waiting on a server round trip plus a re-render, which is routinely slower than any
+// single click or fill, so it defaults to the action budget rather than under it.
+const EXPECT_TIMEOUT = envInt('PLAYWRIGHT_EXPECT_TIMEOUT', ACTION_TIMEOUT);
+// A per-test budget smaller than the navigation and assertions it must contain fails the test before
+// the page has settled, reported as a test timeout rather than as the slow page it is. Raising any
+// one of those budgets therefore raises this floor with it, unless the caller sets an explicit value.
+const TEST_TIMEOUT = envInt(
+  'PLAYWRIGHT_TIMEOUT',
+  Math.max(30000, NAVIGATION_TIMEOUT + ACTION_TIMEOUT + EXPECT_TIMEOUT + 5000),
+);
 
 const BROWSER_PROJECTS: Record<string, any> = {
   chromium: { name: 'chromium', use: { ...devices['Desktop Chrome'], channel: 'chrome' } },
@@ -57,6 +66,7 @@ module.exports = defineConfig({
   workers: parseInt(process.env.PLAYWRIGHT_WORKERS || '3', 10),
   retries: parseInt(process.env.PLAYWRIGHT_RETRIES || '1', 10),
   timeout: TEST_TIMEOUT,
+  expect: { timeout: EXPECT_TIMEOUT },
   forbidOnly: !!process.env.CI, // Fail if test.only left in code in CI
 
   // ── Reporting ────────────────────────────────────────────────────────────

@@ -2,7 +2,7 @@
   "version": "1.0.0",
   "projectId": "ARIA Project",
   "createdAt": "2026-09-16T12:21:03.645Z",
-  "updatedAt": "2026-09-21T19:22:28.180Z",
+  "updatedAt": "2026-09-22T16:38:34.866Z",
   "cycles": [],
   "globalLearnings": {
     "selectorPatterns": {},
@@ -362,6 +362,38 @@
         "comment": "AUTO-APPROVED",
         "content": "Generated: 7, Needs context: 3, Blocked: 0",
         "timestamp": "2026-09-21T19:22:28.180Z"
+      },
+      {
+        "id": "fb_1790094323688",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "",
+        "timestamp": "2026-09-22T16:25:23.688Z"
+      },
+      {
+        "id": "fb_1790094325208",
+        "stageId": "01-requirement-analyzer",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "Features: 1, Stories: 1",
+        "timestamp": "2026-09-22T16:25:25.208Z"
+      },
+      {
+        "id": "fb_1790095114801",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "",
+        "timestamp": "2026-09-22T16:38:34.801Z"
+      },
+      {
+        "id": "fb_1790095114866",
+        "stageId": "02-test-case-generator",
+        "status": "APPROVED",
+        "comment": "Approved via ARIA UI",
+        "content": "TCs: 13",
+        "timestamp": "2026-09-22T16:38:34.866Z"
       }
     ],
     "performanceBaselines": {},
@@ -652,6 +684,118 @@
         "answer": "Yes",
         "stageId": "01-requirement-analyzer",
         "resolvedAt": "2026-09-19T07:38:40.657Z"
+      },
+      {
+        "id": "clq_1790092876059",
+        "question": "Please provide at least one specific protected sub-page URL (e.g. https://admin.nexolvi.ai/settings or https://admin.nexolvi.ai/users) that should be used in the post-logout redirect test.",
+        "answer": "https://admin.nexolvi.ai/login",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-22T16:01:16.059Z"
+      },
+      {
+        "id": "clq_1790092876066",
+        "question": "What is the exact visible text of the error message displayed in the alert box when login fails (e.g. 'Login failed', 'Invalid credentials', or another string)?",
+        "answer": "Login failed",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-22T16:01:16.066Z"
+      },
+      {
+        "id": "clq_1790092876071",
+        "question": "What is the exact text displayed in the native browser logout confirmation dialog — specifically the dialog message and the label of the confirm button (e.g. 'OK', 'Log out', 'Confirm')?",
+        "answer": "Dailog Message - Are you sure you want to log out? Any unsaved changes will be lost.\nCancel button and Logout button.",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-22T16:01:16.071Z"
+      },
+      {
+        "id": "clq_1790092876074",
+        "question": "What is the exact visible text label of the submit button on the https://admin.nexolvi.ai/ login page — is it 'Sign In', 'Login', or another string?",
+        "answer": "Sign In",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-22T16:01:16.074Z"
+      },
+      {
+        "id": "clq_1790092876078",
+        "question": "Which specific product name on the inventory page carries the 'Test' prefix for visual_user, and what is the full expected product name string (e.g. 'Test Sauce Labs Backpack')?",
+        "answer": "Test Sauce Labs Backpack",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-22T16:01:16.078Z"
+      },
+      {
+        "id": "clq_1790093171292",
+        "question": "What is the exact full name displayed in the user menu for the account bikash.htc@gmail.com (e.g. 'Bikash HTC', 'Admin User', or another string)?",
+        "answer": "Bikash h",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-22T16:06:11.292Z"
+      },
+      {
+        "id": "clq_1790093171299",
+        "question": "What is the expected behaviour when the user clicks the 'Profile' button inside the user menu — e.g. does it navigate to a profile settings page, and if so what is the URL?",
+        "answer": "My Profile drawer opens up",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-22T16:06:11.299Z"
+      },
+      {
+        "id": "clq_1790093171304",
+        "question": "Which specific product name(s) on the inventory page cannot be added to the cart by error_user, so that the test can assert the correct failure?",
+        "answer": "This is not related to Nexolvi. Hence it should not be part of the requirement question.",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-22T16:06:11.304Z"
+      },
+      {
+        "id": "clq_1790093347537",
+        "question": "Is the Sign In button always enabled (even when both fields are empty), or does it only become enabled once both the Email and Password fields contain at least one character?",
+        "answer": "No in case of Nexolvi, the Sign In button is disabled if any one of the field or both fields are empty.",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-22T16:09:07.537Z"
+      },
+      {
+        "id": "clq_1790093347544",
+        "question": "For Nexolvi admin portal login tests, should the precondition navigation URL be https://admin.nexolvi.ai/ (not https://www.saucedemo.com/)? Please confirm the correct login page URL for the Nexolvi admin portal.",
+        "answer": "https://admin.nexolvi.ai/login",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-22T16:09:07.544Z"
+      },
+      {
+        "id": "clq_1790093347549",
+        "question": "What is the exact text displayed in the native browser tooltip when hovering over the Profile button — is it the full email address 'bikash.htc@gmail.com' or a different string?",
+        "answer": "bikash.h",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-22T16:09:07.549Z"
+      },
+      {
+        "id": "clq_1790094299635",
+        "question": "What is the exact visible error message text shown to the user when the New Password and Confirm Password fields do not match?",
+        "answer": "Passwords do not match. It will appear as a toast message at the bottom right corner.",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-22T16:24:59.635Z"
+      },
+      {
+        "id": "clq_1790094299642",
+        "question": "After a successful Save Changes action, what is the observable UI feedback shown to the user — for example, a success toast/notification with specific text, the modal closing automatically, or another indicator?",
+        "answer": "Profile updated successfully. It will appear as a toast message at the bottom right corner.",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-22T16:24:59.642Z"
+      },
+      {
+        "id": "clq_1790094299647",
+        "question": "Are all three fields — Name, Email, and Phone — individually editable? If any field is read-only (e.g. Email cannot be changed), please specify which ones. Also, what are valid test input values to use when updating Name, Email, and Phone?",
+        "answer": "Yes. Use standard test input values.",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-22T16:24:59.647Z"
+      },
+      {
+        "id": "clq_1790094299651",
+        "question": "Are there any password complexity or length requirements for the New Password field (e.g. minimum 8 characters, must contain uppercase, number, or special character)? If so, please provide the rules and example valid/invalid values.",
+        "answer": "No. But we should follow the standard best practice test data for this field.",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-22T16:24:59.651Z"
+      },
+      {
+        "id": "clq_1790094299656",
+        "question": "What are the exact visible error messages displayed when Name, Email, or Phone fields fail validation on Save Changes — for example, if Name is cleared, if Email is in an invalid format, or if Phone contains non-numeric characters?",
+        "answer": "If Name field is left empty then \"Name is required\" is the error message which appears below the Name text box field.\nIf Email field is left empty then \"Email is required\" is the error message which appears below the Email text box field.\nIf Phone contains non-numeric characters then \"Enter a valid phone number\" is the error message which appears below the Phone text box filed",
+        "stageId": "01-requirement-analyzer",
+        "resolvedAt": "2026-09-22T16:24:59.656Z"
       }
     ],
     "stableTestIds": [],
