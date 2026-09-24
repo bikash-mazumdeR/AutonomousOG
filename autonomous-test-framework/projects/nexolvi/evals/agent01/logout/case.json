@@ -1,0 +1,23 @@
+{
+  "name": "nexolvi-logout",
+  "description": "The Nexolvi Logout requirement: its 11 acceptance criteria and the exact popup wording.",
+  "requirement": "../../../../../requirements/Nexolvi_Logout.md",
+  "projectId": "nexolvi",
+  "expect": {
+    "stories": 1,
+    "criteria": [
+      { "ref": "AC-01", "all": ["initial"] },
+      { "ref": "AC-02", "all": ["email", "hover"] },
+      { "ref": "AC-03", "all": ["menu"], "any": ["clicking the profile button", "click", "opens", "displays"] },
+      { "ref": "AC-04", "all": ["menu", "logout|log out"] },
+      { "ref": "AC-05", "all": ["logout|log out"], "any": ["confirmation", "popup", "dialog"] },
+      { "ref": "AC-06", "all": ["log out?"] },
+      { "ref": "AC-07", "all": ["unsaved changes will be lost"] },
+      { "ref": "AC-08", "all": ["cancel", "logout|log out"], "any": ["button", "buttons"] },
+      { "ref": "AC-09", "all": ["cancel"], "any": ["close", "closes", "dismiss", "remain", "stays", "without logging out"] },
+      { "ref": "AC-10", "all": ["login|log in|sign in"], "any": ["redirect", "session", "ends"] },
+      { "ref": "AC-11", "all": ["dashboard"], "any": ["session", "previous", "back", "cannot access", "not able"] }
+    ],
+    "forbidden": ["two-factor", "2FA", "idle timeout", "auto logout", "automatic logout"]
+  }
+}

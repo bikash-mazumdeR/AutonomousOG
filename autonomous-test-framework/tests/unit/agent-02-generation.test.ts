@@ -5,7 +5,7 @@ import {
 import { parseGherkinScenarios } from '../../agents/02-test-case-generator/parsers/GherkinToZephyrParser';
 import { validateStoryScenarios, ScenarioContext } from '../../agents/02-test-case-generator/validators/scenarioValidator';
 import {
-  buildTestCases, computeRequirementCoverage, priorityFor,
+  buildTestCases, buildCoverageWarnings, computeRequirementCoverage, priorityFor,
 } from '../../agents/02-test-case-generator/builders/testCaseBuilder';
 import {
   generateStoryScenarios, ChatMessage, extractUnacceptedBlocks, dropUnfinishedScenario,
@@ -495,5 +495,212 @@ describe('Agent 02 — prompt token trimming', () => {
     });
     expect(prompt).toContain('- Rule: Quote messages verbatim');
     expect(prompt).not.toContain('Other stage');
+  });
+});
+
+describe('Agent 02 — test data names from the analysis', () => {
+  const withTestData = () => rawAnalysis({
+    testDataValues: [
+      { name: 'validUsername', value: 'standard_user', sourceRef: 'AC-1', sensitive: false },
+      { name: 'validPassword', value: 'must-not-appear', sourceRef: 'AC-1', sensitive: true },
+      { name: 'bad name', value: 'x', sourceRef: 'AC-2', sensitive: false },
+      { name: 'validUsername', value: 'duplicate', sourceRef: 'AC-2', sensitive: false },
+    ],
+  });
+
+  it('keeps each valid name once, and never the value of a sensitive entry', () => {
+    const { features, warnings } = normalizeAnalysis(withTestData());
+    expect(features[0].userStories[0].testData).toEqual([
+      { name: 'validUsername', value: 'standard_user', sourceRef: 'AC-1', sensitive: false },
+      { name: 'validPassword', sourceRef: 'AC-1', sensitive: true },
+    ]);
+    expect(warnings).toEqual(expect.arrayContaining([expect.stringMatching(/Test data name "bad name" is not a valid placeholder name/)]));
+  });
+
+  it('lists the credentials and the extracted names in the prompt, without any sensitive value', () => {
+    const ctx = contextFor(withTestData());
+    const prompt = buildStoryPrompt({
+      ...ctx, openAmbiguities: [], stateTransitions: [], memoryContext: {}, credentialNames: ['validEmail', 'validPassword'],
+    });
+    expect(prompt).toContain('## TEST DATA — placeholder names for test inputs');
+    expect(prompt).toContain('- {{validEmail}} — test account credential, supplied by the environment');
+    expect(prompt).toContain('- {{validUsername}} = "standard_user" (AC-1)');
+    expect(prompt).toContain('- {{validPassword}} — sensitive; supplied by the environment, never write its value (AC-1)');
+    // A credential the analysis also names is listed once, from the analysis.
+    expect(prompt.match(/\{\{validPassword\}\}/g)).toHaveLength(1);
+    expect(prompt).not.toContain('must-not-appear');
+  });
+
+  it('treats a value the analysis redacted to a placeholder as supplied by the environment', () => {
+    const { features } = normalizeAnalysis(rawAnalysis({ testDataValues: [{ name: 'validEmail', value: '{{validEmail}}', sourceRef: 'AC-1', sensitive: false }] }));
+    const ctx = contextFor(rawAnalysis({ testDataValues: [{ name: 'validEmail', value: '{{validEmail}}', sourceRef: 'AC-1', sensitive: false }] }));
+    expect(features[0].userStories[0].testData).toEqual([{ name: 'validEmail', sourceRef: 'AC-1', sensitive: false }]);
+    expect(buildStoryPrompt({ ...ctx, openAmbiguities: [], stateTransitions: [], memoryContext: {} }))
+      .toContain('- {{validEmail}} — sensitive; supplied by the environment, never write its value (AC-1)');
+  });
+
+  it('asks for placeholders only for entered or selected values, keeping expected on-screen wording quoted', () => {
+    const prompt = buildStoryPrompt({ ...contextFor(), openAmbiguities: [], stateTransitions: [], memoryContext: {}, credentialNames: ['validEmail'] });
+    expect(prompt).toMatch(/value the user ENTERS or SELECTS, or an API request SENDS in its body, as its placeholder/);
+    expect(prompt).toMatch(/Keep expected on-screen wording \(headings, labels, messages\) as quoted text/);
+  });
+
+  it('leaves the section out when there is nothing to name', () => {
+    const prompt = buildStoryPrompt({ ...contextFor(), openAmbiguities: [], stateTransitions: [], memoryContext: {} });
+    expect(prompt).not.toContain('TEST DATA');
+  });
+
+  it('warns about a placeholder that is neither an extracted name nor a credential, and not about known ones', () => {
+    const known = validate(VALID_GHERKIN, contextFor(withTestData()));
+    expect(known.warnings.filter((w) => w.includes('New placeholder'))).toEqual([]);
+
+    const invented = validate(VALID_GHERKIN.replace('{{validUsername}}', '{{updatedName}}'), { ...contextFor(withTestData()), credentialNames: ['validEmail'] });
+    expect(invented.errors).toEqual([]);
+    expect(invented.warnings.filter((w) => w.includes('New placeholder'))).toEqual([
+      '[F-01/US-01] New placeholder(s) {{updatedName}}: the analysis and credentials name only {{validEmail}}, {{validUsername}}, {{validPassword}}, so Agent 04 must find a value for each',
+    ]);
+  });
+});
+
+describe('Agent 02 — escaped quotes in test data', () => {
+  it('keeps a JSON request body parseable, so an API test case carries it', () => {
+    const parsed = parseGherkinScenarios(`
+@api @ac-1 @int-int-01 @method-post @status-201
+Scenario: Creating an order returns the new order id
+  Given the orders endpoint is available
+  Then the endpoint accepts requests
+  When the client posts a new order
+  And with test data "{ \\"productId\\": \\"SKU-1001\\", \\"path\\": \\"C:\\\\temp\\" }"
+  Then the response status is 201
+`);
+    expect(parsed.errors).toEqual([]);
+    const [scenario] = parsed.scenarios;
+    const data = scenario.steps.find((step) => step.testData)?.testData;
+    // The escaped quotes are unescaped; the body's own escaped backslash stays, so it is still valid JSON.
+    expect(data).toBe('{ "productId": "SKU-1001", "path": "C:\\\\temp" }');
+    expect(JSON.parse(data as string)).toEqual({ productId: 'SKU-1001', path: 'C:\\temp' });
+  });
+});
+
+describe('Agent 02 — an API error response counts as the negative case', () => {
+  const ordersAnalysis = () => ({
+    features: [{
+      id: 'F-01',
+      name: 'Orders',
+      riskLevel: 'Medium',
+      userStories: [{
+        id: 'US-01',
+        title: 'Create an order',
+        acceptanceCriteria: [
+          '[@functional] POST /api/v1/orders with a valid product returns 201.',
+          "[@error-handling] POST /api/v1/orders with a quantity of 0 returns 400 with 'Quantity must be at least 1'.",
+        ],
+        businessRules: [],
+        integrationPoints: ['INT-01'],
+        testTypes: ['UI', 'API'],
+      }],
+    }],
+    integrationPoints: [{ id: 'INT-01', name: 'Orders API', type: 'REST_API', endpoint: '/api/v1/orders' }],
+    ambiguities: [],
+  });
+  const created = `
+@api @ac-1 @int-01 @method-post @status-201
+Scenario: Creating an order with a valid product returns 201
+  Given the orders endpoint is available
+  Then the endpoint accepts requests
+  When the client posts an order for a valid product
+  Then the response status is 201
+`;
+  const rejected = `
+@api @ac-2 @int-01 @method-post @status-400
+Scenario: Creating an order with quantity 0 returns 400
+  Given the orders endpoint is available
+  Then the endpoint accepts requests
+  When the client posts an order with a quantity of 0
+  Then the response status is 400 with "Quantity must be at least 1"
+`;
+  const positive = `
+@positive @ac-1 @functional
+Scenario: The Orders page lists a newly created order
+  Given the user has created an order
+  Then the order confirmation is displayed
+  When the user opens the Orders page
+  Then the new order is listed
+`;
+  const ctx = () => contextFor(ordersAnalysis(), ['edge', 'performance']);
+
+  it('accepts a story whose only negative behaviour is an API 4xx response', () => {
+    const result = validate(`${positive}\n${created}\n${rejected}`, ctx());
+    expect(result.errors).toEqual([]);
+    expect(result.scenarios.map((s) => s.type)).toEqual(['Positive', 'API', 'API']);
+  });
+
+  it('still requires a negative case, and says an API 4xx scenario would do', () => {
+    const result = validate(`${positive}\n${created}`, ctx());
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.stringMatching(/no @negative scenario .* An @api scenario asserting a documented 4xx status also counts — keep it tagged @api, never @negative/),
+    ]));
+  });
+
+  it('does not count a successful API response, nor offer the API option when API tests are not allowed', () => {
+    const result = validate(`${positive}\n${created}`, ctx());
+    expect(result.errors.some((e) => /no @negative scenario/.test(e))).toBe(true);
+    const uiOnly = validate(VALID_GHERKIN.replace(/@negative[\s\S]*$/, ''), contextFor());
+    expect(uiOnly.errors.find((e) => /no @negative scenario/.test(e))).not.toMatch(/@api scenario/);
+  });
+
+  it('tells the model up front, and counts the API 4xx case in the feature-level coverage warnings', () => {
+    const prompt = buildStoryPrompt({ ...ctx(), openAmbiguities: [], stateTransitions: [], memoryContext: {} });
+    expect(prompt).toMatch(/A documented API error response is tested as ONE @api scenario asserting its 4xx @status-<code>; it also counts as the story's @negative scenario/);
+    const noApiPrompt = buildStoryPrompt({ ...contextFor(), openAmbiguities: [], stateTransitions: [], memoryContext: {} });
+    expect(noApiPrompt).not.toMatch(/A documented API error response/);
+
+    const { features } = normalizeAnalysis(ordersAnalysis());
+    const scenarios = validate(`${positive}\n${created}\n${rejected}`, ctx()).scenarios;
+    const testCases = buildTestCases([{ feature: features[0], story: features[0].userStories[0], scenarios }]);
+    const warnings = buildCoverageWarnings(features, testCases, new Set(['edge', 'performance']));
+    expect(warnings.filter((w) => / negative test cases/.test(w))).toEqual([expect.stringMatching(/1\/2 negative test cases/)]);
+  });
+});
+
+describe('Agent 02 — wording and tag checks', () => {
+  const invented = `
+@positive @ac-1 @smoke @functional
+Scenario: Login with valid credentials redirects to inventory
+  Given the user is on the login page
+  Then the login form is displayed
+  When the user logs in with valid credentials
+  And with test data "{{validUsername}}"
+  Then the URL is /inventory.html and the banner "Welcome to Swag Labs" is shown
+
+@negative @ac-2 @br-1 @error-handling
+Scenario: Empty username shows the username required error
+  Given the user is on the login page
+  Then the login form is displayed
+  When the user clicks Login with only a password entered
+  And with test data "{{validPassword}}"
+  Then the error "Epic sadface: Username is required" is displayed
+`;
+
+  it('says nothing about wording and tags that the story grounds', () => {
+    const warnings = validate(VALID_GHERKIN).warnings;
+    expect(warnings.filter((w) => /states "|shares no wording/.test(w))).toEqual([]);
+  });
+
+  it('warns about quoted wording no criterion, rule or test value states, without rejecting the scenario', () => {
+    const result = validate(invented);
+    expect(result.errors).toEqual([]);
+    expect(result.warnings.filter((w) => /states "/.test(w))).toEqual([
+      "[F-01/US-01] \"Login with valid credentials redirects to inventory\" states \"Welcome to Swag Labs\", which none of the story's criteria, rules or test data contain — check it is not invented",
+    ]);
+  });
+
+  it('warns when a requirement tag shares no wording with its criterion', () => {
+    const misTagged = VALID_GHERKIN.replace('@negative @ac-2 @br-1 @error-handling', '@negative @ac-2 @br-1 @error-handling')
+      .replace('Username is case-sensitive.', 'unused');
+    const result = validate(misTagged, contextFor(rawAnalysis({ businessRules: ['Checkout totals include tax.'] })));
+    expect(result.warnings.filter((w) => /shares no wording/.test(w))).toEqual([
+      '[F-01/US-01] "Empty username shows the username required error" is tagged @br-1 but shares no wording with BR-1 ("Checkout totals include tax.") — check that it really verifies it',
+    ]);
   });
 });

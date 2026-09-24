@@ -1,0 +1,9 @@
+{
+  "name": "nexolvi-profile",
+  "description": "The frozen Nexolvi Profile analysis (27 criteria, 13 extracted test data names); nothing about deleting the account, photos or 2FA.",
+  "analysis": "analysis.json",
+  "projectId": "nexolvi",
+  "expect": {
+    "forbidden": ["delete account", "delete the account", "profile picture", "photo", "avatar upload", "two-factor", "2FA"]
+  }
+}

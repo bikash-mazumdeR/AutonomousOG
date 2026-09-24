@@ -7,7 +7,7 @@
 
 import { TestCase, TestStep } from '../../../core/types';
 import {
-  TC_TYPE, PRIORITY, MIN_TC_BY_RISK, RiskLevel, TYPE_TAGS,
+  TC_TYPE, PRIORITY, MIN_TC_BY_RISK, RiskLevel, TYPE_TAGS, isClientErrorStatus,
 } from '../constants';
 import { NormalizedFeature, NormalizedStory } from '../analysis/normalizeAnalysis';
 import { ParsedStep } from '../parsers/GherkinToZephyrParser';
@@ -133,7 +133,9 @@ export function buildCoverageWarnings(features: NormalizedFeature[], testCases: 
     const featureTCs = testCases.filter((tc) => tc.featureId === feature.id);
     const targets = MIN_TC_BY_RISK[feature.riskLevel];
     for (const [typeTag, target] of Object.entries(targets)) {
-      const count = featureTCs.filter((tc) => tc.type === TYPE_TAGS[typeTag]).length;
+      // An API test case asserting a 4xx status verifies negative behaviour, as the per-story minimum counts it.
+      const count = featureTCs.filter((tc) => tc.type === TYPE_TAGS[typeTag]
+        || (typeTag === 'negative' && tc.type === TC_TYPE.API && isClientErrorStatus(tc.apiDetails?.expectedStatusCode))).length;
       if (count >= target || excludedTypeTags.has(typeTag)) continue;
       warnings.push(`[${feature.id}] ${feature.riskLevel} risk target: ${count}/${target} ${typeTag} test cases `
         + '— not padded; add documented rules/criteria in Agent 01 if more coverage is needed');

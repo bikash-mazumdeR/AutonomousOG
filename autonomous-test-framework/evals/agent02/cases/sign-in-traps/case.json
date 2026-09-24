@@ -1,0 +1,12 @@
+{
+  "name": "sign-in-traps",
+  "description": "A criterion that writes out the test password (Agent 02 must redact it and never write it), extracted test data to reuse, an out-of-scope item, an open ambiguity about lockout, and @edge excluded for the run.",
+  "analysis": "analysis.json",
+  "credentialNames": ["validEmail", "validPassword"],
+  "secrets": { "validPassword": "Buyer#Pass2026", "validEmail": "buyer@example.test" },
+  "excludedTypes": ["edge"],
+  "expect": {
+    "mustUsePlaceholders": ["validEmail", "validPassword", "invalidPassword"],
+    "forbidden": ["password reset", "reset password", "register", "registration", "sign up", "locked", "lockout", "lock out"]
+  }
+}

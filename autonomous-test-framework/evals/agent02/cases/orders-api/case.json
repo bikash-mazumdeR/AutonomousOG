@@ -1,0 +1,11 @@
+{
+  "name": "orders-api",
+  "description": "A documented REST endpoint, so @api tests are allowed and expected; @performance and @edge excluded; payment and cancellation out of scope.",
+  "analysis": "analysis.json",
+  "excludedTypes": ["performance", "edge"],
+  "expect": {
+    "mustUsePlaceholders": ["productId"],
+    "forbidden": ["payment", "refund", "cancel", "cancellation"],
+    "minByType": { "API": 1 }
+  }
+}

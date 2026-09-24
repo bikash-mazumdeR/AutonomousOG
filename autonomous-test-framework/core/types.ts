@@ -103,6 +103,11 @@ export interface TestCase {
   hash: string;
   /** false when the user excluded the test case during Agent 02 approval. */
   selected: boolean;
+  /**
+   * Open Agent 01 questions about a criterion this test case covers. Agent 03 holds the test case while its
+   * clarification is open, since the behaviour it tests is still undecided.
+   */
+  openQuestions?: Array<{ ambiguityId: string; question: string; clarificationId?: string }>;
   [key: string]: any;
 }
 

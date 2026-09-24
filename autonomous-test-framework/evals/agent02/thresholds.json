@@ -1,0 +1,12 @@
+{
+  "unresolvedErrors": 0,
+  "criteriaCoverage": 1,
+  "placeholderRecall": 1,
+  "secretsLeaked": 0,
+  "ungroundedClaims": 0,
+  "forbiddenHits": 0,
+  "excludedTypeLeaks": 0,
+  "duplicates": 0,
+  "minByTypeMissed": 0,
+  "stability": 0.6
+}

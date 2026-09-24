@@ -125,6 +125,17 @@ function openScenario(state: ParserState, rawTitle: string, lineNo: number): voi
   if (!state.scenario.title) addError(state, `Line ${lineNo}: Scenario has no title`);
 }
 
+/**
+ * The test data value as meant, not as quoted: a model writes a JSON request body inside the quotes as
+ * `"{ \"id\": 1 }"`, and keeping the backslashes makes the body unparseable, so the API test case lost it. Only an
+ * escaped quote is unescaped: a JSON body's own escaped backslash must stay as written.
+ * @param {string} raw - Text between the quotes of "with test data"
+ * @returns {string}
+ */
+export function unescapeTestData(raw: string): string {
+  return raw.replace(/\\"/g, '"');
+}
+
 function attachTestData(state: ParserState, data: string, lineNo: number): void {
   const { draft } = state;
   if (!draft || draft.expectations.length > 0) {
@@ -157,7 +168,7 @@ function processStep(state: ParserState, keyword: string, text: string, lineNo: 
   }
   const dataMatch = text.match(TEST_DATA_LINE);
   if (dataMatch) {
-    attachTestData(state, dataMatch[1], lineNo);
+    attachTestData(state, unescapeTestData(dataMatch[1]), lineNo);
   } else if (state.draft && state.draft.expectations.length > 0) {
     state.draft.expectations.push(text);
   } else {

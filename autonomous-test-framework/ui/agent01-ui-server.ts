@@ -931,7 +931,9 @@ const updateTestCaseHandler = async (req: Request, res: Response) => {
 
     try {
       const requirements = await stateManager.getPipelineArtifact('analyzedRequirements');
-      if (requirements) {
+      // Feature files hold approved test cases only: an edit made before approval is written by the approve route.
+      const approved = (await stateManager.getFullState()).stages?.['02-test-case-generator']?.approval === 'APPROVED';
+      if (requirements && approved) {
         syncFeatureFiles(stateManager.getProjectId(), requirements, allTCs, logger);
       }
     } catch (syncErr: any) {

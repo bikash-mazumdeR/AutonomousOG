@@ -1,0 +1,178 @@
+{
+  "totalFeatures": 1,
+  "totalUserStories": 1,
+  "features": [
+    {
+      "id": "F-01",
+      "name": "Login",
+      "description": "Allow authorized users to securely log in to Nexo Desk using their email and password at https://admin.nexolvi.ai.",
+      "riskLevel": "CRITICAL",
+      "userStories": [
+        {
+          "id": "US-01",
+          "sourceStoryId": null,
+          "title": "Login to Nexo Desk",
+          "role": "authorized user",
+          "goal": "log in to Nexo Desk using email and password",
+          "benefit": "access the Nexo Desk Dashboard securely",
+          "acceptanceCriteria": [
+            "[@functional] The Sign In button is disabled when both the Email and Password fields are empty.",
+            "[@functional] The Sign In button is disabled when only the Email field has a value and the Password field is empty.",
+            "[@functional] The Sign In button is disabled when only the Password field has a value and the Email field is empty.",
+            "[@functional] The Sign In button becomes enabled when both the Email field and the Password field contain at least one character.",
+            "[@functional] Submitting the form with an invalid email and a valid password displays the error message 'Login failed'.",
+            "[@functional] Submitting the form with a valid email and an invalid password displays the error message 'Login failed'.",
+            "[@functional] Submitting the form with an invalid email and an invalid password displays the error message 'Login failed'.",
+            "[@functional] Submitting the form with the valid email '{{validEmail}}' and the valid password 'admin' authenticates the user and redirects them to the Nexo Desk Dashboard.",
+            "[@functional] When the Remember Me checkbox is selected during a successful login, the user's login session is persisted for 30 days.",
+            "[@ui] The login page is accessible at https://admin.nexolvi.ai.",
+            "[@ui] The login form contains an Email field, a Password field, a Remember Me checkbox labelled 'Remember me for 30 days', and a Sign In button.",
+            "[@ui] The Password field masks its value by default.",
+            "[@ui] An eye icon is present on the Password field; clicking it toggles the password between masked and visible states.",
+            "[@ui] When the eye icon is clicked once, the password text becomes visible; clicking it again re-masks the password.",
+            "[@error-handling] The error message 'Login failed' is displayed in the page DOM (not a browser alert) when invalid credentials are submitted.",
+            "[@security] The Password field value is masked by default, preventing shoulder-surfing exposure of credentials."
+          ],
+          "testDataValues": [
+            {
+              "name": "validEmail",
+              "value": "{{validEmail}}",
+              "sourceRef": "AC-8",
+              "sensitive": false
+            },
+            {
+              "name": "validPassword",
+              "sensitive": true,
+              "sourceRef": "AC-8"
+            },
+            {
+              "name": "rememberMeDuration",
+              "value": "30 days",
+              "sourceRef": "AC-9",
+              "sensitive": false
+            },
+            {
+              "name": "loginErrorMessage",
+              "value": "Login failed",
+              "sourceRef": "AC-5",
+              "sensitive": false
+            }
+          ],
+          "businessRules": [
+            "Sign In button must remain disabled until both Email and Password fields contain at least one character.",
+            "Any combination of invalid email or invalid password results in the same 'Login failed' error — no distinction is made between the two failure modes.",
+            "Remember Me session duration is exactly 30 days from the time of successful login."
+          ],
+          "stateTransitions": [
+            "Form state: both fields empty → Sign In disabled",
+            "Form state: one field populated → Sign In disabled",
+            "Form state: both fields populated → Sign In enabled",
+            "Authentication: valid credentials submitted → user authenticated → redirect to Nexo Desk Dashboard",
+            "Authentication: invalid credentials submitted → 'Login failed' error displayed → user remains on login page",
+            "Password field: masked (default) → eye icon clicked → visible",
+            "Password field: visible → eye icon clicked → masked"
+          ],
+          "integrationPoints": [],
+          "testability": "AUTOMATABLE",
+          "testTypes": [
+            "UI",
+            "SECURITY"
+          ],
+          "assumptions": [
+            "The login page is served over HTTPS; TLS/SSL configuration is an infrastructure concern and not a UI-level acceptance criterion.",
+            "Session storage mechanism (cookie name, token format) is an internal implementation detail; the observable behaviour is that the user remains logged in for 30 days without re-authentication."
+          ],
+          "outOfScope": [
+            "Mobile viewport testing — desktop devices only.",
+            "Registration / sign-up flow.",
+            "Password reset / forgot-password flow.",
+            "Multi-factor authentication (not mentioned in the document).",
+            "Account lockout policy (not mentioned in the document)."
+          ]
+        }
+      ]
+    }
+  ],
+  "integrationPoints": [
+    {
+      "id": "IP-01",
+      "name": "Nexo Desk Authentication Service",
+      "type": "REST_API",
+      "endpoint": "https://admin.nexolvi.ai (login endpoint — exact path not specified in document)",
+      "mockRequired": false,
+      "criticality": "HIGH"
+    }
+  ],
+  "ambiguities": [
+    {
+      "id": "AMB-01",
+      "featureId": "F-01",
+      "userStoryId": "US-01",
+      "acceptanceCriterion": "[@functional] Submitting the form with the valid email '{{validEmail}}' and the valid password 'admin' authenticates the user and redirects them to the Nexo Desk Dashboard.",
+      "category": "PAGE_URL",
+      "description": "The document states the user is redirected to the 'Nexo Desk Dashboard' after successful login but does not specify the URL path of the Dashboard page (e.g. /dashboard, /home, /desk).",
+      "question": "What is the exact URL path (relative or absolute) that the user lands on after a successful login — e.g. https://admin.nexolvi.ai/dashboard?",
+      "blockingTestGeneration": false,
+      "resolved": true,
+      "clarificationId": "clar_1789744497358_11bc3771",
+      "resolution": "The URL is https://admin.nexolvi.ai/, but the page has header - Dashboard"
+    },
+    {
+      "id": "AMB-02",
+      "featureId": "F-01",
+      "userStoryId": "US-01",
+      "acceptanceCriterion": "[@functional] When the Remember Me checkbox is selected during a successful login, the user's login session is persisted for 30 days.",
+      "category": "STORAGE_OR_STATE",
+      "description": "The document states the session is 'remembered for 30 days' but does not describe what the user can observe to confirm this — e.g. whether the user is automatically logged in on a return visit without re-entering credentials, or whether a specific UI indicator is shown.",
+      "question": "What is the observable user-facing behaviour that confirms the Remember Me session is active — for example, does the user land directly on the Dashboard on a subsequent visit without seeing the login form, or is there another visible indicator?",
+      "blockingTestGeneration": false,
+      "resolved": true,
+      "clarificationId": "clar_1789744497361_2d770783",
+      "resolution": "the user land directly on the Dashboard on a subsequent visit without seeing the login form"
+    },
+    {
+      "id": "AMB-03",
+      "featureId": "F-01",
+      "userStoryId": "US-01",
+      "acceptanceCriterion": "[@error-handling] The error message 'Login failed' is displayed in the page DOM (not a browser alert) when invalid credentials are submitted.",
+      "category": "ELEMENT_IDENTIFICATION",
+      "description": "The document states the error message text is 'Login failed' but does not specify where on the page it appears (e.g. above the Email field, below the Password field, below the Sign In button) or whether it is a single inline element or a banner/toast.",
+      "question": "Where exactly on the login page is the 'Login failed' error message displayed — e.g. above the form, between the fields and the button, or below the Sign In button? Is it an inline element, a toast notification, or a banner?",
+      "blockingTestGeneration": false,
+      "resolved": true,
+      "clarificationId": "clar_1789744497362_4b24285a",
+      "resolution": "above the form in a alert box"
+    },
+    {
+      "id": "AMB-04",
+      "featureId": "F-01",
+      "userStoryId": "US-01",
+      "acceptanceCriterion": "[@functional] The Sign In button becomes enabled when both the Email field and the Password field contain at least one character.",
+      "category": "TEST_VALUE",
+      "description": "The document does not specify whether the Email field performs format validation before enabling the Sign In button (e.g. does entering 'abc' without '@' count as a value that enables the button, or must it be a syntactically valid email address?).",
+      "question": "Does the Sign In button become enabled as soon as any non-empty string is typed in the Email field (regardless of email format), or does the field require a syntactically valid email address (containing '@' and a domain) before the button is enabled?",
+      "blockingTestGeneration": false,
+      "resolved": true,
+      "clarificationId": "clar_1789744497363_460e3c6a",
+      "resolution": "as soon as any non-empty string is typed in the Email field and the Password field"
+    },
+    {
+      "id": "AMB-05",
+      "featureId": "F-01",
+      "userStoryId": "US-01",
+      "acceptanceCriterion": "[@functional] When the Remember Me checkbox is selected during a successful login, the user's login session is persisted for 30 days.",
+      "category": "TEST_VALUE",
+      "description": "The document does not specify the observable behaviour when Remember Me is NOT selected — i.e. what is the session duration or expiry behaviour for a standard (non-remembered) login.",
+      "question": "When the Remember Me checkbox is NOT selected, what is the expected session behaviour — e.g. session expires when the browser is closed, or after a specific idle timeout period?",
+      "blockingTestGeneration": false,
+      "resolved": true,
+      "clarificationId": "clar_1789744497364_8a4793f0",
+      "resolution": "session expires when the browser is closed and on new session user lands on the Login page"
+    }
+  ],
+  "businessRules": [],
+  "stateTransitions": [],
+  "requirementFingerprint": "ebae5f1e61f93123d1ae24f709227ee08b7d9f9749b5180fb7eccc21974fe8ea",
+  "analysisPromptVersion": "4",
+  "ambiguitiesPending": 0
+}

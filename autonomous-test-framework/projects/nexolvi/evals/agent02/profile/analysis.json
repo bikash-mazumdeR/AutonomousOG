@@ -1,0 +1,243 @@
+{
+  "totalFeatures": 1,
+  "totalUserStories": 1,
+  "features": [
+    {
+      "id": "F-01",
+      "name": "Profile Feature",
+      "description": "Allows an authenticated user to view and update their account information including name, email, phone number, and password via the My Profile modal accessible from the Dashboard.",
+      "riskLevel": "HIGH",
+      "userStories": [
+        {
+          "id": "US-01",
+          "sourceStoryId": null,
+          "title": "View and Edit Profile Information",
+          "role": "authenticated user",
+          "goal": "view and update my account information including name, email, phone number, and password",
+          "benefit": "keep my account details current and secure",
+          "acceptanceCriteria": [
+            "[@functional] Navigating to https://admin.nexolvi.ai/login displays the login page with Email field, Password field, 'Remember me for 30 days' checkbox, and Sign In button.",
+            "[@functional] The Sign In button is disabled when either the Email field or the Password field (or both) is empty.",
+            "[@functional] The Sign In button becomes enabled only when both the Email field and the Password field contain at least one character.",
+            "[@functional] Entering valid credentials ({{validEmail}} / {{validPassword}}) and clicking Sign In redirects the user to https://admin.nexolvi.ai/ which displays a page with the header 'Dashboard'.",
+            "[@functional] After successful login, a profile button displaying the character 'B' is visible at the top-left corner of the Dashboard.",
+            "[@functional] Clicking the profile button opens a user menu containing: the user initial, the user's email ({{validEmail}}), a 'Profile' option, and a 'Logout' option.",
+            "[@functional] Clicking the 'Profile' option in the user menu opens the My Profile modal (drawer).",
+            "[@functional] The My Profile modal displays the modal title 'My Profile' and the description 'View and edit your account information.'",
+            "[@functional] The My Profile modal contains a Close (X) button in the top-right corner; clicking it closes the modal.",
+            "[@functional] The My Profile modal displays Name, Email, and Phone fields pre-populated with the user's current account information.",
+            "[@functional] The Name, Email, and Phone fields in the modal are editable.",
+            "[@functional] The My Profile modal contains a 'Change Password' section with a 'New Password' input field (placeholder: '{{newPasswordPlaceholder}}') and a 'Confirm Password' input field (placeholder: '{{confirmPasswordPlaceholder}}').",
+            "[@functional] If both the New Password and Confirm Password fields are left blank when Save Changes is clicked, the existing password is preserved unchanged.",
+            "[@functional] If the New Password and Confirm Password fields contain different values, the save is rejected (password mismatch validation fails).",
+            "[@functional] If the New Password and Confirm Password fields contain matching non-empty values, password validation passes and the new password is accepted.",
+            "[@functional] Clicking 'Save Changes' validates all entered information; when validation succeeds, the updated profile information is saved.",
+            "[@functional] After a successful save, reopening the My Profile modal reflects the updated profile information.",
+            "[@functional] Clicking 'Cancel' closes the My Profile modal, discards any unsaved changes, and the user remains on the Dashboard.",
+            "[@ui] The My Profile modal header text is exactly 'My Profile'.",
+            "[@ui] The My Profile modal description text is exactly 'View and edit your account information.'",
+            "[@ui] The New Password field displays the placeholder text '{{newPasswordPlaceholder}}'.",
+            "[@ui] The Confirm Password field displays the placeholder text '{{confirmPasswordPlaceholder}}'.",
+            "[@ui] The profile button at the top-left of the Dashboard displays the character 'B' for the account {{validEmail}}.",
+            "[@ui] The user menu displays the user's full name 'Bikash h', email '{{validEmail}}', a 'Profile' button, and a 'Logout' button.",
+            "[@ui] Hovering over the profile button displays a native browser tooltip showing 'bikash.h'.",
+            "[@error-handling] If the New Password and Confirm Password values do not match, the system rejects the save and indicates a mismatch error before persisting any changes.",
+            "[@security] The Password fields (New Password and Confirm Password) mask the entered characters."
+          ],
+          "testDataValues": [
+            {
+              "name": "loginUrl",
+              "value": "https://admin.nexolvi.ai/login",
+              "sourceRef": "AC-1",
+              "sensitive": false
+            },
+            {
+              "name": "dashboardUrl",
+              "value": "https://admin.nexolvi.ai/",
+              "sourceRef": "AC-4",
+              "sensitive": false
+            },
+            {
+              "name": "validEmail",
+              "value": "{{validEmail}}",
+              "sourceRef": "AC-4",
+              "sensitive": false
+            },
+            {
+              "name": "validPassword",
+              "sourceRef": "AC-4",
+              "sensitive": true
+            },
+            {
+              "name": "profileButtonInitial",
+              "value": "B",
+              "sourceRef": "AC-5",
+              "sensitive": false
+            },
+            {
+              "name": "userFullName",
+              "value": "Bikash h",
+              "sourceRef": "AC-24",
+              "sensitive": false
+            },
+            {
+              "name": "userEmail",
+              "value": "{{validEmail}}",
+              "sourceRef": "AC-4",
+              "sensitive": false
+            },
+            {
+              "name": "userPhone",
+              "value": "+1 555 000 0000",
+              "sourceRef": "AC-8",
+              "sensitive": false
+            },
+            {
+              "name": "profileButtonTooltipText",
+              "value": "bikash.h",
+              "sourceRef": "AC-4",
+              "sensitive": false
+            },
+            {
+              "name": "modalTitle",
+              "value": "My Profile",
+              "sourceRef": "AC-7",
+              "sensitive": false
+            },
+            {
+              "name": "modalDescription",
+              "value": "View and edit your account information.",
+              "sourceRef": "AC-8",
+              "sensitive": false
+            },
+            {
+              "name": "newPasswordPlaceholder",
+              "sourceRef": "AC-12",
+              "sensitive": true
+            },
+            {
+              "name": "confirmPasswordPlaceholder",
+              "sourceRef": "AC-12",
+              "sensitive": true
+            }
+          ],
+          "businessRules": [
+            "BR-01: The Sign In button is disabled when either or both of the Email and Password fields are empty; it becomes enabled only when both fields contain at least one character.",
+            "BR-02: If both New Password and Confirm Password fields are blank on save, the existing password is retained.",
+            "BR-03: If New Password is non-empty, Confirm Password must exactly match New Password; otherwise the save is rejected.",
+            "BR-04: Password validation is performed before any profile changes are persisted.",
+            "BR-05: Clicking Cancel discards all unsaved changes and closes the modal without saving."
+          ],
+          "stateTransitions": [
+            "Login page → (valid credentials + Sign In) → Dashboard",
+            "Dashboard → (click profile button) → User menu open",
+            "User menu open → (click Profile) → My Profile modal open",
+            "My Profile modal open → (click Cancel or X) → Modal closed, Dashboard visible",
+            "My Profile modal open → (click Save Changes, validation passes) → Changes saved, modal reflects updated data"
+          ],
+          "integrationPoints": [],
+          "testability": "AUTOMATABLE",
+          "testTypes": [
+            "UI",
+            "FUNCTIONAL"
+          ],
+          "assumptions": [
+            "The My Profile modal is implemented as a DOM drawer/panel, not a native browser dialog.",
+            "Field editability is controlled by standard HTML input attributes; no custom read-only overlay is described.",
+            "The application persists profile changes to a backend data store; the mechanism is not described in the requirement."
+          ],
+          "outOfScope": [
+            "Mobile viewport testing (desktop only per resolved clarification).",
+            "Viewport width range assertions (ignored per resolved clarification).",
+            "Registration / sign-up flow.",
+            "MFA / 2FA.",
+            "Logout flow (covered in separate feature).",
+            "Remember Me session behaviour (covered in separate feature).",
+            "SauceDemo / error_user / performance_glitch_user / problem_user / visual_user scenarios (not part of Nexolvi)."
+          ]
+        }
+      ]
+    }
+  ],
+  "integrationPoints": [
+    {
+      "id": "IP-01",
+      "name": "Nexolvi Admin Backend – Profile Persistence",
+      "type": "INTERNAL",
+      "endpoint": "N/A",
+      "criticality": "HIGH"
+    }
+  ],
+  "ambiguities": [
+    {
+      "id": "AMB-01",
+      "featureId": "F-01",
+      "userStoryId": "US-01",
+      "acceptanceCriterion": "[@error-handling] If the New Password and Confirm Password values do not match, the system rejects the save and indicates a mismatch error before persisting any changes.",
+      "category": "ELEMENT_IDENTIFICATION",
+      "description": "The requirement states mismatched passwords are rejected (AC-12) but does not specify the exact visible error message text displayed to the user when the passwords do not match.",
+      "question": "What is the exact visible error message text shown to the user when the New Password and Confirm Password fields do not match?",
+      "blockingTestGeneration": false,
+      "resolved": true,
+      "clarificationId": "clar_1790093767602_98514d83",
+      "resolution": "Passwords do not match. It will appear as a toast message at the bottom right corner."
+    },
+    {
+      "id": "AMB-02",
+      "featureId": "F-01",
+      "userStoryId": "US-01",
+      "acceptanceCriterion": "[@functional] Clicking 'Save Changes' validates all entered information; when validation succeeds, the updated profile information is saved.",
+      "category": "ELEMENT_IDENTIFICATION",
+      "description": "The requirement states that Save Changes validates and saves information (AC-14) but does not specify what success feedback (if any) is shown to the user after a successful save — e.g. a success toast, a message, or simply the modal closing.",
+      "question": "After a successful Save Changes action, what is the observable UI feedback shown to the user — for example, a success toast/notification with specific text, the modal closing automatically, or another indicator?",
+      "blockingTestGeneration": false,
+      "resolved": true,
+      "clarificationId": "clar_1790093767604_66348ebd",
+      "resolution": "Profile updated successfully. It will appear as a toast message at the bottom right corner."
+    },
+    {
+      "id": "AMB-03",
+      "featureId": "F-01",
+      "userStoryId": "US-01",
+      "acceptanceCriterion": "[@functional] The Name, Email, and Phone fields in the modal are editable.",
+      "category": "TEST_VALUE",
+      "description": "The requirement states fields should allow editing but does not specify whether all three fields (Name, Email, Phone) are editable, or whether any field (e.g. Email) is read-only. It also does not provide concrete test input values for updating Name, Email, or Phone.",
+      "question": "Are all three fields — Name, Email, and Phone — individually editable? If any field is read-only (e.g. Email cannot be changed), please specify which ones. Also, what are valid test input values to use when updating Name, Email, and Phone?",
+      "blockingTestGeneration": false,
+      "resolved": true,
+      "clarificationId": "clar_1790093767605_aa27649d",
+      "resolution": "Yes. Use standard test input values."
+    },
+    {
+      "id": "AMB-04",
+      "featureId": "F-01",
+      "userStoryId": "US-01",
+      "acceptanceCriterion": "[@functional] If the New Password and Confirm Password fields contain matching non-empty values, password validation passes and the new password is accepted.",
+      "category": "TEST_VALUE",
+      "description": "The requirement does not specify any password complexity rules (minimum length, required character types, etc.) for the New Password field. Without this, boundary and invalid-value tests cannot be defined.",
+      "question": "Are there any password complexity or length requirements for the New Password field (e.g. minimum 8 characters, must contain uppercase, number, or special character)? If so, please provide the rules and example valid/invalid values.",
+      "blockingTestGeneration": false,
+      "resolved": true,
+      "clarificationId": "clar_1790093767606_35665734",
+      "resolution": "No. But we should follow the standard best practice test data for this field."
+    },
+    {
+      "id": "AMB-05",
+      "featureId": "F-01",
+      "userStoryId": "US-01",
+      "acceptanceCriterion": "[@functional] Clicking 'Save Changes' validates all entered information; when validation succeeds, the updated profile information is saved.",
+      "category": "ELEMENT_IDENTIFICATION",
+      "description": "The requirement does not specify what validation error messages are shown when Name, Email, or Phone fields contain invalid input (e.g. empty Name, invalid email format, invalid phone format).",
+      "question": "What are the exact visible error messages displayed when Name, Email, or Phone fields fail validation on Save Changes — for example, if Name is cleared, if Email is in an invalid format, or if Phone contains non-numeric characters?",
+      "blockingTestGeneration": false,
+      "resolved": true,
+      "clarificationId": "clar_1790093767607_4a870946",
+      "resolution": "If Name field is left empty then \"Name is required\" is the error message which appears below the Name text box field.\nIf Email field is left empty then \"Email is required\" is the error message which appears below the Email text box field.\nIf Phone contains non-numeric characters then \"Enter a valid phone number\" is the error message which appears below the Phone text box filed"
+    }
+  ],
+  "businessRules": [],
+  "stateTransitions": [],
+  "requirementFingerprint": "e1d8e11fd83299950ce55d2e0393552f37fdc08f251f47fb19bab77f53521d64",
+  "analysisPromptVersion": "4",
+  "ambiguitiesPending": 0
+}

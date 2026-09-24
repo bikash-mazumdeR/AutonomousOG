@@ -8,6 +8,8 @@
  * Structural issues are fed back to the LLM once; everything else is corrected or surfaced as a warning.
  */
 
+import { CLARIFICATION_SOURCE_REF } from './analysisSchema';
+
 /** A user story the requirement document itself defines. */
 export interface SourceStory {
   /** Story id as written, e.g. "SL-AUTH-001"; absent for a narrative without an id. */
@@ -103,7 +105,8 @@ export function fixTestDataSourceRefs(report: any): string[] {
     const items = refItems(story);
     for (const data of story?.testDataValues || []) {
       const value = typeof data?.value === 'string' ? data.value.trim() : '';
-      if (!value || data.sensitive === true) continue;
+      // A value from a clarification answer is traced to that answer, not to a criterion or rule of the document.
+      if (!value || data.sensitive === true || String(data.sourceRef || '').trim().toUpperCase() === CLARIFICATION_SOURCE_REF) continue;
       const ref = String(data.sourceRef || '').trim().match(REF_PATTERN);
       const referenced = ref ? items[ref[1].toUpperCase() as 'AC' | 'BR'][Number(ref[2]) - 1] : undefined;
       if (referenced && referenced.toLowerCase().includes(value.toLowerCase())) continue;

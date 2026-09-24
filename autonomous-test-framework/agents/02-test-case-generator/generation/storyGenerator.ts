@@ -11,6 +11,7 @@ import { buildStoryPrompt, buildRetryPrompt, PromptMemoryContext } from '../prom
 import { evaluateApiGate, evaluatePerformanceGate } from '../analysis/requirementGates';
 import { NormalizedFeature, NormalizedStory, OpenAmbiguity } from '../analysis/normalizeAnalysis';
 import { StoryScenarios } from '../builders/testCaseBuilder';
+import { KnownSecret } from '../../../core/aut/knownSecrets';
 
 /** Chat message in the LLMClient format. */
 export interface ChatMessage {
@@ -38,6 +39,10 @@ export interface StoryGenerationRequest {
   memoryContext: PromptMemoryContext;
   /** Self-correction retries after the first attempt. */
   maxRetries: number;
+  /** Placeholder names of the test account's credentials, from the AUT profile. */
+  credentialNames?: string[];
+  /** Secret values the AUT profile names; scenarios containing one are rejected. */
+  secrets?: KnownSecret[];
 }
 
 /** What one generate → validate round produced (diagnostic; recorded in the prompt trace). */
@@ -133,6 +138,8 @@ export async function generateStoryScenarios(request: StoryGenerationRequest, ch
     apiGate: evaluateApiGate(story),
     performanceGate: evaluatePerformanceGate(story),
     excludedTypeTags: request.excludedTypeTags,
+    credentialNames: request.credentialNames || [],
+    secrets: request.secrets || [],
   };
   const userPrompt = buildStoryPrompt({
     ...ctx, openAmbiguities: request.openAmbiguities, stateTransitions: request.stateTransitions, memoryContext: request.memoryContext,

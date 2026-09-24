@@ -102,6 +102,16 @@ function resolveSupersededQuestions(store: ClarificationStore, tcKey: string): v
   }
 }
 
+/**
+ * Open Agent 01 questions about a criterion the test case covers (linked by Agent 02). Agent 01 asks them per story, not
+ * per test case, so they are not found by test case key; answering one releases every test case that depends on it.
+ */
+function openRequirementQuestions(tc: any, store: ClarificationStore): Clarification[] {
+  return (Array.isArray(tc.openQuestions) ? tc.openQuestions : [])
+    .map((q: any) => (q?.clarificationId ? store.get(String(q.clarificationId)) : null))
+    .filter((c: Clarification | null): c is Clarification => Boolean(c) && (c as Clarification).status === CLARIFICATION_STATUS.OPEN);
+}
+
 function applyHold(tc: any, open: Clarification[]): void {
   if (open.length === 0) {
     if (tc.reviewStatus === REVIEW_STATUS.HELD) tc.reviewStatus = tc.reviewStatusBeforeHold || REVIEW_STATUS.PASSED;
@@ -175,7 +185,8 @@ export function holdUnreadyTestCases(testCases: any[], store: ClarificationStore
     const raised = items.map((item) => store.raise(requestFor(tc, item)));
     store.resolveMissing({ sourceStage: STAGE_ID, tcKey: tc.key, firingKeys: raised.map((c) => c.dedupeKey) });
     resolveSupersededQuestions(store, tc.key);
-    const open = store.listOpen({ tcKeys: [tc.key] }).filter((c) => HOLDING_OWNERS.has(c.owningStage));
+    const open = [...store.listOpen({ tcKeys: [tc.key] }), ...openRequirementQuestions(tc, store)]
+      .filter((c, idx, all) => HOLDING_OWNERS.has(c.owningStage) && all.findIndex((other) => other.id === c.id) === idx);
     applyHold(tc, open);
     if (open.length > 0) summary.held.push(tc.key);
   }

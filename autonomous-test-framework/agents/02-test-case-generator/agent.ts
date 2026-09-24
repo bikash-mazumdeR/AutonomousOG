@@ -14,7 +14,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import pLimit from 'p-limit';
 
-import { stateManager, STAGE_STATUS } from '../../core/state-manager/StateManager';
+import { stateManager, STAGE_STATUS, APPROVAL_STATUS } from '../../core/state-manager/StateManager';
 import { memoryEngine } from '../../core/project-memory/MemoryEngine';
 import { approvalGate } from '../../core/approval-gate/ApprovalGate';
 import { Logger } from '../../core/logger/Logger';
@@ -25,7 +25,7 @@ import { TestCase, TestCasesArtifact, GenerationMeta } from '../../core/types';
 import {
   STAGE_ID, STAGE_NAME, STAGE_NUMBER, NEXT_STAGE, SKILL_PATH, LEARNINGS_PATH, LLM_SETTINGS, SKIP_OPTIONS, TC_TYPE,
 } from './constants';
-import { normalizeAnalysis, NormalizedAnalysis } from './analysis/normalizeAnalysis';
+import { normalizeAnalysis, NormalizedAnalysis, redactNormalizedAnalysis } from './analysis/normalizeAnalysis';
 import {
   generateStoryScenarios, ChatMessage, ChatReply, StoryGenerationOutcome,
 } from './generation/storyGenerator';
@@ -37,7 +37,10 @@ import { buildGenerationMeta, describeInputChanges, formatInputChanges } from '.
 import { filterByActiveTypes, resolveActiveTypeTags } from './prompts/systemPrompt';
 import { buildPromptTrace } from './generation/promptTrace';
 import { assertTestCasesGenerated } from './generation/emptyResultGuard';
+import { linkOpenAmbiguities } from './analysis/ambiguityLinks';
 import { LATEST_PROJECT_SQL } from '../../core/state-manager/projectResolver';
+import { loadAutProfile } from '../../core/aut/AutProfile';
+import { KnownSecret, profileSecrets } from '../../core/aut/knownSecrets';
 
 const PROMPT_TRACE_FILE = 'test-case-generation-prompt-trace.json';
 
@@ -47,7 +50,14 @@ export interface TestCaseGeneratorInput {
   opts?: Record<string, unknown>;
 }
 
-interface GenerationSummary {
+/** The project facts generation depends on; resolved from the AUT profile unless given (the eval suite gives them). */
+export interface GenerationEnvironment {
+  credentialNames: string[];
+  secrets: KnownSecret[];
+}
+
+/** What one generation produced. */
+export interface GenerationSummary {
   testCases: TestCase[];
   warnings: string[];
   clarifications: string[];
@@ -76,7 +86,7 @@ export function resolveExcludedTypeTags(opts: Record<string, unknown> = {}): Rea
   return new Set(Object.entries(SKIP_OPTIONS).filter(([flag]) => Boolean(opts[flag])).map(([, tag]) => tag));
 }
 
-function buildApprovalSummary(testCases: TestCase[], generation: GenerationSummary, featureFilePaths: string[]) {
+function buildApprovalSummary(testCases: TestCase[], generation: GenerationSummary) {
   const { coverage, meta } = generation;
   const count = (type: string) => testCases.filter((tc) => tc.type === type).length;
   return {
@@ -88,7 +98,7 @@ function buildApprovalSummary(testCases: TestCase[], generation: GenerationSumma
     'Performance TCs': count(TC_TYPE.PERFORMANCE),
     'Acceptance Criteria Covered': `${coverage.acceptanceCriteria.covered}/${coverage.acceptanceCriteria.total}`,
     'Business Rules Covered': `${coverage.businessRules.covered}/${coverage.businessRules.total}`,
-    'Feature Files Synced': featureFilePaths.length,
+    'Feature Files': 'written after approval',
     'Skipped Types': meta.excludedTypes.join(', ') || 'none',
     'Models Used': meta.modelsUsed.join(', ') || 'unknown',
     'Changed Since Last Run': formatInputChanges(generation.inputChanges),
@@ -141,7 +151,6 @@ export class TestCaseGeneratorAgent {
       const output: TestCasesArtifact = {
         zephyrExport: { totalTestCases: generation.testCases.length, testCases: generation.testCases, generationMeta: generation.meta },
       };
-      const featureFilePaths = syncFeatureFiles(stateManager.getProjectId(), input.analyzedRequirements, generation.testCases, this._logger);
 
       const usage = llmClient.getStageUsage(STAGE_ID);
       await stateManager.setPipelineArtifact('testCases', output);
@@ -153,7 +162,7 @@ export class TestCaseGeneratorAgent {
       this._logger.stage('COMPLETE', STAGE_ID, {
         totalTCs: generation.testCases.length, durationMs, modelsUsed: generation.meta.modelsUsed, inputChanges: generation.inputChanges,
       });
-      return await this._awaitApproval(output, generation, featureFilePaths, usage, durationMs);
+      return await this._awaitApproval(output, generation, input.analyzedRequirements, usage, durationMs);
     } catch (error: any) {
       this._logger.error('Agent execution failed', { error: error.message });
       await this._savePromptTrace(trace, 'FAILED', error.message);
@@ -164,8 +173,16 @@ export class TestCaseGeneratorAgent {
 
   // ── Generation ───────────────────────────────────────────────────────────
 
-  private async _generate(input: TestCaseGeneratorInput, memoryContext: any, trace: TraceContext): Promise<GenerationSummary> {
+  private async _generate(
+    input: TestCaseGeneratorInput,
+    memoryContext: any,
+    trace: TraceContext,
+    environment: GenerationEnvironment = { credentialNames: this._credentialNames(), secrets: this._knownSecrets() },
+  ): Promise<GenerationSummary> {
     const normalized = normalizeAnalysis(input.analyzedRequirements);
+    const { secrets } = environment;
+    const redacted = redactNormalizedAnalysis(normalized, secrets);
+    if (redacted > 0) normalized.warnings.push(`Secrets: replaced secret values with placeholders in ${redacted} requirement text(s) before generation`);
     const excludedTypeTags = resolveExcludedTypeTags(input.opts);
     this._logger.info('Starting requirement-grounded generation', {
       features: normalized.features.length,
@@ -176,8 +193,9 @@ export class TestCaseGeneratorAgent {
 
     const systemPrompt = filterByActiveTypes(this._skill, resolveActiveTypeTags(normalized.features, excludedTypeTags));
     trace.systemPrompt = systemPrompt;
-    const outcomes = await this._generateStories(normalized, excludedTypeTags, memoryContext, systemPrompt);
+    const outcomes = await this._generateStories(normalized, excludedTypeTags, memoryContext, systemPrompt, environment);
     const testCases = buildTestCases(outcomes);
+    const ambiguityWarnings = linkOpenAmbiguities(testCases, normalized.features, normalized.openAmbiguities);
     const meta = buildGenerationMeta({
       analyzedRequirements: input.analyzedRequirements,
       normalized,
@@ -191,6 +209,7 @@ export class TestCaseGeneratorAgent {
       ...normalized.warnings,
       ...outcomes.flatMap((outcome) => outcome.warnings),
       ...buildCoverageWarnings(normalized.features, testCases, excludedTypeTags),
+      ...ambiguityWarnings,
     ];
     Object.assign(trace, { outcomes, warnings, testCaseCount: testCases.length });
     return {
@@ -208,6 +227,7 @@ export class TestCaseGeneratorAgent {
     excludedTypeTags: ReadonlySet<string>,
     memoryContext: any,
     systemPrompt: string,
+    { credentialNames, secrets }: GenerationEnvironment,
   ): Promise<StoryGenerationOutcome[]> {
     const limit = pLimit(Math.max(1, FRAMEWORK_CONFIG.maxThreads));
     const jobs = normalized.features.flatMap((feature) => feature.userStories.map((story) => limit(async () => {
@@ -225,6 +245,8 @@ export class TestCaseGeneratorAgent {
         stateTransitions: normalized.stateTransitions,
         memoryContext,
         maxRetries: FRAMEWORK_CONFIG.selfReviewRetries,
+        credentialNames,
+        secrets,
       }, (messages) => {
         attempt += 1;
         return this._chat(messages, `${storyKey} #${attempt}`);
@@ -234,6 +256,40 @@ export class TestCaseGeneratorAgent {
     })));
     // Promise.all preserves job order, which keeps TC keys deterministic.
     return Promise.all(jobs);
+  }
+
+  /**
+   * Placeholder names of the test account's credentials: the keys of the AUT profile's credential bindings, which the
+   * later agents resolve from the environment. None when the project has no profile yet.
+   */
+  private _credentialNames(): string[] {
+    try {
+      return Object.keys(loadAutProfile(stateManager.getProjectId()).auth?.credentialEnvVars || {});
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /**
+   * Generation exactly as the stage performs it — normalisation, redaction, per-story LLM generation with validation and
+   * self-correction, test case building and coverage — without pipeline state, memory, feature files or the approval
+   * gate. Used by the Agent 02 eval suite.
+   * @param {any} analyzedRequirements - A stored Agent 01 analysis
+   * @param {Record<string, unknown>} opts - Run options, e.g. { 'skip-edge': true }
+   * @param {GenerationEnvironment} environment - Credential names and secrets, as the project's AUT profile would give them
+   * @returns {Promise<GenerationSummary>}
+   */
+  async generateForEval(analyzedRequirements: any, opts: Record<string, unknown>, environment: GenerationEnvironment): Promise<GenerationSummary> {
+    return this._generate({ analyzedRequirements, opts }, { improvementRules: [], rejectionFeedback: [] }, { opts }, environment);
+  }
+
+  /** Secret values the AUT profile names; none when the project has no profile yet. */
+  private _knownSecrets(): KnownSecret[] {
+    try {
+      return profileSecrets(loadAutProfile(stateManager.getProjectId()), process.env);
+    } catch (_) {
+      return [];
+    }
   }
 
   /** `traceLabel` ("F-01/US-01 #2") attributes the call to its story and attempt in the prompt trace. */
@@ -250,10 +306,15 @@ export class TestCaseGeneratorAgent {
 
   // ── Approval & Persistence ───────────────────────────────────────────────
 
+  /**
+   * Waits at the approval gate, then writes the feature files — only on approval. Feature files are committed, so output
+   * a human has not approved must never reach them. They are written from the stored test cases, which include any
+   * edits made in the review UI while the gate was open.
+   */
   private async _awaitApproval(
     output: TestCasesArtifact,
     generation: GenerationSummary,
-    featureFilePaths: string[],
+    analyzedRequirements: any,
     usage: any,
     durationMs: number,
   ): Promise<any> {
@@ -263,7 +324,7 @@ export class TestCaseGeneratorAgent {
       stageId: STAGE_ID,
       stageName: STAGE_NAME,
       nextStageName: NEXT_STAGE,
-      summary: buildApprovalSummary(testCases, generation, featureFilePaths),
+      summary: buildApprovalSummary(testCases, generation),
       fullOutput: output.zephyrExport,
       warnings: generation.warnings,
       clarifications: generation.clarifications,
@@ -272,6 +333,11 @@ export class TestCaseGeneratorAgent {
 
     agentResult.approvalStatus = gateResult.status;
     agentResult.approvalComment = gateResult.comment;
+    if (gateResult.status === APPROVAL_STATUS.APPROVED) {
+      const approved = (await stateManager.getPipelineArtifact('testCases'))?.zephyrExport?.testCases || testCases;
+      const featureFilePaths = syncFeatureFiles(stateManager.getProjectId(), analyzedRequirements, approved, this._logger);
+      this._logger.info('Feature files written after approval', { files: featureFilePaths.length });
+    }
     await memoryEngine.recordApprovalFeedback(STAGE_ID, gateResult.status, gateResult.comment, `TCs: ${testCases.length}`);
     return agentResult;
   }

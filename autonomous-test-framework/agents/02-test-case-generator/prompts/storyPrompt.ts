@@ -29,6 +29,8 @@ export interface StoryPromptInput {
   openAmbiguities: OpenAmbiguity[];
   stateTransitions: unknown[];
   memoryContext: PromptMemoryContext;
+  /** Placeholder names of the test account's credentials, supplied by the environment (e.g. validEmail). */
+  credentialNames?: string[];
 }
 
 function section(title: string, lines: string[], emptyText?: string): string {
@@ -102,7 +104,9 @@ function gateLines({ apiGate, performanceGate, excludedTypeTags }: StoryPromptIn
   return lines;
 }
 
-function coverageLines({ feature, story, excludedTypeTags }: StoryPromptInput): string[] {
+function coverageLines({
+  feature, story, excludedTypeTags, apiGate,
+}: StoryPromptInput): string[] {
   const storyCount = Math.max(feature.userStories.length, 1);
   const max = maxTcPerStoryPerType(story.acceptanceCriteria.length + story.businessRules.length);
   const targets = selectedUiTypes(excludedTypeTags).map((typeTag) => {
@@ -117,8 +121,36 @@ function coverageLines({ feature, story, excludedTypeTags }: StoryPromptInput): 
     lines.push(`- Per story: at least ${MIN_TC_PER_STORY_PER_TYPE} and at most ${max} scenarios of EACH selected type; `
       + `aim for up to ${targets.join(', ')} when enough distinct behaviour is documented.`);
   }
+  if (!excludedTypeTags.has('negative') && !excludedTypeTags.has('api') && apiGate.allowed) {
+    lines.push('- A documented API error response is tested as ONE @api scenario asserting its 4xx @status-<code>; it also counts as '
+      + "the story's @negative scenario. Never tag an API scenario @negative, and never add @method-/@status-/@int- tags to a @negative scenario.");
+  }
   lines.push('- Beyond the minimum, add scenarios only for distinct documented behaviour; never invent behaviour to reach a number.');
   return lines;
+}
+
+/**
+ * The placeholder names a scenario should use for test inputs: the account credentials, then the values the analysis
+ * extracted for this story. A sensitive value is listed by name only.
+ */
+function testDataLines({ story, credentialNames = [] }: StoryPromptInput): string[] {
+  const credentials = credentialNames
+    .filter((name) => !(story.testData || []).some((item) => item.name === name))
+    .map((name) => `- {{${name}}} — test account credential, supplied by the environment`);
+  const values = (story.testData || []).map((item) => {
+    const source = item.sourceRef ? ` (${item.sourceRef})` : '';
+    return item.sensitive || item.value === undefined
+      ? `- {{${item.name}}} — sensitive; supplied by the environment, never write its value${source}`
+      : `- {{${item.name}}} = ${JSON.stringify(item.value)}${source}`;
+  });
+  const lines = [...credentials, ...values];
+  if (lines.length === 0) return [];
+  return [
+    ...lines,
+    'Write a value the user ENTERS or SELECTS, or an API request SENDS in its body, as its placeholder with exactly this name',
+    '(e.g. { "productId": "{{productId}}" }), and name a new camelCase placeholder only for an input none of them covers.',
+    'Keep expected on-screen wording (headings, labels, messages) as quoted text, exactly as the criteria state it.',
+  ];
 }
 
 function memoryLines({ memoryContext }: StoryPromptInput): string[] {
@@ -150,6 +182,7 @@ export function buildStoryPrompt(input: StoryPromptInput): string {
       story.acceptanceCriteria.map((ac) => `- ${ac.id}${ac.category ? ` [${ac.category}]` : ''}: ${ac.text}`), '(none)'),
     section('BUSINESS RULES (tag scenarios that verify them with @br-N)', story.businessRules.map((br) => `- ${br.id}: ${br.text}`), '(none)'),
     section('STATE TRANSITIONS', stateTransitionLines(input)),
+    section('TEST DATA — placeholder names for test inputs', testDataLines(input)),
     section('ASSUMPTIONS', story.assumptions.map((item) => `- ${item}`)),
     section('OUT OF SCOPE — never test these', story.outOfScope.map((item) => `- ${item}`)),
     section('OPEN AMBIGUITIES — do not assume an answer; skip behaviour that depends on them', ambiguities),

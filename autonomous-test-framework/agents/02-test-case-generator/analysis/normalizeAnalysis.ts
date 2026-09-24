@@ -10,6 +10,7 @@
 import {
   RISK_LEVEL, RiskLevel, TESTABILITY, REQUIREMENT_REF_PREFIX,
 } from '../constants';
+import { KnownSecret, replaceSecrets } from '../../../core/aut/knownSecrets';
 
 /** An acceptance criterion or business rule with a stable, story-local id. */
 export interface RequirementItem {
@@ -20,6 +21,15 @@ export interface RequirementItem {
 }
 
 /** Integration point with its enum type upper-cased. */
+/** A test input value Agent 01 extracted for a story; tests refer to it as the placeholder {{name}}. */
+export interface TestDataItem {
+  name: string;
+  /** The value as written in the requirement; absent for a sensitive value, which comes from the environment. */
+  value?: string;
+  sourceRef: string;
+  sensitive: boolean;
+}
+
 export interface IntegrationPoint {
   id: string;
   name: string;
@@ -43,6 +53,8 @@ export interface NormalizedStory {
   outOfScope: string[];
   integrationPoints: IntegrationPoint[];
   testTypes: string[];
+  /** Test input values the analysis extracted, reused as placeholder names. */
+  testData: TestDataItem[];
 }
 
 /** Feature with a valid risk level and only generatable stories. */
@@ -60,6 +72,12 @@ export interface OpenAmbiguity {
   featureId: string;
   question: string;
   blocking: boolean;
+  /** Story the ambiguity is about, when Agent 01 names one. */
+  userStoryId?: string;
+  /** Exact text of the acceptance criterion the ambiguity is about, when Agent 01 names one. */
+  criterionText?: string;
+  /** The Agent 01 clarification that asks it; answering it settles the ambiguity. */
+  clarificationId?: string;
 }
 
 /** Result of normalisation. */
@@ -118,6 +136,36 @@ function normalizeIntegration(raw: any): IntegrationPoint {
   };
 }
 
+const PLACEHOLDER_NAME = /^[a-zA-Z][a-zA-Z0-9]*$/;
+const PLACEHOLDER_VALUE = /^\{\{\w+\}\}$/;
+
+/**
+ * The story's test data values, usable as placeholder names. A sensitive entry keeps its name and never its value;
+ * an entry whose name cannot be a placeholder is skipped with a warning.
+ */
+function toTestData(value: unknown, label: string, warnings: string[]): TestDataItem[] {
+  if (!Array.isArray(value)) return [];
+  const items: TestDataItem[] = [];
+  for (const raw of value) {
+    const name = String(raw?.name ?? '').trim();
+    if (!PLACEHOLDER_NAME.test(name)) {
+      warnings.push(`${label} Test data name "${name}" is not a valid placeholder name (camelCase letters and digits) — skipped`);
+      continue;
+    }
+    if (items.some((item) => item.name === name)) continue;
+    // A value Agent 01 redacted to a placeholder ("{{validEmail}}") comes from the environment, like a sensitive one.
+    const value = typeof raw?.value === 'string' && !PLACEHOLDER_VALUE.test(raw.value.trim()) ? raw.value : undefined;
+    const sensitive = raw?.sensitive === true;
+    items.push({
+      name,
+      ...(!sensitive && value !== undefined ? { value } : {}),
+      sourceRef: String(raw?.sourceRef ?? '').trim(),
+      sensitive,
+    });
+  }
+  return items;
+}
+
 function resolveIntegrations(refs: unknown, globalById: Map<string, IntegrationPoint>): IntegrationPoint[] {
   if (!Array.isArray(refs)) return [];
   return refs
@@ -153,6 +201,7 @@ function normalizeStory(
     outOfScope: toStringList(raw?.outOfScope),
     integrationPoints: resolveIntegrations(raw?.integrationPoints, globalById),
     testTypes: toStringList(raw?.testTypes).map(toEnumValue),
+    testData: toTestData(raw?.testDataValues, label, warnings),
   };
   if (story.acceptanceCriteria.length + story.businessRules.length === 0) {
     warnings.push(`${label} Story has no acceptance criteria or business rules — skipped (nothing to test without inventing scope)`);
@@ -192,6 +241,9 @@ function collectOpenAmbiguities(raw: unknown): OpenAmbiguity[] {
       featureId: String(amb.featureId || '').trim(),
       question: textOf(amb.question) || textOf(amb.description),
       blocking: String(amb.blockingTestGeneration).toLowerCase() === 'true',
+      ...(textOf(amb.userStoryId) ? { userStoryId: textOf(amb.userStoryId) } : {}),
+      ...(textOf(amb.acceptanceCriterion) ? { criterionText: textOf(amb.acceptanceCriterion) } : {}),
+      ...(textOf(amb.clarificationId) ? { clarificationId: textOf(amb.clarificationId) } : {}),
     }))
     .filter((amb) => amb.question);
 }
@@ -229,4 +281,36 @@ export function normalizeAnalysis(raw: any): NormalizedAnalysis {
     warnings,
     clarifications,
   };
+}
+
+/**
+ * Replaces every secret value in the normalised stories by its placeholder, so no secret reaches the prompt even when the
+ * analysis predates Agent 01's redaction. A test data value that was a secret keeps only its name. Updates in place.
+ * @param {NormalizedAnalysis} analysis
+ * @param {KnownSecret[]} secrets
+ * @returns {number} How many texts contained a secret
+ */
+export function redactNormalizedAnalysis(analysis: NormalizedAnalysis, secrets: KnownSecret[]): number {
+  if (secrets.length === 0) return 0;
+  let redacted = 0;
+  const clean = (text: string): string => {
+    const out = replaceSecrets(text, secrets);
+    if (out !== text) redacted += 1;
+    return out;
+  };
+  for (const feature of analysis.features) {
+    feature.description = clean(feature.description);
+    for (const story of feature.userStories) {
+      story.acceptanceCriteria.forEach((item) => { item.text = clean(item.text); });
+      story.businessRules.forEach((item) => { item.text = clean(item.text); });
+      story.assumptions = story.assumptions.map(clean);
+      story.outOfScope = story.outOfScope.map(clean);
+      story.stateTransitions = story.stateTransitions.map(clean);
+      story.testData.forEach((item) => {
+        if (item.value !== undefined && clean(item.value) !== item.value) delete item.value;
+      });
+    }
+  }
+  analysis.openAmbiguities.forEach((amb) => { amb.question = clean(amb.question); });
+  return redacted;
 }

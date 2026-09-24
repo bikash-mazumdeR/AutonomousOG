@@ -25,7 +25,7 @@ const DOCUMENT = `# Swag Labs Login Page
 const story = (id: string, overrides: Record<string, unknown> = {}) => ({
   id, title: id, acceptanceCriteria: ['[@functional] placeholder criterion'], businessRules: [], testDataValues: [], ...overrides,
 });
-const reportWith = (...userStories: any[]) => ({ features: [{ id: 'F-01', userStories }] });
+const reportWith = (...userStories: any[]) => ({ features: [{ id: 'F-01', name: 'Login', userStories }] });
 
 describe('Agent 01 — source user stories', () => {
   it('finds explicit story ids and ignores numbered flows', () => {
@@ -92,7 +92,7 @@ describe('Agent 01 — test data traceability and duplicates', () => {
 describe('Agent 01 — incomplete LLM output is never saved', () => {
   const agent: any = new RequirementAnalyzerAgent();
   const chat = llmClient.chat as jest.Mock;
-  const validReport = JSON.stringify({ features: [{ id: 'F-01', userStories: [story('US-01', { sourceStoryId: 'SL-AUTH-001' })] }], ambiguities: [] });
+  const validReport = JSON.stringify({ features: [{ id: 'F-01', name: 'Login', userStories: [story('US-01', { sourceStoryId: 'SL-AUTH-001' })] }], ambiguities: [] });
 
   afterEach(() => chat.mockReset());
 
@@ -107,7 +107,7 @@ describe('Agent 01 — incomplete LLM output is never saved', () => {
   });
 
   it('asks once for a corrected story structure and reports what is still wrong', async () => {
-    const split = JSON.stringify({ features: [{ id: 'F-01', userStories: [story('US-01'), story('US-02')] }], ambiguities: [] });
+    const split = JSON.stringify({ features: [{ id: 'F-01', name: 'Login', userStories: [story('US-01'), story('US-02')] }], ambiguities: [] });
     chat.mockResolvedValueOnce({ text: split, usage: {} }).mockResolvedValueOnce({ text: validReport, usage: {} });
     const report = await agent._performLLMAnalysis(DOCUMENT, 'Demo', {});
     expect(chat).toHaveBeenCalledTimes(2);

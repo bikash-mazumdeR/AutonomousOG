@@ -8,7 +8,7 @@
 import * as crypto from 'crypto';
 
 /** Bump when the analysis prompt changes in a way that should invalidate saved analyses. */
-export const ANALYSIS_PROMPT_VERSION = '4';
+export const ANALYSIS_PROMPT_VERSION = '5';
 
 /** @enum {string} Where the stage's analysis came from. */
 export const ANALYSIS_SOURCE = Object.freeze({

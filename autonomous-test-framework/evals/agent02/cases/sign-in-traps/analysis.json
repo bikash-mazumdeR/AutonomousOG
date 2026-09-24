@@ -1,0 +1,38 @@
+{
+  "features": [{
+    "id": "F-01",
+    "name": "Sign-in",
+    "description": "The customer sign-in page.",
+    "riskLevel": "HIGH",
+    "userStories": [{
+      "id": "US-01",
+      "sourceStoryId": "ACC-101",
+      "title": "Sign in with email and password",
+      "role": "returning customer",
+      "goal": "sign in with my email and password",
+      "benefit": "I can see my orders",
+      "acceptanceCriteria": [
+        "[@ui] The sign-in page shows the heading 'Welcome back'.",
+        "[@ui] The page has an Email field, a Password field and a Sign in button.",
+        "[@functional] The Sign in button is disabled until both fields are filled.",
+        "[@functional] Signing in as buyer@example.test with Buyer#Pass2026 opens the page /orders.",
+        "[@error-handling] Submitting the password wrong-pass shows the error 'Email or password is incorrect'."
+      ],
+      "businessRules": ["The password must be between 8 and 64 characters."],
+      "outOfScope": ["Password reset and account registration"],
+      "testDataValues": [
+        { "name": "validEmail", "value": "buyer@example.test", "sourceRef": "AC-4", "sensitive": false },
+        { "name": "validPassword", "sourceRef": "AC-4", "sensitive": true },
+        { "name": "invalidPassword", "value": "wrong-pass", "sourceRef": "AC-5", "sensitive": false }
+      ],
+      "testTypes": ["UI"],
+      "testability": "AUTOMATABLE"
+    }]
+  }],
+  "integrationPoints": [],
+  "ambiguities": [{
+    "id": "AMB-01", "featureId": "F-01", "userStoryId": "US-01", "category": "TEST_VALUE",
+    "question": "After how many failed sign-in attempts is the account locked, and for how long?",
+    "blockingTestGeneration": false
+  }]
+}

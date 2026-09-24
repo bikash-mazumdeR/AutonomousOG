@@ -1,0 +1,23 @@
+{
+  "name": "contradictions-and-traps",
+  "description": "A contradiction (AC-3 vs BR-1), an unquantified limit (AC-6), a secret, and features a model tends to invent (MFA, registration, lockout, password reset).",
+  "requirement": "requirement.md",
+  "secrets": { "validPassword": "Buyer#Pass2026" },
+  "expect": {
+    "stories": 1,
+    "sourceStoryIds": ["ACC-101"],
+    "criteria": [
+      { "ref": "AC-1", "all": ["welcome back"] },
+      { "ref": "AC-2", "all": ["email", "password", "sign in"] },
+      { "ref": "AC-3", "all": ["sign in", "enabled|disabled"] },
+      { "ref": "AC-4", "all": ["/orders"] },
+      { "ref": "AC-5", "all": ["email or password is incorrect"] },
+      { "ref": "BR-2", "all": ["8", "64"] }
+    ],
+    "ambiguities": [
+      { "about": "Sign in button: enabled only when filled (AC-3) vs enabled at all times (BR-1)", "all": ["enabled|disabled"], "any": ["all times", "only when", "contradict", "conflict", "both fields"] },
+      { "about": "'load quickly' has no measurable limit (AC-6)", "any": ["quickly", "load time", "how fast", "threshold", "second"] }
+    ],
+    "forbidden": ["MFA", "two-factor", "2FA", "register", "registration", "sign up", "lockout", "locked", "password reset", "forgot password"]
+  }
+}

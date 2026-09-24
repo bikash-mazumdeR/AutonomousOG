@@ -42,6 +42,8 @@
     "test": "jest",
     "test:unit": "jest --verbose",
     "test:changed": "jest --onlyChanged",
+    "eval:agent01": "node -r ts-node/register evals/agent01/run.ts",
+    "eval:agent02": "node -r ts-node/register evals/agent02/run.ts",
     "test:coverage": "jest --coverage",
     "test:watch": "jest --watch",
     "test:playwright": "npx playwright test",

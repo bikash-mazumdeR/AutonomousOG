@@ -26,12 +26,17 @@ import {
   computeInputFingerprint, findReusableAnalysis, requiresIsolatedRun, ANALYSIS_SOURCE, ANALYSIS_PROMPT_VERSION,
 } from './inputFingerprint';
 import { assessAnalysisQuality } from './analysisQuality';
+import { issuesForPrompt, validateAnalysisSchema } from './analysisSchema';
 import { isNonAnswer } from '../../core/clarifications/answerQuality';
 import { computeRequirementFingerprint } from '../../core/requirements/requirementFingerprint';
 import { stateDb } from '../../core/state-manager/Database';
 import { clarificationRequestFor, normalizeAmbiguities, normalizeQuestion } from './ambiguities';
 import { ClarificationStore } from '../../core/clarifications/ClarificationStore';
 import { AnalysisPromptParts, buildPromptTrace, PromptTraceInput, UTILITY_STAGE_ID } from './promptTrace';
+import { loadAutProfile } from '../../core/aut/AutProfile';
+import {
+  KnownSecret, SECRET_WARNING_PREFIX, UNGROUNDED_WARNING_PREFIX, findUngroundedClaims, profileSecrets, redactSecrets, redactText,
+} from './guardrails';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -111,6 +116,7 @@ export class RequirementAnalyzerAgent {
       
       const analysisReport = await this._resolveAnalysis(rawRequirements, inputFingerprint, input, memoryContext);
       Object.assign(trace, { analysisSource: analysisReport.analysisSource, inputFingerprint });
+      this._applyGuardrails(analysisReport, this._groundingSource(trace.originalRequirements as string, memoryContext));
       await this._savePromptTrace(input, trace, 'COMPLETED');
       analysisReport.featureFilePaths = [];
       // Stamped so the next upload of identical content is recognised as already processed.
@@ -268,6 +274,58 @@ export class RequirementAnalyzerAgent {
   }
 
   /**
+   * Enforces what the prompt only asks for: no secret value anywhere in the analysis, and no quoted wording, URL or
+   * number the requirement document does not contain. Runs on a reused analysis too, which may predate these checks.
+   * Grounding is judged against the original document, not the squeezed summary the LLM may have been given.
+   */
+  /**
+   * What the analysis may state: the original requirement document and the answers to Agent 01's own clarifications,
+   * which the prompt tells the model to integrate. A value taken from an answer is grounded, not invented.
+   */
+  private _groundingSource(originalRequirements: string, memoryContext: any): string {
+    const answers = (memoryContext?.resolvedClarifications || [])
+      .filter((c: any) => c.stageId === STAGE_ID && c.answer)
+      .map((c: any) => String(c.answer));
+    return [originalRequirements, ...answers].join('\n\n');
+  }
+
+  private _applyGuardrails(report: any, originalRequirements: string, knownSecrets: KnownSecret[] = this._profileSecrets()): void {
+    const { secrets, warnings: secretWarnings } = redactSecrets(report, knownSecrets);
+    const ungrounded = findUngroundedClaims(report, redactText(originalRequirements, secrets));
+    const earlier = (report.analysisWarnings || [])
+      .filter((warning: string) => !warning.startsWith(UNGROUNDED_WARNING_PREFIX) && !warning.startsWith(SECRET_WARNING_PREFIX));
+    report.analysisWarnings = [...earlier, ...secretWarnings, ...ungrounded];
+    report.ungroundedClaims = ungrounded.length;
+    if (ungrounded.length > 0) this._logger.warn(`${ungrounded.length} claim(s) in the analysis are not in the requirement document`, { ungrounded });
+  }
+
+  /**
+   * The analysis exactly as the stage produces it — LLM decomposition, schema and structure checks with their correction
+   * round, then the secret and grounding guardrails — without touching pipeline state, clarifications, memory or the
+   * approval gate. Used by the Agent 01 eval suite. Inputs over the squeeze limit are analysed unsqueezed.
+   * @param {string} requirements - Requirement document text
+   * @param {string} projectName
+   * @param {any} memoryContext - { improvementRules, resolvedClarifications }
+   * @param {KnownSecret[]} secrets - Secrets to redact, as the project's AUT profile would name them
+   * @returns {Promise<{ report: any, modelOutput: any }>} The guarded analysis, and a copy of it before the guardrails
+   */
+  async analyzeForEval(requirements: string, projectName: string, memoryContext: any, secrets: KnownSecret[]): Promise<{ report: any; modelOutput: any }> {
+    const report = await this._performLLMAnalysis(requirements, projectName, memoryContext);
+    const modelOutput = JSON.parse(JSON.stringify(report));
+    this._applyGuardrails(report, this._groundingSource(requirements, memoryContext), secrets);
+    return { report, modelOutput };
+  }
+
+  /** Secrets the project's AUT profile names; none when the project has no profile yet. */
+  private _profileSecrets(): KnownSecret[] {
+    try {
+      return profileSecrets(loadAutProfile(stateManager.getProjectId()), process.env);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /**
    * Reuses the previous analysis when the requirement inputs are unchanged (unless --reanalyze),
    * otherwise runs the LLM analysis and stamps it with the input fingerprint.
    */
@@ -365,6 +423,8 @@ untestable. Automation prerequisites are never blocking — they are asked while
 
 TEST DATA VALUES: list every concrete test input value the requirement states in the user story's "testDataValues" as
 { "name": "<camelCase name>", "value": "<value exactly as written>", "sourceRef": "AC-n or BR-n", "sensitive": false }.
+When the value comes from a RESOLVED CLARIFICATIONS answer rather than the document, set "sourceRef": "CLARIFICATION";
+never point a value at a criterion or rule that does not contain it.
 For passwords, tokens and other secrets set "sensitive": true and omit "value".
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -439,23 +499,40 @@ CRITICAL:
       { role: 'user', content: prompt },
     ];
     let text = await this._requestAnalysis(messages);
-    let report = this._parseAnalysis(text);
-    let quality = assessAnalysisQuality(report, rawRequirements);
+    let checked = this._checkAnalysis(text, rawRequirements);
 
-    for (let round = 0; round < MAX_STRUCTURE_CORRECTIONS && quality.issues.length > 0; round += 1) {
-      this._logger.warn('Analysis story structure does not match the document — requesting a correction', { issues: quality.issues });
-      messages.push({ role: 'assistant', content: text }, { role: 'user', content: this._structureCorrectionPrompt(quality.issues) });
+    for (let round = 0; round < MAX_STRUCTURE_CORRECTIONS && checked.structure.length + checked.schema.length > 0; round += 1) {
+      this._logger.warn('Analysis does not match the document or the output format — requesting a correction', {
+        structure: checked.structure, schema: checked.schema,
+      });
+      messages.push({ role: 'assistant', content: text }, { role: 'user', content: this._correctionPrompt(checked.structure, checked.schema) });
       // eslint-disable-next-line no-await-in-loop -- each correction depends on the previous answer
       text = await this._requestAnalysis(messages);
-      report = this._parseAnalysis(text);
-      quality = assessAnalysisQuality(report, rawRequirements);
+      checked = this._checkAnalysis(text, rawRequirements);
     }
 
+    const { report } = checked;
+    if (report.features.length === 0) {
+      throw new Error('The requirement analysis contains no features, even after a correction round, so it was not saved. '
+        + `Remaining issues: ${[...checked.structure, ...checked.schema].join('; ') || 'none reported'}.`);
+    }
     report.analysisWarnings = [
-      ...quality.issues.map((issue) => `Story structure: ${issue}`),
-      ...quality.warnings,
+      ...checked.structure.map((issue) => `Story structure: ${issue}`),
+      ...checked.schema,
+      ...checked.warnings,
     ];
     return report;
+  }
+
+  /**
+   * Parses one LLM answer and runs every deterministic check on it: the output schema on the JSON exactly as returned,
+   * then story structure and quality on the normalised report.
+   */
+  private _checkAnalysis(text: string, rawRequirements: string): { report: any; structure: string[]; schema: string[]; warnings: string[] } {
+    const report = this._parseAnalysis(text);
+    const schema = validateAnalysisSchema(this._repairAndParseJson(text));
+    const quality = assessAnalysisQuality(report, rawRequirements);
+    return { report, structure: quality.issues, schema, warnings: quality.warnings };
   }
 
   /**
@@ -496,11 +573,10 @@ CRITICAL:
     return report;
   }
 
-  private _structureCorrectionPrompt(issues: string[]): string {
+  private _correctionPrompt(structure: string[], schema: string[]): string {
     return [
-      'Your analysis does not follow the USER STORY IDENTITY rules:',
-      ...issues.map((issue, idx) => `${idx + 1}. ${issue}`),
-      '',
+      ...(structure.length > 0 ? ['Your analysis does not follow the USER STORY IDENTITY rules:', ...structure.map((issue, idx) => `${idx + 1}. ${issue}`), ''] : []),
+      ...(schema.length > 0 ? ['Your analysis does not follow the REQUIRED JSON OUTPUT FORMAT:', ...issuesForPrompt(schema).map((issue, idx) => `${idx + 1}. ${issue}`), ''] : []),
       'Return the COMPLETE corrected JSON analysis. Merge the acceptance criteria, business rules, test data values, assumptions',
       'and out-of-scope items of stories that must be combined, remove duplicate criteria, renumber test data sourceRefs and',
       'update ambiguity userStoryIds to the new story ids. Do not add or drop requirements.',
@@ -919,7 +995,8 @@ CRITICAL:
       'Features': report.totalFeatures,
       'User Stories': report.totalUserStories,
       'Integration Points': (report.integrationPoints || []).length,
-      'Ambiguities': report.ambiguitiesPending
+      'Ambiguities': report.ambiguitiesPending,
+      'Ungrounded Claims': report.ungroundedClaims ?? 0,
     };
   }
 

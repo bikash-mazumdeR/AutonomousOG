@@ -1,0 +1,10 @@
+{
+  "name": "nexolvi-login",
+  "description": "The frozen Nexolvi Login analysis. Sign-in tests must use the credential placeholders; nothing the document does not describe (2FA, registration, password reset, lockout).",
+  "analysis": "analysis.json",
+  "projectId": "nexolvi",
+  "expect": {
+    "mustUsePlaceholders": ["validEmail", "validPassword"],
+    "forbidden": ["two-factor", "2FA", "register", "registration", "sign up", "forgot password", "password reset", "locked", "lockout"]
+  }
+}

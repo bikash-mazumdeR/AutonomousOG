@@ -1,0 +1,28 @@
+{
+  "name": "nexolvi-profile",
+  "description": "The Nexolvi Profile requirement: its 16 acceptance criteria, no user story of its own (so one analysed story), and the project's AUT-profile secrets.",
+  "requirement": "../../../../../requirements/Nexolvi_Profile.md",
+  "projectId": "nexolvi",
+  "expect": {
+    "stories": 1,
+    "criteria": [
+      { "ref": "AC-01", "all": ["initial"] },
+      { "ref": "AC-02", "all": ["email", "hover"] },
+      { "ref": "AC-03", "all": ["menu"], "any": ["clicking the profile button", "click", "opens", "displays"] },
+      { "ref": "AC-04", "all": ["menu", "profile"], "any": ["option", "contains", "item"] },
+      { "ref": "AC-05", "all": ["my profile", "modal"] },
+      { "ref": "AC-06", "all": ["my profile"], "any": ["header", "heading", "title"] },
+      { "ref": "AC-07", "all": ["view and edit your account information"] },
+      { "ref": "AC-08", "all": ["name", "email", "phone"] },
+      { "ref": "AC-09", "all": ["change password"] },
+      { "ref": "AC-10", "all": ["new password", "confirm password"] },
+      { "ref": "AC-11", "all": ["blank|empty"], "any": ["existing password", "unchanged", "preserve", "remains"] },
+      { "ref": "AC-12", "all": ["password"], "any": ["mismatch", "do not match", "does not match", "different"] },
+      { "ref": "AC-13", "all": ["cancel"], "any": ["without saving", "discard", "not saved", "closes"] },
+      { "ref": "AC-14", "all": ["save changes"] },
+      { "ref": "AC-15", "any": ["x button", "close button", "(x)", "'x'", "\"x\""] },
+      { "ref": "AC-16", "all": ["saved|updated"], "any": ["reopen", "again", "reflected"] }
+    ],
+    "forbidden": ["two-factor", "2FA", "delete account", "profile picture", "avatar upload"]
+  }
+}

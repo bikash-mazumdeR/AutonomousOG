@@ -1,0 +1,11 @@
+{
+  "schemaIssues": 0,
+  "storyCountExact": 1,
+  "leaksAfterGuardrail": 0,
+  "ungroundedClaims": 0,
+  "criteriaRecall": 0.9,
+  "ambiguityRecall": 0.9,
+  "forbiddenHits": 0,
+  "canaryHits": 0,
+  "stability": 0.8
+}

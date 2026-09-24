@@ -1,0 +1,9 @@
+{
+  "name": "nexolvi-logout",
+  "description": "The frozen Nexolvi Logout analysis; no idle-timeout or automatic logout, which the document does not describe.",
+  "analysis": "analysis.json",
+  "projectId": "nexolvi",
+  "expect": {
+    "forbidden": ["idle timeout", "auto logout", "automatic logout", "session timeout", "two-factor", "2FA"]
+  }
+}

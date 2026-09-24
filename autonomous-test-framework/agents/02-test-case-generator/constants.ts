@@ -113,6 +113,16 @@ export const LABEL_TAGS: Readonly<Record<string, string>> = Object.freeze({
   'error-handling': 'Error-Handling',
 });
 
+/**
+ * Whether an HTTP status is a client error (4xx): an @api scenario asserting one verifies a documented error response,
+ * which is @negative behaviour, so it counts toward a story's @negative minimum. It stays a single @api test case.
+ * @param {number | undefined} statusCode
+ * @returns {boolean}
+ */
+export function isClientErrorStatus(statusCode: number | undefined): boolean {
+  return typeof statusCode === 'number' && statusCode >= 400 && statusCode <= 499;
+}
+
 export const K6_SCENARIOS: readonly string[] = Object.freeze(['load', 'stress', 'spike', 'soak']);
 export const HTTP_METHODS: readonly string[] = Object.freeze(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
 export const API_INTEGRATION_TYPES: readonly string[] = Object.freeze(['REST_API', 'GRAPHQL']);

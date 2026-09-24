@@ -10,12 +10,17 @@ import {
   TYPE_TAGS, LABEL_TAGS, K6_SCENARIOS, HTTP_METHODS, TAG_PATTERN, IGNORED_TAGS, PLACEHOLDER_TOKEN,
   VALID_PLACEHOLDER, TITLE_LENGTH, MIN_OUT_OF_SCOPE_PHRASE_LENGTH, SMOKE_REQUIRED_RISKS, TC_TYPE,
   SELECTABLE_UI_TYPE_TAGS, MIN_TC_PER_STORY_PER_TYPE, FAILURE_OUTCOME_PATTERN, NEGATED_FAILURE_PHRASE, maxTcPerStoryPerType,
+  isClientErrorStatus,
 } from '../constants';
 import {
   GherkinParseResult, ParsedScenario, ParsedStep, UncoveredDeclaration,
 } from '../parsers/GherkinToZephyrParser';
 import { IntegrationPoint, NormalizedFeature, NormalizedStory } from '../analysis/normalizeAnalysis';
 import { GateResult, integrationTag } from '../analysis/requirementGates';
+import { KnownSecret, secretsIn } from '../../../core/aut/knownSecrets';
+import {
+  concreteClaims, isGroundedClaim, normalizeForMatch, numbersIn,
+} from '../../../core/requirements/groundedText';
 
 /** Everything the validator needs to judge one story's scenarios. */
 export interface ScenarioContext {
@@ -25,6 +30,10 @@ export interface ScenarioContext {
   performanceGate: GateResult;
   /** Type tags excluded by --skip-* options. */
   excludedTypeTags: ReadonlySet<string>;
+  /** Placeholder names of the test account's credentials (e.g. validEmail), supplied by the environment. */
+  credentialNames?: string[];
+  /** Secret values the AUT profile names; a scenario containing one is rejected. */
+  secrets?: KnownSecret[];
 }
 
 /** A scenario that passed validation, with its tags resolved. */
@@ -137,6 +146,15 @@ function checkPlaceholders(scenario: ParsedScenario): string[] {
   return errors;
 }
 
+/**
+ * Rejects a scenario that writes out a secret value: scenarios become feature files, which are committed. The error
+ * names the placeholder, never the value, because it is shown to the model and kept in the prompt trace.
+ */
+function checkSecrets(scenario: ParsedScenario, secrets: KnownSecret[]): string[] {
+  const text = [scenario.title, ...scenario.steps.flatMap((s) => [s.description, s.testData, s.expectedResult])].join('\n');
+  return secretsIn(text, secrets).map((placeholder) => `writes out the value of ${placeholder} — write ${placeholder} instead`);
+}
+
 function normalizePhrase(text: string): string {
   return ` ${text.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()} `;
 }
@@ -238,6 +256,7 @@ function validateScenario(scenario: ParsedScenario, ctx: ScenarioContext): Scena
     ...checkTitle(scenario.title),
     ...checkPlaceholders(scenario),
     ...checkOutOfScope(scenario, ctx.story),
+    ...checkSecrets(scenario, ctx.secrets || []),
   );
   const api = resolveApi(typeTag, tags, ctx, errors);
   const performance = resolvePerformance(typeTag, tags, ctx, errors);
@@ -274,11 +293,29 @@ function uncoveredCriterionIssues(accepted: ValidatedScenario[], ctx: ScenarioCo
   return issues;
 }
 
+/**
+ * Scenarios that count toward a type's per-story minimum. An @api scenario asserting a 4xx status verifies a documented
+ * error response, so it counts as @negative: a story whose only error behaviour is an API response can meet the
+ * minimum without inventing a UI error.
+ */
+function countsToward(tag: string, scenario: ValidatedScenario): boolean {
+  if (scenario.type === TYPE_TAGS[tag]) return true;
+  return tag === 'negative' && scenario.type === TC_TYPE.API && isClientErrorStatus(scenario.api?.statusCode);
+}
+
+/** Whether an @api scenario may stand in for the @negative minimum in this run. */
+function apiMayCountAsNegative(ctx: ScenarioContext): boolean {
+  return ctx.apiGate.allowed && !ctx.excludedTypeTags.has('api');
+}
+
 function typeMinimumErrors(accepted: ValidatedScenario[], ctx: ScenarioContext): string[] {
   return selectedUiTypeTags(ctx)
-    .filter((tag) => accepted.filter((s) => s.type === TYPE_TAGS[tag]).length < MIN_TC_PER_STORY_PER_TYPE)
+    .filter((tag) => accepted.filter((s) => countsToward(tag, s)).length < MIN_TC_PER_STORY_PER_TYPE)
     .map((tag) => `no @${tag} scenario — at least ${MIN_TC_PER_STORY_PER_TYPE} @${tag} scenario is required for every story; `
-      + 'ground it in the closest acceptance criterion or business rule');
+      + 'ground it in the closest acceptance criterion or business rule'
+      + (tag === 'negative' && apiMayCountAsNegative(ctx)
+        ? '. An @api scenario asserting a documented 4xx status also counts — keep it tagged @api, never @negative'
+        : ''));
 }
 
 function checkStoryCoverage(accepted: ValidatedScenario[], ctx: ScenarioContext, declared: UncoveredDeclaration[]): StoryIssues {
@@ -290,6 +327,68 @@ function checkStoryCoverage(accepted: ValidatedScenario[], ctx: ScenarioContext,
     issues.errors.push(`${ctx.feature.riskLevel} risk story: tag the primary happy-path @positive scenario with @smoke`);
   }
   return issues;
+}
+
+/**
+ * Placeholders the accepted scenarios use that are neither a test data name of the analysis nor a credential. Such a
+ * value is unknown to the pipeline, so Agent 04 has to find one; a warning, since a genuinely new input is legitimate.
+ */
+function newPlaceholderWarnings(accepted: ValidatedScenario[], ctx: ScenarioContext): string[] {
+  const known = new Set([...(ctx.credentialNames || []), ...(ctx.story.testData || []).map((item) => item.name)]);
+  const used = new Set(accepted.flatMap((scenario) => scenario.steps
+    .flatMap((step) => [step.description, step.testData, step.expectedResult].join(' ').match(PLACEHOLDER_TOKEN) || [])
+    .filter((token) => VALID_PLACEHOLDER.test(token))
+    .map((token) => token.slice(2, -2))));
+  const unknown = [...used].filter((name) => !known.has(name)).sort();
+  if (unknown.length === 0) return [];
+  const listed = known.size > 0 ? `the analysis and credentials name only ${[...known].map((n) => `{{${n}}}`).join(', ')}` : 'the analysis names no test data';
+  return [`[${ctx.feature.id}/${ctx.story.id}] New placeholder(s) ${unknown.map((n) => `{{${n}}}`).join(', ')}: ${listed}, `
+    + 'so Agent 04 must find a value for each'];
+}
+
+/** Words too common to show that a scenario and a criterion are about the same thing. */
+const COMMON_WORDS: ReadonlySet<string> = new Set([
+  'that', 'this', 'with', 'from', 'when', 'then', 'user', 'users', 'page', 'into', 'shows', 'shown', 'displayed', 'display',
+  'should', 'their', 'them', 'have', 'does', 'will', 'your', 'must', 'after', 'before', 'each', 'only', 'which', 'there',
+]);
+
+function significantWords(text: string): Set<string> {
+  return new Set((String(text || '').toLowerCase().match(/[a-z]{4,}/g) || []).filter((word) => !COMMON_WORDS.has(word)));
+}
+
+function scenarioText(scenario: ValidatedScenario): string {
+  return [scenario.title, ...scenario.steps.flatMap((s) => [s.description, s.testData, s.expectedResult])].join('\n');
+}
+
+/**
+ * Quoted wording, URLs and numbers a scenario states that nothing in its story does: the criteria, rules, assumptions,
+ * state transitions and test data values. A boundary one away from a stated number counts as grounded. Warnings, not
+ * errors: a paraphrase is not an invention, and a human reviews them at the gate.
+ */
+function ungroundedWordingWarnings(accepted: ValidatedScenario[], ctx: ScenarioContext): string[] {
+  const { story, feature } = ctx;
+  const source = normalizeForMatch([
+    feature.description, story.title, story.goal,
+    ...story.acceptanceCriteria.map((item) => item.text), ...story.businessRules.map((item) => item.text),
+    ...story.assumptions, ...story.stateTransitions, ...(story.testData || []).map((item) => item.value || ''),
+  ].join('\n'));
+  const numbers = numbersIn(source);
+  return accepted.flatMap((scenario) => concreteClaims(scenarioText(scenario))
+    .filter((claim) => !isGroundedClaim(claim, source, numbers))
+    .map((claim) => `[${feature.id}/${story.id}] "${snippet(scenario.title)}" states "${snippet(claim)}", `
+      + "which none of the story's criteria, rules or test data contain — check it is not invented"));
+}
+
+/** A requirement tag whose criterion shares no significant word with the scenario: the tag may not be honest. */
+function unrelatedTagWarnings(accepted: ValidatedScenario[], ctx: ScenarioContext): string[] {
+  const items = new Map([...ctx.story.acceptanceCriteria, ...ctx.story.businessRules].map((item) => [item.id, item.text]));
+  return accepted.flatMap((scenario) => {
+    const words = significantWords(scenarioText(scenario));
+    return scenario.requirementRefs
+      .filter((ref) => items.has(ref) && [...significantWords(items.get(ref) as string)].every((word) => !words.has(word)))
+      .map((ref) => `[${ctx.feature.id}/${ctx.story.id}] "${snippet(scenario.title)}" is tagged @${ref.toLowerCase()} but shares `
+        + `no wording with ${ref} ("${snippet(items.get(ref) as string)}") — check that it really verifies it`);
+  });
 }
 
 function uncoveredRuleWarnings(accepted: ValidatedScenario[], ctx: ScenarioContext): string[] {
@@ -387,7 +486,10 @@ export function validateStoryScenarios(
 
   const coverage = checkStoryCoverage(accepted, ctx, declaredUncovered);
   errors.push(...coverage.errors);
-  warnings.push(...coverage.warnings, ...uncoveredRuleWarnings(accepted, ctx));
+  warnings.push(
+    ...coverage.warnings, ...uncoveredRuleWarnings(accepted, ctx), ...newPlaceholderWarnings(accepted, ctx),
+    ...ungroundedWordingWarnings(accepted, ctx), ...unrelatedTagWarnings(accepted, ctx),
+  );
   return {
     scenarios: accepted, errors, warnings, declaredUncovered, excludedDrops,
   };

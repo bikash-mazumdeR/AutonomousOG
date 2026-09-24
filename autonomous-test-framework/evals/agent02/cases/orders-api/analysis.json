@@ -1,0 +1,30 @@
+{
+  "features": [{
+    "id": "F-01",
+    "name": "Orders",
+    "description": "Creating orders through the Orders API and seeing them on the Orders page.",
+    "riskLevel": "MEDIUM",
+    "userStories": [{
+      "id": "US-01",
+      "title": "Create an order",
+      "role": "shopper",
+      "goal": "create an order",
+      "benefit": "the products are delivered to me",
+      "acceptanceCriteria": [
+        "[@functional] POST /api/v1/orders with a valid product id (SKU-1001) and a quantity of 2 returns 201 and the new order id.",
+        "[@error-handling] POST /api/v1/orders with a quantity of 0 returns 400 with the message 'Quantity must be at least 1'.",
+        "[@functional] The Orders page lists the new order after it is created."
+      ],
+      "businessRules": ["A quantity must be at least 1."],
+      "outOfScope": ["Payment and order cancellation"],
+      "integrationPoints": ["INT-01"],
+      "testDataValues": [
+        { "name": "productId", "value": "SKU-1001", "sourceRef": "AC-1", "sensitive": false }
+      ],
+      "testTypes": ["UI", "API"],
+      "testability": "AUTOMATABLE"
+    }]
+  }],
+  "integrationPoints": [{ "id": "INT-01", "name": "Orders API", "type": "REST_API", "endpoint": "/api/v1/orders", "criticality": "High" }],
+  "ambiguities": []
+}

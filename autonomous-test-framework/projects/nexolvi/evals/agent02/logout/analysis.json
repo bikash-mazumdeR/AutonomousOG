@@ -1,0 +1,155 @@
+{
+  "totalFeatures": 1,
+  "totalUserStories": 1,
+  "features": [
+    {
+      "id": "F-01",
+      "name": "Logout Feature – Nexo Desk",
+      "description": "Allows an authenticated user to securely log out of Nexo Desk via a profile menu and confirmation dialog, terminating the session and returning the user to the Login page.",
+      "riskLevel": "CRITICAL",
+      "userStories": [
+        {
+          "id": "US-01",
+          "sourceStoryId": null,
+          "title": "Logout from Nexo Desk Dashboard",
+          "role": "authenticated user",
+          "goal": "securely log out of the Nexo Desk application",
+          "benefit": "ensure my session is terminated and no unauthorised access to my account is possible",
+          "acceptanceCriteria": [
+            "[@functional] The profile button displaying the first initial of the user's email (e.g. 'B' for {{validEmail}}) is visible at the top-left corner of the Dashboard after login.",
+            "[@functional] Clicking the profile button opens the user menu containing: the user initial, the user email, a Profile button, and a Logout button.",
+            "[@functional] Clicking the Logout option in the user menu displays a confirmation popup with header 'Log out?' and message 'Are you sure you want to log out? Any unsaved changes will be lost.'",
+            "[@functional] The confirmation popup contains a Cancel button and a Logout button.",
+            "[@functional] Clicking the Cancel button closes the confirmation popup, the user remains on the Dashboard, and the user remains authenticated.",
+            "[@functional] Clicking the Logout button in the confirmation popup terminates the authenticated session and redirects the user to the Login page at https://admin.nexolvi.ai/.",
+            "[@functional] After logout, navigating to https://admin.nexolvi.ai/ does not grant access to the Dashboard; the Login page is displayed instead.",
+            "[@ui] The profile button displays the single uppercase character 'B' as the first initial of the email {{validEmail}}.",
+            "[@ui] Hovering over the profile button displays the user's email address as a native browser tooltip.",
+            "[@ui] The user menu opened by clicking the profile button displays the user initial, user email, a Profile button, and a Logout button as distinct visible elements.",
+            "[@ui] The confirmation popup header text is exactly 'Log out?'.",
+            "[@ui] The confirmation popup body text is exactly 'Are you sure you want to log out? Any unsaved changes will be lost.'",
+            "[@ui] The confirmation popup is a native browser dialog (not a custom DOM element).",
+            "[@security] After the Logout button in the confirmation popup is clicked, the authenticated session is fully terminated and the previously active session cannot be reused to access https://admin.nexolvi.ai/.",
+            "[@error-handling] Clicking Cancel on the confirmation popup leaves the user authenticated on the Dashboard with no session change."
+          ],
+          "testDataValues": [
+            {
+              "name": "validEmail",
+              "value": "{{validEmail}}",
+              "sourceRef": "AC-1",
+              "sensitive": false
+            },
+            {
+              "name": "validPassword",
+              "sensitive": true,
+              "sourceRef": "AC (ENVIRONMENT_AUTH resolved clarification)"
+            },
+            {
+              "name": "profileInitial",
+              "value": "B",
+              "sourceRef": "AC-1",
+              "sensitive": false
+            },
+            {
+              "name": "dashboardUrl",
+              "value": "https://admin.nexolvi.ai/",
+              "sourceRef": "AC-6",
+              "sensitive": false
+            },
+            {
+              "name": "popupHeader",
+              "value": "Log out?",
+              "sourceRef": "AC-3",
+              "sensitive": false
+            },
+            {
+              "name": "popupMessage",
+              "value": "Are you sure you want to log out? Any unsaved changes will be lost.",
+              "sourceRef": "AC-3",
+              "sensitive": false
+            }
+          ],
+          "businessRules": [
+            "The Sign In button becomes enabled only when both the Email field and the Password field contain at least one non-empty character.",
+            "The confirmation popup is a native browser dialog.",
+            "Session termination must prevent re-access to any authenticated Dashboard page via the terminated session.",
+            "When Remember Me is not selected, the session expires when the browser is closed and the user lands on the Login page on a new session.",
+            "When Remember Me ('Remember me for 30 days') is selected, the user lands directly on the Dashboard on a subsequent visit without seeing the Login form."
+          ],
+          "stateTransitions": [
+            "Unauthenticated → Authenticated: user submits valid credentials on Login page → redirected to Dashboard",
+            "Authenticated (Dashboard) → Popup Open: user clicks Logout in user menu → confirmation popup displayed",
+            "Popup Open → Authenticated (Dashboard): user clicks Cancel → popup closed, session unchanged",
+            "Popup Open → Unauthenticated: user clicks Logout in popup → session terminated, redirected to Login page"
+          ],
+          "integrationPoints": [],
+          "testability": "AUTOMATABLE",
+          "testTypes": [
+            "UI",
+            "SECURITY"
+          ],
+          "assumptions": [
+            "The Login page at https://admin.nexolvi.ai/ is the sole entry point; no separate /login path is used.",
+            "The profile button is located at the top-left corner of the Dashboard as stated in the document.",
+            "The 'Profile' menu item in the user menu is out of scope for this feature; only the Logout flow is in scope.",
+            "Desktop devices only; viewport conditions and mobile viewports are out of scope."
+          ],
+          "outOfScope": [
+            "Mobile viewport testing.",
+            "Profile page functionality (clicking the Profile button in the user menu).",
+            "Registration / sign-up flow.",
+            "MFA / 2FA flows.",
+            "Password reset flow."
+          ]
+        }
+      ]
+    }
+  ],
+  "integrationPoints": [],
+  "ambiguities": [
+    {
+      "id": "AMB-01",
+      "featureId": "F-01",
+      "userStoryId": "US-01",
+      "acceptanceCriterion": "[@functional] Clicking the Cancel button closes the confirmation popup, the user remains on the Dashboard, and the user remains authenticated.",
+      "category": "STORAGE_OR_STATE",
+      "description": "The requirement states the user 'remains authenticated' after Cancel, but does not specify what observable UI state confirms the session is still active (e.g. the Dashboard is still fully rendered, the profile button is still visible, no redirect occurs).",
+      "question": "What is the observable UI indicator that confirms the user is still authenticated after clicking Cancel — for example, the Dashboard page remains fully visible with the profile button present and no redirect to the Login page?",
+      "blockingTestGeneration": false,
+      "resolved": true,
+      "clarificationId": "clar_1789803409101_3da42643",
+      "resolution": "User will be on the dashboard screen and the Logout pop up will disappear"
+    },
+    {
+      "id": "AMB-02",
+      "featureId": "F-01",
+      "userStoryId": "US-01",
+      "acceptanceCriterion": "[@functional] After logout, navigating to https://admin.nexolvi.ai/ does not grant access to the Dashboard; the Login page is displayed instead.",
+      "category": "STORAGE_OR_STATE",
+      "description": "The requirement states the user cannot access authenticated Dashboard pages after logout, but does not specify whether the session is invalidated server-side (cookie/token cleared) or only client-side. The observable check (Login page displayed) is clear, but it is unknown whether a direct URL navigation to a sub-page (e.g. a specific dashboard route) also redirects to Login.",
+      "question": "After logout, if the user navigates directly to a protected sub-page URL (other than https://admin.nexolvi.ai/), are they also redirected to the Login page? If so, please provide at least one example protected sub-page URL to use in the test.",
+      "blockingTestGeneration": false,
+      "resolved": true,
+      "clarificationId": "clar_1789803409102_2a2afe7d",
+      "resolution": "Yes"
+    },
+    {
+      "id": "AMB-03",
+      "featureId": "F-01",
+      "userStoryId": "US-01",
+      "acceptanceCriterion": "[@functional] The profile button displaying the first initial of the user's email (e.g. 'B' for {{validEmail}}) is visible at the top-left corner of the Dashboard after login.",
+      "category": "PRECONDITION",
+      "description": "The document uses the placeholder {{validEmail}} and {{validPassword}} without defining their concrete values in the requirement text itself. The resolved clarifications supply {{validEmail}} / {{validPassword}}, but the document's Section 3 also references a Login flow with these placeholders. It is unclear whether the same credentials are the only test account or whether additional accounts exist for this feature.",
+      "question": "Is {{validEmail}} / {{validPassword}} the only test account to be used for all logout test scenarios, or are there additional valid accounts that should also be tested?",
+      "blockingTestGeneration": false,
+      "resolved": true,
+      "clarificationId": "clar_1789803409103_0a9d5e13",
+      "resolution": "Yes"
+    }
+  ],
+  "businessRules": [],
+  "stateTransitions": [],
+  "requirementFingerprint": "ec89d0de82df1f7bdf0b6a36c2231e2ad322668a2cef0c7b940c6b10ea4f5c0f",
+  "analysisPromptVersion": "4",
+  "ambiguitiesPending": 0
+}

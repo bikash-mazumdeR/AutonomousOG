@@ -1,0 +1,18 @@
+{
+  "name": "two-stories",
+  "description": "Two documented stories must stay exactly two analysed stories, each with its source id; nothing about checkout or payment may be invented.",
+  "requirement": "requirement.md",
+  "expect": {
+    "stories": 2,
+    "sourceStoryIds": ["CART-1", "CART-2"],
+    "criteria": [
+      { "ref": "CART-1 AC-1", "all": ["add to cart", "product"] },
+      { "ref": "CART-1 AC-2", "all": ["badge", "add to cart|increase"] },
+      { "ref": "CART-1 AC-3", "all": ["quantity", "2|twice|two"] },
+      { "ref": "CART-2 AC-1", "all": ["remove"], "any": ["cart line", "line", "each"] },
+      { "ref": "CART-2 AC-2", "all": ["remove", "badge"] },
+      { "ref": "CART-2 AC-3", "all": ["your cart is empty"] }
+    ],
+    "forbidden": ["checkout", "payment", "discount", "wishlist", "stock"]
+  }
+}
