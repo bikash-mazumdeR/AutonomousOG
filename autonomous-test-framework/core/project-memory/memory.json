@@ -808,7 +808,7 @@
       {
         "id": "clq_1789796494637",
         "question": "What are the valid test account email address and password to be used as preconditions for logout tests in the test environment (https://admin.nexolvi.ai/)?",
-        "answer": "Email - bikash.htc@gmail.com\nPassword - admin@123",
+        "answer": "Email - {{validEmail}}\nPassword - {{validPassword}}",
         "stageId": "01-requirement-analyzer",
         "resolvedAt": "2026-09-19T05:41:34.637Z"
       },
@@ -821,7 +821,7 @@
       },
       {
         "id": "clq_1789802975923",
-        "question": "For the email 'bikash.htc@gmail.com', what exact character is displayed on the profile button — is it 'B' (uppercase first letter of local part), 'b' (lowercase), or another character?",
+        "question": "For the email '{{validEmail}}', what exact character is displayed on the profile button — is it 'B' (uppercase first letter of local part), 'b' (lowercase), or another character?",
         "answer": "B",
         "stageId": "01-requirement-analyzer",
         "resolvedAt": "2026-09-19T07:29:35.923Z"
@@ -856,7 +856,7 @@
       },
       {
         "id": "clq_1789803520657",
-        "question": "Is bikash.htc@gmail.com / admin@123 the only test account to be used for all logout test scenarios, or are there additional valid accounts that should also be tested?",
+        "question": "Is {{validEmail}} / {{validPassword}} the only test account to be used for all logout test scenarios, or are there additional valid accounts that should also be tested?",
         "answer": "Yes",
         "stageId": "01-requirement-analyzer",
         "resolvedAt": "2026-09-19T07:38:40.657Z"
@@ -898,7 +898,7 @@
       },
       {
         "id": "clq_1790093171292",
-        "question": "What is the exact full name displayed in the user menu for the account bikash.htc@gmail.com (e.g. 'Bikash HTC', 'Admin User', or another string)?",
+        "question": "What is the exact full name displayed in the user menu for the account {{validEmail}} (e.g. 'Bikash HTC', 'Admin User', or another string)?",
         "answer": "Bikash h",
         "stageId": "01-requirement-analyzer",
         "resolvedAt": "2026-09-22T16:06:11.292Z"
@@ -933,7 +933,7 @@
       },
       {
         "id": "clq_1790093347549",
-        "question": "What is the exact text displayed in the native browser tooltip when hovering over the Profile button — is it the full email address 'bikash.htc@gmail.com' or a different string?",
+        "question": "What is the exact text displayed in the native browser tooltip when hovering over the Profile button — is it the full email address '{{validEmail}}' or a different string?",
         "answer": "bikash.h",
         "stageId": "01-requirement-analyzer",
         "resolvedAt": "2026-09-22T16:09:07.549Z"

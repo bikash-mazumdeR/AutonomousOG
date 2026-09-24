@@ -1,0 +1,495 @@
+[
+  {
+    "key": "TC-001",
+    "name": "Login page displays required fields and Sign In button is disabled until both fields are filled",
+    "objective": "Verifies AC-1, AC-2, AC-3: Login page displays required fields and Sign In button is disabled until both fields are filled",
+    "precondition": "the user navigates to \"https://admin.nexolvi.ai/login\"",
+    "type": "Positive",
+    "priority": "High",
+    "labels": [
+      "Smoke",
+      "Functional"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-1",
+      "AC-2",
+      "AC-3"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the user navigates to \"https://admin.nexolvi.ai/login\"",
+        "testData": "",
+        "expectedResult": "the Email field, Password field, 'Remember me for 30 days' checkbox, and Sign In button are displayed"
+      },
+      {
+        "keyword": "When",
+        "description": "the user views the Sign In button with both Email and Password fields empty",
+        "testData": "",
+        "expectedResult": "the Sign In button is disabled"
+      },
+      {
+        "keyword": "When",
+        "description": "the user enters a value in the Email field and leaves the Password field empty",
+        "testData": "",
+        "expectedResult": "the Sign In button is disabled"
+      },
+      {
+        "keyword": "When",
+        "description": "the user enters a value in both the Email field and the Password field",
+        "testData": "",
+        "expectedResult": "the Sign In button is enabled"
+      }
+    ],
+    "hash": "6e9ac533d53f",
+    "selected": true
+  },
+  {
+    "key": "TC-002",
+    "name": "Valid credentials redirect to Dashboard and profile button displays character B",
+    "objective": "Verifies AC-4, AC-5: Valid credentials redirect to Dashboard and profile button displays character B",
+    "precondition": "the user is on the login page at \"https://admin.nexolvi.ai/login\"",
+    "type": "Positive",
+    "priority": "High",
+    "labels": [
+      "Smoke",
+      "Functional"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-4",
+      "AC-5"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the user is on the login page at \"https://admin.nexolvi.ai/login\"",
+        "testData": "",
+        "expectedResult": "the Email field, Password field, and Sign In button are displayed"
+      },
+      {
+        "keyword": "When",
+        "description": "the user enters \"{{validEmail}}\" in the Email field and \"{{validPassword}}\" in the Password field and clicks Sign In",
+        "testData": "",
+        "expectedResult": "the user is redirected to \"https://admin.nexolvi.ai/\" and the page displays the header 'Dashboard'"
+      },
+      {
+        "keyword": "When",
+        "description": "the user views the top-left corner of the Dashboard",
+        "testData": "",
+        "expectedResult": "a profile button displaying the character 'B' is visible"
+      }
+    ],
+    "hash": "9d4881c3519a",
+    "selected": true
+  },
+  {
+    "key": "TC-003",
+    "name": "Opening My Profile modal shows pre-populated editable fields and Change Password section",
+    "objective": "Verifies AC-6, AC-7, AC-8, AC-9, AC-10, AC-11, AC-12: Opening My Profile modal shows pre-populated editable fields and Change Password section",
+    "precondition": "the user is authenticated and on the Dashboard at \"https://admin.nexolvi.ai/\"",
+    "type": "Positive",
+    "priority": "High",
+    "labels": [
+      "Functional"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-6",
+      "AC-7",
+      "AC-8",
+      "AC-9",
+      "AC-10",
+      "AC-11",
+      "AC-12"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the user is authenticated and on the Dashboard at \"https://admin.nexolvi.ai/\"",
+        "testData": "",
+        "expectedResult": "the Dashboard header is displayed"
+      },
+      {
+        "keyword": "When",
+        "description": "the user clicks the profile button at the top-left corner",
+        "testData": "",
+        "expectedResult": "the user menu is displayed containing the user initial, the email '{{validEmail}}', a 'Profile' option, and a 'Logout' option"
+      },
+      {
+        "keyword": "When",
+        "description": "the user clicks the 'Profile' option in the user menu",
+        "testData": "",
+        "expectedResult": "the My Profile modal opens displaying the title 'My Profile' and the description 'View and edit your account information.'"
+      },
+      {
+        "keyword": "When",
+        "description": "the user views the fields in the My Profile modal",
+        "testData": "",
+        "expectedResult": "the Name, Email, and Phone fields are displayed pre-populated with the user's current account information and are editable\nthe 'Change Password' section is displayed with a 'New Password' input field and a 'Confirm Password' input field\na Close (X) button is visible in the top-right corner of the modal"
+      }
+    ],
+    "hash": "2aed7cd3c42f",
+    "selected": true
+  },
+  {
+    "key": "TC-004",
+    "name": "Saving profile with blank password fields preserves existing password and reflects updated info",
+    "objective": "Verifies AC-13, AC-16, AC-17, BR-2: Saving profile with blank password fields preserves existing password and reflects updated info",
+    "precondition": "the user has the My Profile modal open",
+    "type": "Positive",
+    "priority": "High",
+    "labels": [
+      "Functional"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-13",
+      "AC-16",
+      "AC-17",
+      "BR-2"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the user has the My Profile modal open",
+        "testData": "",
+        "expectedResult": "the Name, Email, Phone, New Password, and Confirm Password fields are displayed"
+      },
+      {
+        "keyword": "When",
+        "description": "the user updates the Name field with {{updatedName}} and leaves New Password and Confirm Password blank and clicks 'Save Changes'",
+        "testData": "",
+        "expectedResult": "the profile changes are saved and the existing password is preserved unchanged"
+      },
+      {
+        "keyword": "When",
+        "description": "the user closes and reopens the My Profile modal",
+        "testData": "",
+        "expectedResult": "the Name field displays {{updatedName}} reflecting the updated profile information"
+      }
+    ],
+    "hash": "47b6fa9cb471",
+    "selected": true
+  },
+  {
+    "key": "TC-005",
+    "name": "Saving profile with matching non-empty passwords accepts the new password",
+    "objective": "Verifies AC-15, AC-16, BR-3: Saving profile with matching non-empty passwords accepts the new password",
+    "precondition": "the user has the My Profile modal open",
+    "type": "Positive",
+    "priority": "High",
+    "labels": [
+      "Functional"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-15",
+      "AC-16",
+      "BR-3"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the user has the My Profile modal open",
+        "testData": "",
+        "expectedResult": "the New Password and Confirm Password fields are displayed"
+      },
+      {
+        "keyword": "When",
+        "description": "the user enters {{newPassword}} in the New Password field and {{newPassword}} in the Confirm Password field and clicks 'Save Changes'",
+        "testData": "",
+        "expectedResult": "password validation passes and the updated profile information is saved successfully"
+      }
+    ],
+    "hash": "3de6f7b7d35a",
+    "selected": true
+  },
+  {
+    "key": "TC-006",
+    "name": "Mismatched New Password and Confirm Password values reject the save with a mismatch error",
+    "objective": "Verifies AC-14, AC-26, BR-3, BR-4: Mismatched New Password and Confirm Password values reject the save with a mismatch error",
+    "precondition": "the user has the My Profile modal open",
+    "type": "Negative",
+    "priority": "High",
+    "labels": [
+      "Error-Handling"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-14",
+      "AC-26",
+      "BR-3",
+      "BR-4"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the user has the My Profile modal open",
+        "testData": "",
+        "expectedResult": "the New Password and Confirm Password fields are displayed"
+      },
+      {
+        "keyword": "When",
+        "description": "the user enters {{newPassword}} in the New Password field and {{differentPassword}} in the Confirm Password field and clicks 'Save Changes'",
+        "testData": "",
+        "expectedResult": "the save is rejected and a password mismatch error is indicated before any profile changes are persisted"
+      }
+    ],
+    "hash": "d4b31e9f7958",
+    "selected": true
+  },
+  {
+    "key": "TC-007",
+    "name": "Sign In button remains disabled when only the Email field contains a value",
+    "objective": "Verifies AC-2, BR-1: Sign In button remains disabled when only the Email field contains a value",
+    "precondition": "the user is on the login page at \"https://admin.nexolvi.ai/login\"",
+    "type": "Negative",
+    "priority": "High",
+    "labels": [
+      "Functional"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-2",
+      "BR-1"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the user is on the login page at \"https://admin.nexolvi.ai/login\"",
+        "testData": "",
+        "expectedResult": "the Email field and Password field are displayed and both are empty"
+      },
+      {
+        "keyword": "When",
+        "description": "the user enters \"{{validEmail}}\" in the Email field and leaves the Password field empty",
+        "testData": "",
+        "expectedResult": "the Sign In button is disabled"
+      }
+    ],
+    "hash": "5dac3d4cf977",
+    "selected": true
+  },
+  {
+    "key": "TC-008",
+    "name": "Sign In button remains disabled when only the Password field contains a value",
+    "objective": "Verifies AC-2, BR-1: Sign In button remains disabled when only the Password field contains a value",
+    "precondition": "the user is on the login page at \"https://admin.nexolvi.ai/login\"",
+    "type": "Negative",
+    "priority": "High",
+    "labels": [
+      "Functional"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-2",
+      "BR-1"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the user is on the login page at \"https://admin.nexolvi.ai/login\"",
+        "testData": "",
+        "expectedResult": "the Email field and Password field are displayed and both are empty"
+      },
+      {
+        "keyword": "When",
+        "description": "the user leaves the Email field empty and enters \"{{validPassword}}\" in the Password field",
+        "testData": "",
+        "expectedResult": "the Sign In button is disabled"
+      }
+    ],
+    "hash": "fcbb3e03fe35",
+    "selected": true
+  },
+  {
+    "key": "TC-009",
+    "name": "Clicking Cancel discards unsaved changes and closes the modal leaving the user on the Dashboard",
+    "objective": "Verifies AC-18, BR-5: Clicking Cancel discards unsaved changes and closes the modal leaving the user on the Dashboard",
+    "precondition": "the user has the My Profile modal open with unsaved changes entered in the Name field",
+    "type": "Negative",
+    "priority": "High",
+    "labels": [
+      "Functional"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-18",
+      "BR-5"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the user has the My Profile modal open with unsaved changes entered in the Name field",
+        "testData": "",
+        "expectedResult": "the modal is displayed with the unsaved changes visible"
+      },
+      {
+        "keyword": "When",
+        "description": "the user clicks 'Cancel'",
+        "testData": "",
+        "expectedResult": "the My Profile modal is closed, the unsaved changes are discarded, and the Dashboard is displayed"
+      }
+    ],
+    "hash": "9cbdb6b33524",
+    "selected": true
+  },
+  {
+    "key": "TC-010",
+    "name": "Sign In button becomes enabled when each field contains exactly one character",
+    "objective": "Verifies AC-3, BR-1: Sign In button becomes enabled when each field contains exactly one character",
+    "precondition": "the user is on the login page at \"https://admin.nexolvi.ai/login\"",
+    "type": "Edge",
+    "priority": "Medium",
+    "labels": [
+      "Functional"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-3",
+      "BR-1"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the user is on the login page at \"https://admin.nexolvi.ai/login\"",
+        "testData": "",
+        "expectedResult": "the Sign In button is disabled with both fields empty"
+      },
+      {
+        "keyword": "When",
+        "description": "the user enters a single character in the Email field and a single character in the Password field",
+        "testData": "",
+        "expectedResult": "the Sign In button is enabled"
+      }
+    ],
+    "hash": "6c863054d071",
+    "selected": true
+  },
+  {
+    "key": "TC-011",
+    "name": "Clicking the Close X button on the My Profile modal closes the modal",
+    "objective": "Verifies AC-9: Clicking the Close X button on the My Profile modal closes the modal",
+    "precondition": "the user has the My Profile modal open",
+    "type": "Edge",
+    "priority": "Medium",
+    "labels": [
+      "Functional"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-9"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the user has the My Profile modal open",
+        "testData": "",
+        "expectedResult": "the Close (X) button is visible in the top-right corner of the modal"
+      },
+      {
+        "keyword": "When",
+        "description": "the user clicks the Close (X) button",
+        "testData": "",
+        "expectedResult": "the My Profile modal is closed and the Dashboard is displayed"
+      }
+    ],
+    "hash": "1c696af4ecc6",
+    "selected": true
+  },
+  {
+    "key": "TC-012",
+    "name": "My Profile modal and user menu display exact UI text and profile button shows correct tooltip",
+    "objective": "Verifies AC-19, AC-20, AC-21, AC-22, AC-23, AC-24, AC-25: My Profile modal and user menu display exact UI text and profile button shows correct tooltip",
+    "precondition": "the user is authenticated and on the Dashboard at \"https://admin.nexolvi.ai/\"",
+    "type": "Edge",
+    "priority": "Medium",
+    "labels": [
+      "UI"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-19",
+      "AC-20",
+      "AC-21",
+      "AC-22",
+      "AC-23",
+      "AC-24",
+      "AC-25"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the user is authenticated and on the Dashboard at \"https://admin.nexolvi.ai/\"",
+        "testData": "",
+        "expectedResult": "the profile button at the top-left displays the character 'B'"
+      },
+      {
+        "keyword": "When",
+        "description": "the user hovers over the profile button",
+        "testData": "",
+        "expectedResult": "a native browser tooltip displaying 'bikash.h' is shown"
+      },
+      {
+        "keyword": "When",
+        "description": "the user clicks the profile button",
+        "testData": "",
+        "expectedResult": "the user menu displays the full name 'Bikash h', email '{{validEmail}}', a 'Profile' button, and a 'Logout' button"
+      },
+      {
+        "keyword": "When",
+        "description": "the user clicks the 'Profile' option and views the My Profile modal",
+        "testData": "",
+        "expectedResult": "the modal header text is exactly 'My Profile' and the description text is exactly 'View and edit your account information.'\nthe New Password field displays the placeholder text 'Leave blank to keep current'\nthe Confirm Password field displays the placeholder text 'Repeat new password'"
+      }
+    ],
+    "hash": "1a5a238f5996",
+    "selected": true
+  },
+  {
+    "key": "TC-013",
+    "name": "New Password and Confirm Password fields mask entered characters",
+    "objective": "Verifies AC-27: New Password and Confirm Password fields mask entered characters",
+    "precondition": "the user has the My Profile modal open",
+    "type": "Edge",
+    "priority": "Medium",
+    "labels": [
+      "Security"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-27"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the user has the My Profile modal open",
+        "testData": "",
+        "expectedResult": "the 'Change Password' section with New Password and Confirm Password fields is displayed"
+      },
+      {
+        "keyword": "When",
+        "description": "the user enters {{newPassword}} in the New Password field and {{newPassword}} in the Confirm Password field",
+        "testData": "",
+        "expectedResult": "the characters entered in the New Password field are masked\nthe characters entered in the Confirm Password field are masked"
+      }
+    ],
+    "hash": "10b0b6f3afb9",
+    "selected": true
+  }
+]

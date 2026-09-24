@@ -1,0 +1,504 @@
+[
+  {
+    "key": "TC-001",
+    "name": "Successful login with valid credentials redirects to the Nexo Desk Dashboard",
+    "objective": "Verifies AC-8, AC-10, AC-11: Successful login with valid credentials redirects to the Nexo Desk Dashboard",
+    "precondition": "the user navigates to https://admin.nexolvi.ai",
+    "type": "Positive",
+    "priority": "High",
+    "labels": [
+      "Smoke",
+      "Functional"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-8",
+      "AC-10",
+      "AC-11"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the user navigates to https://admin.nexolvi.ai",
+        "testData": "",
+        "expectedResult": "the login page is displayed"
+      },
+      {
+        "keyword": "When",
+        "description": "the user views the login form",
+        "testData": "",
+        "expectedResult": "the Email field, Password field, Remember Me checkbox labelled 'Remember me for 30 days', and Sign In button are displayed"
+      },
+      {
+        "keyword": "When",
+        "description": "the user enters '{{validEmail}}' in the Email field and 'admin' in the Password field and clicks Sign In",
+        "testData": "",
+        "expectedResult": "the user is redirected to the Nexo Desk Dashboard"
+      }
+    ],
+    "hash": "26ca85eacddc",
+    "selected": true
+  },
+  {
+    "key": "TC-002",
+    "name": "Sign In button becomes enabled when both Email and Password fields contain at least one character",
+    "objective": "Verifies AC-4, BR-1: Sign In button becomes enabled when both Email and Password fields contain at least one character",
+    "precondition": "the user navigates to https://admin.nexolvi.ai",
+    "type": "Positive",
+    "priority": "High",
+    "labels": [
+      "Functional"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-4",
+      "BR-1"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the user navigates to https://admin.nexolvi.ai",
+        "testData": "",
+        "expectedResult": "the login page is displayed"
+      },
+      {
+        "keyword": "When",
+        "description": "the user enters at least one character in the Email field and at least one character in the Password field",
+        "testData": "",
+        "expectedResult": "the Sign In button is enabled"
+      }
+    ],
+    "hash": "6a54f1df9ccc",
+    "selected": true
+  },
+  {
+    "key": "TC-003",
+    "name": "Password field masks its value by default on the login page",
+    "objective": "Verifies AC-12, AC-16: Password field masks its value by default on the login page",
+    "precondition": "the user navigates to https://admin.nexolvi.ai",
+    "type": "Positive",
+    "priority": "High",
+    "labels": [
+      "UI",
+      "Security"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-12",
+      "AC-16"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the user navigates to https://admin.nexolvi.ai",
+        "testData": "",
+        "expectedResult": "the login page is displayed"
+      },
+      {
+        "keyword": "When",
+        "description": "the user enters a value in the Password field",
+        "testData": "",
+        "expectedResult": "the Password field value is masked"
+      }
+    ],
+    "hash": "f2dec2c09c42",
+    "selected": true
+  },
+  {
+    "key": "TC-004",
+    "name": "Clicking the eye icon once reveals the password and clicking it again re-masks it",
+    "objective": "Verifies AC-13, AC-14: Clicking the eye icon once reveals the password and clicking it again re-masks it",
+    "precondition": "the user navigates to https://admin.nexolvi.ai",
+    "type": "Positive",
+    "priority": "High",
+    "labels": [
+      "UI"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-13",
+      "AC-14"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the user navigates to https://admin.nexolvi.ai",
+        "testData": "",
+        "expectedResult": "the login page is displayed"
+      },
+      {
+        "keyword": "When",
+        "description": "the user enters a value in the Password field and clicks the eye icon once",
+        "testData": "",
+        "expectedResult": "the password text is visible in the Password field"
+      },
+      {
+        "keyword": "When",
+        "description": "the user clicks the eye icon again",
+        "testData": "",
+        "expectedResult": "the Password field value is masked"
+      }
+    ],
+    "hash": "8f5202347863",
+    "selected": true
+  },
+  {
+    "key": "TC-005",
+    "name": "Selecting Remember Me during successful login persists the session for 30 days",
+    "objective": "Verifies AC-9, BR-3: Selecting Remember Me during successful login persists the session for 30 days",
+    "precondition": "the user navigates to https://admin.nexolvi.ai",
+    "type": "Positive",
+    "priority": "High",
+    "labels": [
+      "Functional"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-9",
+      "BR-3"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the user navigates to https://admin.nexolvi.ai",
+        "testData": "",
+        "expectedResult": "the login page is displayed"
+      },
+      {
+        "keyword": "When",
+        "description": "the user checks the Remember Me checkbox labelled 'Remember me for 30 days', enters '{{validEmail}}' in the Email field and 'admin' in the Password field, and clicks Sign In",
+        "testData": "",
+        "expectedResult": "the user is redirected to the Nexo Desk Dashboard and the login session is persisted for 30 days"
+      }
+    ],
+    "hash": "6b0c71670790",
+    "selected": true
+  },
+  {
+    "key": "TC-006",
+    "name": "Submitting an invalid email with a valid password displays the Login failed error in the DOM",
+    "objective": "Verifies AC-5, AC-15, BR-2: Submitting an invalid email with a valid password displays the Login failed error in the DOM",
+    "precondition": "the user navigates to https://admin.nexolvi.ai",
+    "type": "Negative",
+    "priority": "High",
+    "labels": [
+      "Functional",
+      "Error-Handling"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-5",
+      "AC-15",
+      "BR-2"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the user navigates to https://admin.nexolvi.ai",
+        "testData": "",
+        "expectedResult": "the login page is displayed"
+      },
+      {
+        "keyword": "When",
+        "description": "the user enters '{{invalidEmail}}' in the Email field and 'admin' in the Password field and clicks Sign In",
+        "testData": "",
+        "expectedResult": "the error message 'Login failed' is displayed in the page DOM and no browser alert is shown"
+      }
+    ],
+    "hash": "00c479c03530",
+    "selected": true
+  },
+  {
+    "key": "TC-007",
+    "name": "Submitting a valid email with an invalid password displays the Login failed error in the DOM",
+    "objective": "Verifies AC-6, AC-15, BR-2: Submitting a valid email with an invalid password displays the Login failed error in the DOM",
+    "precondition": "the user navigates to https://admin.nexolvi.ai",
+    "type": "Negative",
+    "priority": "High",
+    "labels": [
+      "Functional",
+      "Error-Handling"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-6",
+      "AC-15",
+      "BR-2"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the user navigates to https://admin.nexolvi.ai",
+        "testData": "",
+        "expectedResult": "the login page is displayed"
+      },
+      {
+        "keyword": "When",
+        "description": "the user enters '{{validEmail}}' in the Email field and '{{invalidPassword}}' in the Password field and clicks Sign In",
+        "testData": "",
+        "expectedResult": "the error message 'Login failed' is displayed in the page DOM and no browser alert is shown"
+      }
+    ],
+    "hash": "5afdf574f483",
+    "selected": true
+  },
+  {
+    "key": "TC-008",
+    "name": "Submitting an invalid email and an invalid password displays the Login failed error in the DOM",
+    "objective": "Verifies AC-7, AC-15, BR-2: Submitting an invalid email and an invalid password displays the Login failed error in the DOM",
+    "precondition": "the user navigates to https://admin.nexolvi.ai",
+    "type": "Negative",
+    "priority": "High",
+    "labels": [
+      "Functional",
+      "Error-Handling"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-7",
+      "AC-15",
+      "BR-2"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the user navigates to https://admin.nexolvi.ai",
+        "testData": "",
+        "expectedResult": "the login page is displayed"
+      },
+      {
+        "keyword": "When",
+        "description": "the user enters '{{invalidEmail}}' in the Email field and '{{invalidPassword}}' in the Password field and clicks Sign In",
+        "testData": "",
+        "expectedResult": "the error message 'Login failed' is displayed in the page DOM and no browser alert is shown"
+      }
+    ],
+    "hash": "bad52326b8d1",
+    "selected": true
+  },
+  {
+    "key": "TC-009",
+    "name": "Sign In button is disabled when both Email and Password fields are empty",
+    "objective": "Verifies AC-1, BR-1: Sign In button is disabled when both Email and Password fields are empty",
+    "precondition": "the user navigates to https://admin.nexolvi.ai",
+    "type": "Negative",
+    "priority": "High",
+    "labels": [
+      "Functional"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-1",
+      "BR-1"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the user navigates to https://admin.nexolvi.ai",
+        "testData": "",
+        "expectedResult": "the login page is displayed"
+      },
+      {
+        "keyword": "When",
+        "description": "the user views the login form with both the Email and Password fields empty",
+        "testData": "",
+        "expectedResult": "the Sign In button is disabled"
+      }
+    ],
+    "hash": "3fe9c99ec455",
+    "selected": true
+  },
+  {
+    "key": "TC-010",
+    "name": "Sign In button is disabled when only the Email field has a value",
+    "objective": "Verifies AC-2, BR-1: Sign In button is disabled when only the Email field has a value",
+    "precondition": "the user navigates to https://admin.nexolvi.ai",
+    "type": "Negative",
+    "priority": "High",
+    "labels": [
+      "Functional"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-2",
+      "BR-1"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the user navigates to https://admin.nexolvi.ai",
+        "testData": "",
+        "expectedResult": "the login page is displayed"
+      },
+      {
+        "keyword": "When",
+        "description": "the user enters a value in the Email field and leaves the Password field empty",
+        "testData": "",
+        "expectedResult": "the Sign In button is disabled"
+      }
+    ],
+    "hash": "8fe66ec0a53a",
+    "selected": true
+  },
+  {
+    "key": "TC-011",
+    "name": "Sign In button is disabled when only the Password field has a value",
+    "objective": "Verifies AC-3, BR-1: Sign In button is disabled when only the Password field has a value",
+    "precondition": "the user navigates to https://admin.nexolvi.ai",
+    "type": "Negative",
+    "priority": "High",
+    "labels": [
+      "Functional"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-3",
+      "BR-1"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the user navigates to https://admin.nexolvi.ai",
+        "testData": "",
+        "expectedResult": "the login page is displayed"
+      },
+      {
+        "keyword": "When",
+        "description": "the user enters a value in the Password field and leaves the Email field empty",
+        "testData": "",
+        "expectedResult": "the Sign In button is disabled"
+      }
+    ],
+    "hash": "d254dc325b85",
+    "selected": true
+  },
+  {
+    "key": "TC-012",
+    "name": "Sign In button becomes enabled when each field contains exactly one character",
+    "objective": "Verifies AC-4, BR-1: Sign In button becomes enabled when each field contains exactly one character",
+    "precondition": "the user navigates to https://admin.nexolvi.ai",
+    "type": "Edge",
+    "priority": "Medium",
+    "labels": [
+      "Functional"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-4",
+      "BR-1"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the user navigates to https://admin.nexolvi.ai",
+        "testData": "",
+        "expectedResult": "the login page is displayed"
+      },
+      {
+        "keyword": "When",
+        "description": "the user enters exactly one character in the Email field and exactly one character in the Password field",
+        "testData": "",
+        "expectedResult": "the Sign In button is enabled"
+      }
+    ],
+    "hash": "7bfa28d78e16",
+    "selected": true
+  },
+  {
+    "key": "TC-013",
+    "name": "Sign In button returns to disabled state after clearing one field that was previously populated",
+    "objective": "Verifies AC-1, AC-2, AC-3, BR-1: Sign In button returns to disabled state after clearing one field that was previously populated",
+    "precondition": "the user navigates to https://admin.nexolvi.ai",
+    "type": "Edge",
+    "priority": "Medium",
+    "labels": [
+      "Functional"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-1",
+      "AC-2",
+      "AC-3",
+      "BR-1"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the user navigates to https://admin.nexolvi.ai",
+        "testData": "",
+        "expectedResult": "the login page is displayed"
+      },
+      {
+        "keyword": "When",
+        "description": "the user enters a value in the Email field and a value in the Password field",
+        "testData": "",
+        "expectedResult": "the Sign In button is enabled"
+      },
+      {
+        "keyword": "When",
+        "description": "the user clears the Password field",
+        "testData": "",
+        "expectedResult": "the Sign In button is disabled"
+      }
+    ],
+    "hash": "15852bc5584c",
+    "selected": true
+  },
+  {
+    "key": "TC-014",
+    "name": "Password visibility toggles correctly across multiple consecutive eye icon clicks",
+    "objective": "Verifies AC-14: Password visibility toggles correctly across multiple consecutive eye icon clicks",
+    "precondition": "the user navigates to https://admin.nexolvi.ai",
+    "type": "Edge",
+    "priority": "Medium",
+    "labels": [
+      "UI"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-14"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the user navigates to https://admin.nexolvi.ai",
+        "testData": "",
+        "expectedResult": "the login page is displayed"
+      },
+      {
+        "keyword": "When",
+        "description": "the user enters a value in the Password field and clicks the eye icon once",
+        "testData": "",
+        "expectedResult": "the password text is visible in the Password field"
+      },
+      {
+        "keyword": "When",
+        "description": "the user clicks the eye icon a second time",
+        "testData": "",
+        "expectedResult": "the Password field value is masked"
+      },
+      {
+        "keyword": "When",
+        "description": "the user clicks the eye icon a third time",
+        "testData": "",
+        "expectedResult": "the password text is visible in the Password field"
+      }
+    ],
+    "hash": "a719f1b2e6eb",
+    "selected": true
+  }
+]

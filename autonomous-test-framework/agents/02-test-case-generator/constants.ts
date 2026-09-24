@@ -4,6 +4,9 @@
 
 import * as path from 'path';
 
+// Shared with Agent 03, which reviews the same coverage: one definition, so the two cannot disagree.
+export { MIN_TC_BY_RISK, SMOKE_REQUIRED_RISKS, isClientErrorStatus } from '../../core/coverage/coverageMinimums';
+
 export const STAGE_ID = '02-test-case-generator';
 export const STAGE_NAME = 'Test Case Generator';
 export const STAGE_NUMBER = '02';
@@ -44,13 +47,6 @@ export const TESTABILITY = Object.freeze({
   MANUAL_ONLY: 'MANUAL_ONLY',
 });
 
-/** Feature-level coverage targets per risk level. Targets never justify invented scenarios. */
-export const MIN_TC_BY_RISK: Readonly<Record<RiskLevel, { positive: number; negative: number; edge: number }>> = Object.freeze({
-  CRITICAL: { positive: 5, negative: 5, edge: 3 },
-  HIGH: { positive: 3, negative: 3, edge: 2 },
-  MEDIUM: { positive: 2, negative: 2, edge: 1 },
-  LOW: { positive: 1, negative: 1, edge: 0 },
-});
 
 /** UI test types the user selects per run; each selected type needs at least MIN_TC_PER_STORY_PER_TYPE per story. */
 export const SELECTABLE_UI_TYPE_TAGS: readonly string[] = Object.freeze(['positive', 'negative', 'edge']);
@@ -90,8 +86,6 @@ export const NEGATED_FAILURE_PHRASE = /\b(?:no|without(?: an?| any)?|not display
 /** Output line declaring a criterion that only an excluded type could verify: "# UNCOVERED AC-3: @negative". */
 export const UNCOVERED_DECLARATION = /^#\s*UNCOVERED\s+((?:AC|BR)-\d+)\s*:\s*@?([a-z]+)/i;
 
-/** Risk levels whose stories must tag their primary happy path @smoke. */
-export const SMOKE_REQUIRED_RISKS: ReadonlySet<string> = new Set([RISK_LEVEL.CRITICAL, RISK_LEVEL.HIGH]);
 
 /** Gherkin type tag → test case type. Exactly one per scenario. */
 export const TYPE_TAGS: Readonly<Record<string, string>> = Object.freeze({
@@ -113,15 +107,6 @@ export const LABEL_TAGS: Readonly<Record<string, string>> = Object.freeze({
   'error-handling': 'Error-Handling',
 });
 
-/**
- * Whether an HTTP status is a client error (4xx): an @api scenario asserting one verifies a documented error response,
- * which is @negative behaviour, so it counts toward a story's @negative minimum. It stays a single @api test case.
- * @param {number | undefined} statusCode
- * @returns {boolean}
- */
-export function isClientErrorStatus(statusCode: number | undefined): boolean {
-  return typeof statusCode === 'number' && statusCode >= 400 && statusCode <= 499;
-}
 
 export const K6_SCENARIOS: readonly string[] = Object.freeze(['load', 'stress', 'spike', 'soak']);
 export const HTTP_METHODS: readonly string[] = Object.freeze(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);

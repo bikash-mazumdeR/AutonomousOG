@@ -6,6 +6,10 @@
  * contain them.
  */
 
+import * as fs from 'fs';
+import { loadAutProfile } from './AutProfile';
+import { PROJECTS_CONFIG_ROOT } from './projectPaths';
+
 /** A secret value and the placeholder that replaces it, e.g. { value: 's3cret', placeholder: '{{validPassword}}' }. */
 export interface KnownSecret {
   value: string;
@@ -57,4 +61,44 @@ export function replaceSecrets(text: string, secrets: KnownSecret[]): string {
  */
 export function secretsIn(text: string, secrets: KnownSecret[]): string[] {
   return [...new Set(secrets.filter((secret) => secret.value && String(text ?? '').includes(secret.value)).map((secret) => secret.placeholder))];
+}
+
+/**
+ * Replaces every secret value in every string of a value (object, array or string) by its placeholder. The value is
+ * copied, never changed in place.
+ * @param {T} value
+ * @param {KnownSecret[]} secrets
+ * @returns {{ value: T, replaced: number }} The redacted copy and how many strings contained a secret
+ */
+export function redactValue<T>(value: T, secrets: KnownSecret[]): { value: T; replaced: number } {
+  let replaced = 0;
+  const walk = (node: any): any => {
+    if (typeof node === 'string') {
+      const out = replaceSecrets(node, secrets);
+      if (out !== node) replaced += 1;
+      return out;
+    }
+    if (Array.isArray(node)) return node.map(walk);
+    if (node && typeof node === 'object') return Object.fromEntries(Object.entries(node).map(([key, item]) => [key, walk(item)]));
+    return node;
+  };
+  const result = secrets.length > 0 ? walk(value) : value;
+  return { value: result, replaced };
+}
+
+/**
+ * The secrets of every project that has an AUT profile, for stores shared across projects (project memory). A project
+ * whose profile cannot be loaded contributes none.
+ * @param {NodeJS.ProcessEnv} env
+ * @returns {KnownSecret[]}
+ */
+export function allProjectSecrets(env: NodeJS.ProcessEnv): KnownSecret[] {
+  const projects: string[] = fs.existsSync(PROJECTS_CONFIG_ROOT) ? fs.readdirSync(PROJECTS_CONFIG_ROOT) : [];
+  return projects.flatMap((projectId) => {
+    try {
+      return profileSecrets(loadAutProfile(projectId, env), env);
+    } catch (_) {
+      return [];
+    }
+  });
 }

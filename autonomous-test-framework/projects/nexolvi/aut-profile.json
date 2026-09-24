@@ -40,7 +40,9 @@
   ],
   "secretsEnvVars": [
     "NEXOLVI_EMAIL",
-    "NEXOLVI_PASSWORD"
+    "NEXOLVI_PASSWORD",
+    "NEXOLVI_PROFILE_EMAIL",
+    "NEXOLVI_PROFILE_PASSWORD"
   ],
   "couplingGuardTokens": [
     "nexolvi",

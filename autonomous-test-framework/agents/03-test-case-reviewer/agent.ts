@@ -20,6 +20,11 @@ import { FRAMEWORK_CONFIG } from '../../config/framework.config';
 import { isAutomationApproved, isTestCaseSelected, REVIEW_STATUS } from '../../core/types';
 import { ClarificationStore } from '../../core/clarifications/ClarificationStore';
 import { loadAutProfile } from '../../core/aut/AutProfile';
+import {
+  MIN_TC_BY_RISK, SMOKE_REQUIRED_RISKS, countsAsNegative, normalizeRiskLevel,
+} from '../../core/coverage/coverageMinimums';
+import { profileSecrets } from '../../core/aut/knownSecrets';
+import { redactReviewSecrets } from './readiness/secrets';
 import { applyClarificationAnswers } from './readiness/applyAnswers';
 import { holdUnreadyTestCases } from './readiness/holdReview';
 import { collectOpenClarifications, describeOpenClarifications } from './readiness/reviewReadiness';
@@ -83,21 +88,6 @@ const DIMENSION_WEIGHTS = Object.freeze({
   dataQuality: 0.15,
 });
 
-/** Minimum coverage counts by risk level */
-const MIN_COVERAGE = Object.freeze({
-  CRITICAL: {
-    positive: 5, negative: 5, edge: 3, smoke: true,
-  },
-  HIGH: {
-    positive: 3, negative: 3, edge: 2, smoke: true,
-  },
-  MEDIUM: {
-    positive: 2, negative: 2, edge: 1, smoke: false,
-  },
-  LOW: {
-    positive: 1, negative: 1, edge: 0, smoke: false,
-  },
-});
 
 /** Vague phrases that trigger step rewrites */
 const VAGUE_PHRASES = Object.freeze([
@@ -120,7 +110,6 @@ const INVALID_PLACEHOLDER_PATTERNS = [
 const VALID_HTTP_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']);
 const VALID_K6_SCENARIOS = new Set(['load', 'stress', 'spike', 'soak']);
 
-const SKILL_PATH = path.resolve(__dirname, '../../skills/test-case-review.md');
 
 // ─── TestCaseReviewerAgent ────────────────────────────────────────────────────
 
@@ -132,7 +121,6 @@ class TestCaseReviewerAgent {
   constructor() {
     this._logger = new Logger(STAGE_ID);
     this._annotations = [];
-    this._skill = this._loadSkill();
   }
 
   // ── Entry Point ──────────────────────────────────────────────────────────
@@ -153,7 +141,6 @@ class TestCaseReviewerAgent {
     }
 
     try {
-      const memoryContext = await memoryEngine.getContextForStage(STAGE_ID);
       await stateManager.markStageRunning(STAGE_ID);
 
       const { zephyrExport } = input.testCases;
@@ -195,28 +182,12 @@ class TestCaseReviewerAgent {
       // ── Phase 1b: Apply answers to earlier clarifications ─────────────
       const store = await this._clarificationStore();
       const appliedAnswers = applyClarificationAnswers(dedupedTCs, store);
+      // After the answers: an answer written into a step is content like any other, and may carry a secret.
+      this._redactSecrets(dedupedTCs);
 
-      // ── Phase 2: Per-TC Multi-Dimensional Review ───────────────────────
-      const reviewedTCs = dedupedTCs.map((tc: any) => this._reviewSingleTC(tc, analysis));
+      // ── Phases 2–6: per-test-case review, coverage, API, performance and traceability ──
+      const { reviewedTCs, coverageMatrix } = this._applyReviewRules(dedupedTCs, analysis, unselectedTCs);
 
-      // ── Phase 3: Coverage Adequacy Review ─────────────────────────────
-      const coverageMatrix = this._buildCoverageMatrix(reviewedTCs, analysis, unselectedTCs);
-
-      // ── Phase 4: API TC Review ─────────────────────────────────────────
-      reviewedTCs.filter((tc: any) => tc.type === 'API').forEach((tc: any) => {
-        this._reviewAPITC(tc);
-      });
-
-      // ── Phase 5: Performance TC Review ────────────────────────────────
-      reviewedTCs.filter((tc: any) => tc.type === 'Performance').forEach((tc: any) => {
-        this._reviewPerformanceTC(tc);
-      });
-
-      // ── Phase 6: Traceability Review ──────────────────────────────────
-      reviewedTCs.forEach((tc: any) => this._reviewTraceability(tc, analysis));
-
-      // ── Phase 7: Apply Improvement Rules from Memory ──────────────────
-      this._applyMemoryImprovements(reviewedTCs, memoryContext.improvementRules);
       const restoredStatuses = reapplyHumanStatuses(reviewedTCs);
 
       // ── Phase 7b: Automation Readiness — hold and ask (after every status change above) ──
@@ -229,7 +200,7 @@ class TestCaseReviewerAgent {
       const qualityScore = this._calculateQualityScore(reviewedTCs, coverageMatrix);
 
       // ── Phase 9: Determine Review Decision ────────────────────────────
-      const decision = this._makeReviewDecision(qualityScore, this._annotations);
+      const decision = this._makeReviewDecision(qualityScore, reviewedTCs, this._annotations);
 
       // ── Phase 10: Extract Improvement Rules for Memory ────────────────
       await this._persistImprovementRules(this._annotations, qualityScore);
@@ -275,6 +246,7 @@ class TestCaseReviewerAgent {
         fullOutput: output,
         warnings,
         clarifications: describeOpenClarifications(output.openClarifications),
+        blockers: this._rejectReasons(output),
       });
 
       agentResult.approvalStatus = gateResult.status;
@@ -294,6 +266,41 @@ class TestCaseReviewerAgent {
       await stateManager.markStageFailed(STAGE_ID, error);
       throw error;
     }
+  }
+
+  /**
+   * The review rules proper, in order: each test case's completeness, step quality and data (phase 2), the coverage
+   * matrix (3), API (4) and performance (5) details, and traceability (6). Findings go to this._annotations.
+   * @private
+   */
+  _applyReviewRules(testCases: any[], analysis: any, unselectedTCs: any[] = []) {
+    const reviewedTCs = testCases.map((tc: any) => this._reviewSingleTC(tc, analysis));
+    const coverageMatrix = this._buildCoverageMatrix(reviewedTCs, analysis, unselectedTCs);
+    reviewedTCs.filter((tc: any) => tc.type === 'API').forEach((tc: any) => this._reviewAPITC(tc));
+    reviewedTCs.filter((tc: any) => tc.type === 'Performance').forEach((tc: any) => this._reviewPerformanceTC(tc));
+    reviewedTCs.forEach((tc: any) => this._reviewTraceability(tc, analysis));
+    return { reviewedTCs, coverageMatrix };
+  }
+
+  /**
+   * A review exactly as the stage performs its rules — duplicates, secrets, every review dimension, the quality score
+   * and the decision — without the clarification store, readiness hold, memory or approval gate. Used by the defect
+   * catalogue, which checks what each rule catches and what a known-good suite triggers.
+   * @param {any[]} testCases - Test cases as Agent 02 produced them
+   * @param {any} analysis - The Agent 01 analysis they were generated from
+   * @param {KnownSecret[]} [secrets] - Secrets to redact, as the project's AUT profile would name them
+   * @returns {{ reviewedTCs: any[], annotations: any[], coverageMatrix: any, qualityScore: any, decision: string }}
+   */
+  reviewForEval(testCases: any[], analysis: any, secrets: any[] = []) {
+    this._annotations = [];
+    const deduped = this._removeDuplicates(JSON.parse(JSON.stringify(testCases)));
+    this._redactSecrets(deduped, secrets);
+    const { reviewedTCs, coverageMatrix } = this._applyReviewRules(deduped, analysis);
+    const qualityScore = this._calculateQualityScore(reviewedTCs, coverageMatrix);
+    const decision = this._makeReviewDecision(qualityScore, reviewedTCs, this._annotations);
+    return {
+      reviewedTCs, annotations: this._annotations, coverageMatrix, qualityScore, decision,
+    };
   }
 
   /**
@@ -448,7 +455,7 @@ class TestCaseReviewerAgent {
    */
   _reviewSingleTC(tc, analysis) {
     const reviewed = {
-      ...tc, reviewStatus: 'PASSED', reviewNotes: [], rewrittenSteps: 0,
+      ...tc, reviewStatus: 'PASSED', reviewNotes: [], rewrittenSteps: tc.rewrittenSteps || 0,
     };
 
     this._reviewCompleteness(reviewed);
@@ -627,11 +634,12 @@ class TestCaseReviewerAgent {
   _reviewDataPlaceholders(tc) {
     if (!tc.testSteps) return;
 
+    // Flagged, never rewritten: "[Sign in]" may be a button's name and "<email>" a placeholder, and only a person can
+    // tell which. A silent rewrite would turn a label into a {{placeholder}} Agent 04 then invents a value for.
     tc.testSteps.forEach((step, idx) => {
-      const fieldsToCheck = [step.description, step.testData, step.expectedResult];
-
+      const allText = [step.description, step.testData, step.expectedResult].filter(Boolean).join(' ');
       for (const { re, label } of INVALID_PLACEHOLDER_PATTERNS) {
-        const allText = fieldsToCheck.filter(Boolean).join(' ');
+        re.lastIndex = 0;
         if (re.test(allText)) {
           this._addAnnotation(
             tc.key,
@@ -641,11 +649,6 @@ class TestCaseReviewerAgent {
             REVIEW_ACTION.FLAGGED,
             'Use {{camelCaseVar}} format. Example: {{validEmail}}, {{authToken}}',
           );
-          // Auto-fix: replace angle/bracket patterns with {{}} format
-          tc.testSteps[idx].testData = (step.testData || '')
-            .replace(/<([a-zA-Z][^>]*)>/g, '{{$1}}')
-            .replace(/\[([a-zA-Z][^\]]*)\]/g, '{{$1}}');
-          tc.rewrittenSteps = (tc.rewrittenSteps || 0) + 1;
         }
         re.lastIndex = 0;
       }
@@ -663,11 +666,13 @@ class TestCaseReviewerAgent {
       const featureTCs = reviewedTCs.filter((tc: any) => tc.featureId === f.id);
       const featureUnselected = unselectedTCs.filter((tc: any) => tc.featureId === f.id);
       const isAffectedByUnselected = featureUnselected.length > 0;
-      const mins = MIN_COVERAGE[f.riskLevel as keyof typeof MIN_COVERAGE] || MIN_COVERAGE.MEDIUM;
+      // The same minimums Agent 02 generates against; an API test case asserting a 4xx counts as negative there too.
+      const risk = normalizeRiskLevel(f.riskLevel);
+      const mins = { ...MIN_TC_BY_RISK[risk], smoke: SMOKE_REQUIRED_RISKS.has(risk) };
 
       const counts = {
         positive: featureTCs.filter((tc: any) => tc.type === 'Positive').length,
-        negative: featureTCs.filter((tc: any) => tc.type === 'Negative').length,
+        negative: featureTCs.filter((tc: any) => countsAsNegative(tc)).length,
         edge: featureTCs.filter((tc: any) => tc.type === 'Edge').length,
         api: featureTCs.filter((tc: any) => tc.type === 'API').length,
         perf: featureTCs.filter((tc: any) => tc.type === 'Performance').length,
@@ -680,7 +685,7 @@ class TestCaseReviewerAgent {
         this._addAnnotation(
           `FEATURE-${f.id}`,
           REVIEW_DIMENSION.COVERAGE,
-          isAffectedByUnselected ? SEVERITY.INFO : (f.riskLevel === 'CRITICAL' ? SEVERITY.MAJOR : SEVERITY.MINOR),
+          isAffectedByUnselected ? SEVERITY.INFO : (risk === 'CRITICAL' ? SEVERITY.MAJOR : SEVERITY.MINOR),
           `Feature "${f.name}" has ${counts.positive}/${mins.positive} positive TCs${isAffectedByUnselected ? ` (${featureUnselected.length} were unselected in Agent 02)` : ''}`,
           REVIEW_ACTION.FLAGGED,
           `Informational advisory: ${mins.positive - counts.positive} more positive TCs recommended for this ${f.riskLevel} risk feature`,
@@ -691,7 +696,7 @@ class TestCaseReviewerAgent {
         this._addAnnotation(
           `FEATURE-${f.id}`,
           REVIEW_DIMENSION.COVERAGE,
-          isAffectedByUnselected ? SEVERITY.INFO : (f.riskLevel === 'CRITICAL' ? SEVERITY.MAJOR : SEVERITY.MINOR),
+          isAffectedByUnselected ? SEVERITY.INFO : (risk === 'CRITICAL' ? SEVERITY.MAJOR : SEVERITY.MINOR),
           `Feature "${f.name}" has ${counts.negative}/${mins.negative} negative TCs${isAffectedByUnselected ? ` (${featureUnselected.length} were unselected in Agent 02)` : ''}`,
           REVIEW_ACTION.FLAGGED,
           `Informational advisory: ${mins.negative - counts.negative} more negative TCs recommended`,
@@ -703,7 +708,7 @@ class TestCaseReviewerAgent {
           `FEATURE-${f.id}`,
           REVIEW_DIMENSION.COVERAGE,
           isAffectedByUnselected ? SEVERITY.INFO : SEVERITY.MAJOR,
-          `Feature "${f.name}" (${f.riskLevel}) has no Smoke-labelled TCs in selected suite`,
+          `Feature "${f.name}" (${risk}) has no Smoke-labelled TCs in selected suite`,
           REVIEW_ACTION.FLAGGED,
           'Mark at least one critical positive TC as Smoke if automated smoke gate is desired',
         );
@@ -719,7 +724,7 @@ class TestCaseReviewerAgent {
       return {
         featureId: f.id,
         featureName: f.name,
-        riskLevel: f.riskLevel,
+        riskLevel: risk,
         positiveCount: counts.positive,
         negativeCount: counts.negative,
         edgeCount: counts.edge,
@@ -948,29 +953,6 @@ class TestCaseReviewerAgent {
     }
   }
 
-  // ── Phase 7: Memory Improvements ─────────────────────────────────────────
-
-  /**
-   * @private
-   */
-  _applyMemoryImprovements(reviewedTCs, rules) {
-    if (!rules || rules.length === 0) return;
-    this._logger.info('Applying memory improvement rules', { count: rules.length });
-
-    for (const rule of rules) {
-      if (rule.appliesTo !== STAGE_ID && rule.appliesTo !== 'ALL') continue;
-
-      if (rule.action === 'FLAG_MISSING_SMOKE_LABELS') {
-        reviewedTCs.forEach((tc) => {
-          if (tc.type === 'Positive' && tc.priority === 'High' && !tc.labels?.includes('Smoke')) {
-            tc.labels = [...(tc.labels || []), 'Smoke'];
-            this._logger.info('Auto-applied Smoke label from memory rule', { tcKey: tc.key });
-          }
-        });
-      }
-    }
-  }
-
   // ── Phase 8: Quality Score ────────────────────────────────────────────────
 
   /**
@@ -986,15 +968,19 @@ class TestCaseReviewerAgent {
     ).length;
     const completeness = Math.max(0, 100 - (completenessBlockers / total) * 100);
 
-    // Coverage: average of feature coverage scores
+    // Coverage: average of feature coverage scores. Without an analysis there is nothing to judge coverage against, so it
+    // is left out of the overall score rather than assumed.
     const coverageScores = coverageMatrix.features.map((f) => f.coverageScore);
     const coverage = coverageScores.length > 0
       ? Math.round(coverageScores.reduce((a, b) => a + b, 0) / coverageScores.length)
-      : 95;
+      : null;
 
-    // Step Quality: % of TCs with no step quality rewrites
-    const rewrittenTCs = reviewedTCs.filter((tc) => tc.rewrittenSteps > 0).length;
-    const stepQuality = Math.max(0, 100 - (rewrittenTCs / total) * 80);
+    // Step Quality: from the step findings themselves — a test case with a MAJOR step finding costs its full share,
+    // one with only MINOR ones a quarter of it.
+    const stepFindings = this._annotations.filter((a) => a.dimension === REVIEW_DIMENSION.STEP_QUALITY);
+    const majorKeys = new Set(stepFindings.filter((a) => a.severity === SEVERITY.MAJOR).map((a) => a.tcKey));
+    const minorOnlyKeys = new Set(stepFindings.filter((a) => a.severity === SEVERITY.MINOR && !majorKeys.has(a.tcKey)).map((a) => a.tcKey));
+    const stepQuality = Math.max(0, 100 - (majorKeys.size / total) * 100 - (minorOnlyKeys.size / total) * 25);
 
     // Traceability: % TCs with valid traceability links
     const orphaned = this._annotations.filter(
@@ -1008,13 +994,15 @@ class TestCaseReviewerAgent {
     ).length;
     const dataQuality = Math.max(0, 100 - (dataFindings / total) * 50);
 
-    const overall = Math.round(
-      completeness * DIMENSION_WEIGHTS.completeness
-      + coverage * DIMENSION_WEIGHTS.coverage
-      + stepQuality * DIMENSION_WEIGHTS.stepQuality
-      + traceability * DIMENSION_WEIGHTS.traceability
-      + dataQuality * DIMENSION_WEIGHTS.dataQuality,
-    );
+    const weighted = [
+      [completeness, DIMENSION_WEIGHTS.completeness],
+      [coverage, DIMENSION_WEIGHTS.coverage],
+      [stepQuality, DIMENSION_WEIGHTS.stepQuality],
+      [traceability, DIMENSION_WEIGHTS.traceability],
+      [dataQuality, DIMENSION_WEIGHTS.dataQuality],
+    ].filter(([score]) => score !== null) as Array<[number, number]>;
+    const weightTotal = weighted.reduce((sum, [, weight]) => sum + weight, 0);
+    const overall = Math.round(weighted.reduce((sum, [score, weight]) => sum + score * weight, 0) / weightTotal);
 
     const grade = overall >= 90 ? 'A'
       : overall >= 75 ? 'B'
@@ -1025,7 +1013,7 @@ class TestCaseReviewerAgent {
     return {
       overall: Math.round(overall),
       completeness: Math.round(completeness),
-      coverage: Math.round(coverage),
+      coverage: coverage === null ? null : Math.round(coverage),
       stepQuality: Math.round(stepQuality),
       traceability: Math.round(traceability),
       dataQuality: Math.round(dataQuality),
@@ -1038,28 +1026,49 @@ class TestCaseReviewerAgent {
   /**
    * @private
    */
-  _makeReviewDecision(qualityScore, annotations) {
-    const hasBlocker = annotations.some((a) => a.severity === SEVERITY.BLOCKER);
+  /**
+   * Why the review decided REJECT, for the approval gate: a D or F grade, or no test case left to continue. Empty unless
+   * the decision is REJECT. In auto-approve mode these stop the pipeline instead of being approved unseen.
+   * @private
+   */
+  _rejectReasons(output: any): string[] {
+    if (output.reviewDecision !== 'REJECT') return [];
+    const { grade, overall } = output.qualityScore || {};
+    const continuing = (output.reviewedZephyrExport?.testCases || [])
+      .filter((tc: any) => ![REVIEW_STATUS.REJECTED, REVIEW_STATUS.MANUAL, 'EXCLUDED'].includes(tc.reviewStatus)).length;
+    const reasons = [
+      ...(grade === 'D' || grade === 'F' ? [`Quality grade ${grade} (${overall}/100) is below the C needed to proceed`] : []),
+      ...(continuing === 0 ? [`No test case is left to continue: ${output.rejectedCount || 0} rejected, ${output.manualCount || 0} kept manual`] : []),
+    ];
+    return reasons.length > 0 ? reasons : ['The review decided REJECT'];
+  }
 
-    if (hasBlocker) return 'REJECT';
+  /**
+   * The suite-level decision. A BLOCKER finding rejects its own test case, which then leaves the suite; it does not
+   * reject the suite, so one malformed test case cannot stop a pipeline whose other test cases are fine. The suite is
+   * rejected only when its quality grade is D or F, or when no test case is left to continue (held test cases count:
+   * they continue once their question is answered).
+   * @private
+   */
+  _makeReviewDecision(qualityScore, reviewedTCs, annotations) {
     if (qualityScore.grade === 'D' || qualityScore.grade === 'F') return 'REJECT';
-    if (qualityScore.grade === 'C') return 'APPROVE_WITH_WARNINGS';
+    if (!reviewedTCs.some((tc) => tc.reviewStatus !== REVIEW_STATUS.REJECTED && tc.reviewStatus !== REVIEW_STATUS.MANUAL)) return 'REJECT';
+    const hasBlocker = annotations.some((a) => a.severity === SEVERITY.BLOCKER);
+    if (hasBlocker || qualityScore.grade === 'C') return 'APPROVE_WITH_WARNINGS';
     return 'APPROVE';
   }
 
   // ── Improvement Rule Persistence ──────────────────────────────────────────
 
   /**
-   * Extracts recurring patterns and persists as improvement rules for Agent 02.
+   * Extracts recurring patterns and persists as improvement rules for Agent 02. There is deliberately no rule asking for
+   * more negative (or any other type of) test cases: Agent 02 puts these rules in its prompt and must never invent
+   * behaviour to reach a number, so a coverage shortfall is reported at this gate, not fed back as pressure.
    * @private
    */
   async _persistImprovementRules(annotations, qualityScore) {
     const missingSmoke = annotations.filter(
       (a) => a.finding.includes('no Smoke-labelled'),
-    ).length;
-
-    const missingNegative = annotations.filter(
-      (a) => a.finding.includes('negative TCs'),
     ).length;
 
     if (missingSmoke > 1) {
@@ -1068,16 +1077,6 @@ class TestCaseReviewerAgent {
         description: 'Agent 02 frequently misses Smoke labels on High/Critical positive TCs',
         appliesTo: '02-test-case-generator',
         action: 'ADD_SMOKE_LABELS',
-        addedAt: new Date().toISOString(),
-      });
-    }
-
-    if (missingNegative > 2) {
-      await memoryEngine.addImprovementRule({
-        id: 'RULE-03-002',
-        description: 'Agent 02 generating insufficient negative TCs for high-risk features',
-        appliesTo: '02-test-case-generator',
-        action: 'INCREASE_NEGATIVE_TC_COUNT',
         addedAt: new Date().toISOString(),
       });
     }
@@ -1150,7 +1149,7 @@ class TestCaseReviewerAgent {
     if (informationalInsights?.unselectedCount > 0) {
       recs.push(`ℹ️ Advisory: ${informationalInsights.unselectedCount} test case(s) excluded during Agent 02. ${informationalInsights.pendingRequirements?.length || 0} requirement(s) have pending/reduced coverage.`);
     }
-    if (qualityScore.coverage < 70) {
+    if (qualityScore.coverage !== null && qualityScore.coverage < 70) {
       recs.push('⚠️ Selected test coverage below 70%. Consider generating more negative and edge TCs if broader coverage is needed.');
     }
     if (qualityScore.stepQuality < 75) {
@@ -1188,7 +1187,7 @@ class TestCaseReviewerAgent {
       'Duplicates Removed': output.duplicatesRemoved,
       'Blockers Found': output.blockers.length,
       'Pending Requirements': output.informationalInsights?.pendingRequirements?.length || 0,
-      'Coverage Score': `${output.qualityScore.coverage}/100`,
+      'Coverage Score': output.qualityScore.coverage === null ? 'n/a — no requirement analysis' : `${output.qualityScore.coverage}/100`,
       'Step Quality Score': `${output.qualityScore.stepQuality}/100`,
     };
   }
@@ -1231,6 +1230,38 @@ class TestCaseReviewerAgent {
    * Performance threshold env var from the AUT profile, when the project has one.
    * @private
    */
+  /**
+   * Replaces secret values in the test cases by their placeholders and reports each one: reviewed test cases become
+   * committed feature files. The test is unchanged — the later agents resolve the placeholder from the environment.
+   * @private
+   */
+  _redactSecrets(testCases: any[], secrets: any[] = this._knownSecrets()) {
+    const stepsBefore = new Map(testCases.map((tc) => [tc.key, (tc.testSteps || []).map((step: any) => JSON.stringify(step))]));
+    for (const { tcKey, placeholders } of redactReviewSecrets(testCases, secrets)) {
+      // A real rewrite: count the steps it changed, as the review UI's "Rewritten" filter and rewrittenCount read.
+      const tc = testCases.find((candidate) => candidate.key === tcKey);
+      const before = stepsBefore.get(tcKey) || [];
+      if (tc) tc.rewrittenSteps = (tc.testSteps || []).filter((step: any, idx: number) => JSON.stringify(step) !== before[idx]).length;
+      this._addAnnotation(
+        tcKey,
+        REVIEW_DIMENSION.DATA,
+        SEVERITY.MAJOR,
+        `Wrote out the value of ${placeholders.join(', ')} — replaced by the placeholder, since feature files are committed.`,
+        REVIEW_ACTION.REWRITTEN,
+        `Write ${placeholders.join(', ')} instead of the value; the value comes from the environment.`,
+      );
+    }
+  }
+
+  /** Secret values the AUT profile names; none when the project has no profile yet. @private */
+  _knownSecrets() {
+    try {
+      return profileSecrets(loadAutProfile(stateManager.getProjectId()), process.env);
+    } catch {
+      return [];
+    }
+  }
+
   _thresholdEnv() {
     try {
       return loadAutProfile(stateManager.getProjectId()).performance?.thresholdEnv;
@@ -1267,9 +1298,6 @@ class TestCaseReviewerAgent {
   /**
    * @private
    */
-  _loadSkill() {
-    try { return fs.readFileSync(SKILL_PATH, 'utf-8'); } catch { return ''; }
-  }
 }
 
 // ─── Export & CLI ─────────────────────────────────────────────────────────────

@@ -14,6 +14,7 @@ import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 import { Mutex } from '../thread-manager/Mutex';
 import { vectorStore } from './VectorStore';
+import { allProjectSecrets, redactValue } from '../aut/knownSecrets';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -510,7 +511,10 @@ export class MemoryEngine {
    * @private
    */
   private async _writeToStorage(memory: any): Promise<void> {
-    await fsPromises.writeFile(MEMORY_FILE_PATH, JSON.stringify(memory, null, 2), 'utf-8');
+    // Memory is committed with the code and shared by every project, so no project's secret may be written into it —
+    // not in a clarification answer, an approval comment or a question an agent quoted a secret in.
+    const { value } = redactValue(memory, allProjectSecrets(process.env));
+    await fsPromises.writeFile(MEMORY_FILE_PATH, JSON.stringify(value, null, 2), 'utf-8');
   }
 
   /** @private */

@@ -9,6 +9,8 @@ import { Express, Request, Response } from 'express';
 import { stateManager } from '../core/state-manager/StateManager';
 import { ClarificationStore } from '../core/clarifications/ClarificationStore';
 import { loadAutProfile } from '../core/aut/AutProfile';
+import { profileSecrets } from '../core/aut/knownSecrets';
+import { redactReviewSecrets } from '../agents/03-test-case-reviewer/readiness/secrets';
 import { Logger } from '../core/logger/Logger';
 import { syncFeatureFiles } from '../agents/02-test-case-generator/utils';
 import { ReviewReadinessContext } from '../agents/03-test-case-reviewer/readiness/holdReview';
@@ -52,7 +54,23 @@ async function openReviewSession(): Promise<ReviewSession> {
   };
 }
 
+/** Secret values the project's AUT profile names; none when the project has no profile. */
+function knownSecrets() {
+  try {
+    return profileSecrets(loadAutProfile(stateManager.getProjectId()), process.env);
+  } catch (_) {
+    return [];
+  }
+}
+
 async function saveReview(reviewedOutput: any, logger: Logger): Promise<void> {
+  // A reviewer's edit or an answer written into a step may carry a secret; the feature files below are committed.
+  const redacted = redactReviewSecrets(reviewedOutput.reviewedZephyrExport.testCases, knownSecrets());
+  if (redacted.length > 0) {
+    logger.warn('Replaced secret values with placeholders before saving the review', {
+      testCases: redacted.map((entry) => `${entry.tcKey}: ${entry.placeholders.join(', ')}`),
+    });
+  }
   await stateManager.setPipelineArtifact(REVIEW_ARTIFACT, reviewedOutput);
   try {
     const requirements = await stateManager.getPipelineArtifact(REQUIREMENTS_ARTIFACT);

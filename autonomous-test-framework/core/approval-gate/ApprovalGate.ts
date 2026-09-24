@@ -41,6 +41,11 @@ const HELP_TEXT = `
   ─────────────────────────────────────────────────────
 `;
 
+/** The automation code review, whose REJECT is resolved by re-running Agent 05. */
+const CODE_REVIEW_STAGE_ID = '06-automation-reviewer';
+/** Blockers quoted in a banner or an auto-rejection comment; the rest are counted. */
+const MAX_BLOCKERS_SHOWN = 5;
+
 interface ApprovalGateOptions {
   autoApprove?: boolean;
   timeoutMs?: number;
@@ -101,6 +106,11 @@ export class ApprovalGate {
     clarifications?: string[];
     usage?: any;
     isReviewRecovery?: boolean;
+    /**
+     * Reasons the stage's own review decided it must not proceed (e.g. Agent 03's REJECT). In auto-approve mode they
+     * reject the stage instead of approving it; at a manual gate they are shown, and approving overrides them.
+     */
+    blockers?: string[];
   }): Promise<ApprovalResult> {
     const {
       stageId,
@@ -112,11 +122,20 @@ export class ApprovalGate {
       clarifications = [],
       usage: explicitUsage,
       isReviewRecovery: explicitReviewRecovery,
+      blockers = [],
     } = params;
 
     this._logger.info('Approval gate activated', { stageId, stageName });
 
-    // CI / auto-approve mode
+    // CI / auto-approve mode: a stage whose own review decided REJECT is rejected, never approved unseen.
+    if (this._autoApprove && blockers.length > 0) {
+      const comment = `AUTO-REJECTED (CI mode): the stage's own review decided it must not proceed — ${blockers.slice(0, MAX_BLOCKERS_SHOWN).join('; ')}`
+        + (blockers.length > MAX_BLOCKERS_SHOWN ? ` (and ${blockers.length - MAX_BLOCKERS_SHOWN} more)` : '');
+      this._logger.warn('AUTO-APPROVE mode active, but the stage review decided REJECT — rejecting', { stageId, blockers: blockers.length });
+      await stateManager.markStageRejected(stageId, comment);
+      await memoryEngine.recordApprovalFeedback(stageId, 'REJECTED', comment);
+      return this._buildResult(APPROVAL_STATUS.REJECTED, stageId, comment);
+    }
     if (this._autoApprove) {
       this._logger.warn('AUTO-APPROVE mode active — skipping human gate', { stageId });
       await stateManager.markStageApproved(stageId, 'AUTO-APPROVED (CI mode)');
@@ -156,7 +175,9 @@ export class ApprovalGate {
     const isReviewReject = summary && typeof summary === 'object' &&
       (summary['Review Decision'] === 'REJECT' || summary['reviewDecision'] === 'REJECT');
 
-    this._printGateBanner(stageId, stageName, nextStageName, summary, warnings, clarifications, stageUsage, isReviewReject, isReviewRecovery);
+    // Only the automation code review (Agent 06) is answered by re-running Agent 05; any other stage's REJECT is its own.
+    const isCodeReviewReject = isReviewReject && stageId === CODE_REVIEW_STAGE_ID;
+    this._printGateBanner(stageId, stageName, nextStageName, summary, warnings, clarifications, stageUsage, isCodeReviewReject, isReviewRecovery, blockers);
 
     return new Promise((resolve) => {
       const rl = readline.createInterface({
@@ -263,7 +284,7 @@ export class ApprovalGate {
 
           // ── HELP ──────────────────────────────────────────────────────
           if (HELP_KEYWORDS.has(upperInput)) {
-            if (stageId === '06-automation-reviewer' || isReviewReject) {
+            if (stageId === CODE_REVIEW_STAGE_ID || isCodeReviewReject) {
               console.log(`
   Available commands (Automation Code Review):
   ─────────────────────────────────────────────────────
@@ -295,7 +316,7 @@ export class ApprovalGate {
             'RERUN AGENT:05', 'RERUN AGENT 05', 'RERUN AGENT:5', 'RERUN AGENT 5'
           ]);
 
-          const isRunAgent05 = (stageId === '06-automation-reviewer' || isReviewReject) && (
+          const isRunAgent05 = (stageId === CODE_REVIEW_STAGE_ID || isCodeReviewReject) && (
             RUN_AGENT05_KEYWORDS.has(upperInput) ||
             /^(?:re-?run\s+|run\s+)?agent[:\s]*0?5\b/i.test(input) ||
             upperInput.includes('RUN AGENT 05') ||
@@ -351,7 +372,7 @@ export class ApprovalGate {
 
             // Extract rejection reason
             const reason = input.replace(/^REJECTED?\s*[-—]?\s*/i, '').trim()
-              || (isReviewReject ? 'Review rejected — Run Agent 05 to resolve code issues' : 'No reason provided');
+              || (isCodeReviewReject ? 'Review rejected — Run Agent 05 to resolve code issues' : 'No reason provided');
 
             await stateManager.markStageRejected(stageId, reason);
             await memoryEngine.recordApprovalFeedback(stageId, 'REJECTED', reason);
@@ -385,7 +406,8 @@ export class ApprovalGate {
     clarifications: string[],
     usageData?: any,
     isReviewReject: boolean = false,
-    isReviewRecovery: boolean = false
+    isReviewRecovery: boolean = false,
+    blockers: string[] = [],
   ) {
     console.log(GATE_BANNER);
     console.log(`\n  ✅ Stage Completed: ${stageName}`);
@@ -428,6 +450,15 @@ export class ApprovalGate {
     if (clarifications.length > 0) {
       console.log(`\n  ❓ PENDING CLARIFICATIONS (${clarifications.length}):`);
       clarifications.forEach((c) => console.log(`    • ${c}`));
+    }
+
+    if (blockers.length > 0 && !isReviewReject) {
+      console.log('\n  ─────────────────────────────────────────────────────');
+      console.log(`  🛑 This stage's own review decided REJECT (${blockers.length} reason(s)):`);
+      blockers.slice(0, MAX_BLOCKERS_SHOWN).forEach((b) => console.log(`    • ${b}`));
+      if (blockers.length > MAX_BLOCKERS_SHOWN) console.log(`    ... and ${blockers.length - MAX_BLOCKERS_SHOWN} more`);
+      console.log('  👉 APPROVED overrides the review; REJECTED — <reason> stops the pipeline.');
+      console.log('  ─────────────────────────────────────────────────────');
     }
 
     if (isReviewReject) {

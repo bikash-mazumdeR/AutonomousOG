@@ -1,0 +1,349 @@
+[
+  {
+    "key": "TC-001",
+    "name": "Profile button displays the user initial at the top-left corner of the Dashboard after login",
+    "objective": "Verifies AC-1, AC-8: Profile button displays the user initial at the top-left corner of the Dashboard after login",
+    "precondition": "the authenticated user is on the Dashboard at https://admin.nexolvi.ai/",
+    "type": "Positive",
+    "priority": "High",
+    "labels": [
+      "Smoke",
+      "Functional",
+      "UI"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-1",
+      "AC-8"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the authenticated user is on the Dashboard at https://admin.nexolvi.ai/",
+        "testData": "",
+        "expectedResult": "the Dashboard page is displayed"
+      },
+      {
+        "keyword": "When",
+        "description": "the user views the top-left corner of the Dashboard",
+        "testData": "",
+        "expectedResult": "the profile button displaying the single uppercase character 'B' is visible at the top-left corner"
+      }
+    ],
+    "hash": "58ce401d5832",
+    "selected": true
+  },
+  {
+    "key": "TC-002",
+    "name": "Clicking the profile button opens the user menu with all required elements",
+    "objective": "Verifies AC-2, AC-10: Clicking the profile button opens the user menu with all required elements",
+    "precondition": "the authenticated user is on the Dashboard at https://admin.nexolvi.ai/",
+    "type": "Positive",
+    "priority": "High",
+    "labels": [
+      "Functional",
+      "UI"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-2",
+      "AC-10"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the authenticated user is on the Dashboard at https://admin.nexolvi.ai/",
+        "testData": "",
+        "expectedResult": "the Dashboard page is displayed"
+      },
+      {
+        "keyword": "When",
+        "description": "the user clicks the profile button at the top-left corner",
+        "testData": "",
+        "expectedResult": "the user menu is displayed containing the user initial, the email address {{validEmail}}, a Profile button, and a Logout button as distinct visible elements"
+      }
+    ],
+    "hash": "b7275abcec64",
+    "selected": true
+  },
+  {
+    "key": "TC-003",
+    "name": "Clicking Logout in the user menu displays the native browser confirmation popup with correct text",
+    "objective": "Verifies AC-3, AC-4, AC-11, AC-12, AC-13, BR-2: Clicking Logout in the user menu displays the native browser confirmation popup with correct text",
+    "precondition": "the authenticated user is on the Dashboard at https://admin.nexolvi.ai/",
+    "type": "Positive",
+    "priority": "High",
+    "labels": [
+      "Smoke",
+      "Functional",
+      "UI"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-3",
+      "AC-4",
+      "AC-11",
+      "AC-12",
+      "AC-13",
+      "BR-2"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the authenticated user is on the Dashboard at https://admin.nexolvi.ai/",
+        "testData": "",
+        "expectedResult": "the Dashboard page is displayed"
+      },
+      {
+        "keyword": "When",
+        "description": "the user clicks the profile button and then clicks the Logout button in the user menu",
+        "testData": "",
+        "expectedResult": "a native browser dialog is displayed with header text 'Log out?' and body text 'Are you sure you want to log out? Any unsaved changes will be lost.'\nthe dialog contains a Cancel button and a Logout button"
+      }
+    ],
+    "hash": "976c1141c302",
+    "selected": true
+  },
+  {
+    "key": "TC-004",
+    "name": "Clicking Logout in the confirmation popup terminates the session and redirects to the Login page",
+    "objective": "Verifies AC-6, AC-14, BR-3: Clicking Logout in the confirmation popup terminates the session and redirects to the Login page",
+    "precondition": "the authenticated user has clicked Logout in the user menu and the confirmation popup is displayed",
+    "type": "Positive",
+    "priority": "High",
+    "labels": [
+      "Smoke",
+      "Functional",
+      "Security"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-6",
+      "AC-14",
+      "BR-3"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the authenticated user has clicked Logout in the user menu and the confirmation popup is displayed",
+        "testData": "",
+        "expectedResult": "the native browser confirmation dialog is displayed"
+      },
+      {
+        "keyword": "When",
+        "description": "the user clicks the Logout button in the confirmation popup",
+        "testData": "",
+        "expectedResult": "the session is terminated and the user is redirected to the Login page at https://admin.nexolvi.ai/\nthe Dashboard is no longer accessible"
+      }
+    ],
+    "hash": "2921e7759d9d",
+    "selected": true
+  },
+  {
+    "key": "TC-005",
+    "name": "Clicking Cancel on the confirmation popup closes it and keeps the user authenticated on the Dashboard",
+    "objective": "Verifies AC-5, AC-15, BR-3: Clicking Cancel on the confirmation popup closes it and keeps the user authenticated on the Dashboard",
+    "precondition": "the authenticated user has clicked Logout in the user menu and the confirmation popup is displayed",
+    "type": "Positive",
+    "priority": "High",
+    "labels": [
+      "Functional",
+      "Error-Handling"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-5",
+      "AC-15",
+      "BR-3"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the authenticated user has clicked Logout in the user menu and the confirmation popup is displayed",
+        "testData": "",
+        "expectedResult": "the native browser confirmation dialog is displayed"
+      },
+      {
+        "keyword": "When",
+        "description": "the user clicks the Cancel button in the confirmation popup",
+        "testData": "",
+        "expectedResult": "the confirmation popup is closed and the user remains on the Dashboard at https://admin.nexolvi.ai/\nthe user remains authenticated with no session change"
+      }
+    ],
+    "hash": "9fb9fc68ce26",
+    "selected": true
+  },
+  {
+    "key": "TC-006",
+    "name": "Navigating to the Dashboard URL after logout displays the Login page instead of the Dashboard",
+    "objective": "Verifies AC-7, BR-3: Navigating to the Dashboard URL after logout displays the Login page instead of the Dashboard",
+    "precondition": "the user has completed the logout flow and is on the Login page at https://admin.nexolvi.ai/",
+    "type": "Negative",
+    "priority": "High",
+    "labels": [
+      "Functional",
+      "Security"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-7",
+      "BR-3"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the user has completed the logout flow and is on the Login page at https://admin.nexolvi.ai/",
+        "testData": "",
+        "expectedResult": "the Login page is displayed"
+      },
+      {
+        "keyword": "When",
+        "description": "the user navigates to https://admin.nexolvi.ai/",
+        "testData": "",
+        "expectedResult": "the Login page is displayed and the Dashboard is not accessible"
+      }
+    ],
+    "hash": "108b5ea46863",
+    "selected": true
+  },
+  {
+    "key": "TC-007",
+    "name": "Attempting to reuse a terminated session to access the Dashboard is blocked",
+    "objective": "Verifies AC-14, BR-3: Attempting to reuse a terminated session to access the Dashboard is blocked",
+    "precondition": "the user has completed the logout flow and the session has been terminated",
+    "type": "Negative",
+    "priority": "High",
+    "labels": [
+      "Functional",
+      "Security"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-14",
+      "BR-3"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the user has completed the logout flow and the session has been terminated",
+        "testData": "",
+        "expectedResult": "the Login page at https://admin.nexolvi.ai/ is displayed"
+      },
+      {
+        "keyword": "When",
+        "description": "the user attempts to access the Dashboard by navigating to https://admin.nexolvi.ai/",
+        "testData": "",
+        "expectedResult": "the Login page is displayed instead of the Dashboard, confirming the terminated session cannot be reused"
+      }
+    ],
+    "hash": "d8d49011a706",
+    "selected": true
+  },
+  {
+    "key": "TC-008",
+    "name": "Hovering over the profile button displays the user email as a native browser tooltip",
+    "objective": "Verifies AC-9: Hovering over the profile button displays the user email as a native browser tooltip",
+    "precondition": "the authenticated user is on the Dashboard at https://admin.nexolvi.ai/",
+    "type": "Edge",
+    "priority": "Medium",
+    "labels": [
+      "UI"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-9"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the authenticated user is on the Dashboard at https://admin.nexolvi.ai/",
+        "testData": "",
+        "expectedResult": "the Dashboard page is displayed"
+      },
+      {
+        "keyword": "When",
+        "description": "the user hovers over the profile button at the top-left corner",
+        "testData": "",
+        "expectedResult": "a native browser tooltip displaying {{validEmail}} is shown"
+      }
+    ],
+    "hash": "1ca3968ab415",
+    "selected": true
+  },
+  {
+    "key": "TC-009",
+    "name": "Profile button displays exactly the single uppercase character 'B' derived from {{validEmail}}",
+    "objective": "Verifies AC-1, AC-8: Profile button displays exactly the single uppercase character 'B' derived from {{validEmail}}",
+    "precondition": "the authenticated user is on the Dashboard at https://admin.nexolvi.ai/",
+    "type": "Edge",
+    "priority": "Medium",
+    "labels": [
+      "UI"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-1",
+      "AC-8"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the authenticated user is on the Dashboard at https://admin.nexolvi.ai/",
+        "testData": "",
+        "expectedResult": "the Dashboard page is displayed"
+      },
+      {
+        "keyword": "When",
+        "description": "the user views the profile button at the top-left corner",
+        "testData": "",
+        "expectedResult": "the profile button displays exactly the single uppercase character 'B' and no other characters"
+      }
+    ],
+    "hash": "2aab4116a321",
+    "selected": true
+  },
+  {
+    "key": "TC-010",
+    "name": "Reopening the user menu after cancelling the logout popup shows the menu again without session change",
+    "objective": "Verifies AC-5, AC-15, BR-3: Reopening the user menu after cancelling the logout popup shows the menu again without session change",
+    "precondition": "the authenticated user has clicked Cancel on the logout confirmation popup and is back on the Dashboard",
+    "type": "Edge",
+    "priority": "Medium",
+    "labels": [
+      "Functional",
+      "Error-Handling"
+    ],
+    "featureId": "F-01",
+    "userStoryId": "US-01",
+    "requirementRefs": [
+      "AC-5",
+      "AC-15",
+      "BR-3"
+    ],
+    "testSteps": [
+      {
+        "keyword": "Given",
+        "description": "the authenticated user has clicked Cancel on the logout confirmation popup and is back on the Dashboard",
+        "testData": "",
+        "expectedResult": "the Dashboard is displayed and the user is authenticated"
+      },
+      {
+        "keyword": "When",
+        "description": "the user clicks the profile button again",
+        "testData": "",
+        "expectedResult": "the user menu is displayed again containing the user initial, the email address {{validEmail}}, a Profile button, and a Logout button"
+      }
+    ],
+    "hash": "7fa05d5af36e",
+    "selected": true
+  }
+]
