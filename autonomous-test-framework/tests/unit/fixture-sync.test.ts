@@ -46,8 +46,9 @@ describe('FixtureSync Centralized Test Data Engine', () => {
       expect(flat.validUsername).toBe('acme_user');
       expect(flat.searchQuery).toBe('backpack');
       expect(flat.TC002_invalidZipCode).toBe('99999');
-      expect(flat.stringMin).toBe('A');
-      expect(flat.numberMax).toBe(2147483647);
+      // Only what the test cases use: no generic boundary constants nothing reads.
+      expect(flat.stringMin).toBeUndefined();
+      expect(flat.numberMax).toBeUndefined();
     });
 
     it('never writes sensitive, runtime or unresolved values', () => {

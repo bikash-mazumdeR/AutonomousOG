@@ -1330,7 +1330,7 @@
       const strings = catalog.strings || {
         min: 1, max: 255, underMin: "'' (empty)", overMax: '256 chars',
         specialChars: '#%&<>!@$^*()', unicode: '🚀 中文 العربية Ñ',
-        sqlInject: "' OR '1'='1'; DROP TABLE users;--",
+        sqlInject: "' OR '1'='1' --",
         xssPayload: "<script>alert('aria-xss-test')<\/script>"
       };
 

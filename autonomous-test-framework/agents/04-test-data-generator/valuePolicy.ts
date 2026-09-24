@@ -78,10 +78,13 @@ const SYNTHETIC = Object.freeze({
   NEGATIVE_AMOUNT: '-1',
   MALFORMED_JSON: '{ broken json }',
   LONG_STRING_LENGTH: 1001,
+  SINGLE_CHARACTER: 'a',
   SPECIAL_CHARS: '#%&<>!@$^*()',
   UNICODE: '🚀 中文 العربية Ñ',
   WHITESPACE: '   ',
-  SQL_INJECTION: "' OR '1'='1'; DROP TABLE users;--",
+  // A probe, never a payload: these tests run against real, shared environments, so it must be harmless even where the
+  // application is vulnerable. "' OR '1'='1' --" detects the flaw without changing any data.
+  SQL_INJECTION: "' OR '1'='1' --",
   XSS: "<script>alert('aria-xss-test')</script>",
   DAY_MS: 86400000,
   HOUR_SECONDS: 3600,
@@ -92,6 +95,7 @@ const LAST_NAMES = Object.freeze(['Sharma', 'Patel', 'Verma', 'Singh', 'Kumar', 
 
 const BOUNDARY_GENERATORS: ReadonlyArray<[readonly string[], () => string]> = [
   [['long'], () => 'A'.repeat(SYNTHETIC.LONG_STRING_LENGTH)],
+  [['short', 'single'], () => SYNTHETIC.SINGLE_CHARACTER],
   [['special'], () => SYNTHETIC.SPECIAL_CHARS],
   [['unicode'], () => SYNTHETIC.UNICODE],
   [['whitespace'], () => SYNTHETIC.WHITESPACE],
@@ -158,8 +162,8 @@ function fromHuman(key: string, valueClass: ValueClass, ctx: PolicyContext): Val
   return override.envVar ? runtimeEntry(override.envVar, VALUE_SOURCE.USER_OVERRIDE, valueClass, 'Environment variable set in the Agent 04 UI') : null;
 }
 
-function boundToEnvironment(key: string, valueClass: ValueClass, ctx: PolicyContext, note: string): PolicyResult {
-  const declared = declaredEnvVar(key, ctx.profile);
+function boundToEnvironment(key: string, valueClass: ValueClass, ctx: PolicyContext, note: string, knownEnvVar?: string): PolicyResult {
+  const declared = knownEnvVar || declaredEnvVar(key, ctx.profile);
   const envVar = declared || toEnvVarName(key);
   const envIssue = !declared && ctx.env[envVar] === undefined ? { name: key, envVar } : undefined;
   return { valueClass, entry: runtimeEntry(envVar, VALUE_SOURCE.REQUIREMENT, valueClass, note), envIssue };
@@ -172,8 +176,9 @@ function fromRequirement(key: string, valueClass: ValueClass, ctx: PolicyContext
   // A project that declares an environment variable for a placeholder has decided where its value comes from:
   // the requirement may state the value for readers, but the fixture must still reference the variable.
   const declaredByProject = Boolean(declaredEnvVar(key, ctx.profile)) && !ctx.profile?.credentialsInFixture;
-  if (valueClass === VALUE_CLASS.RUNTIME || declaredByProject || (stated.sensitive && !ctx.profile?.credentialsInFixture)) {
-    return boundToEnvironment(key, valueClass, ctx, `Credential stated in ${where}; read from the environment, never stored`);
+  // A value bound to a declared secret (bindSecretValues) is a secret whatever its name says.
+  if (valueClass === VALUE_CLASS.RUNTIME || declaredByProject || stated.envVar || (stated.sensitive && !ctx.profile?.credentialsInFixture)) {
+    return boundToEnvironment(key, valueClass, ctx, `Credential stated in ${where}; read from the environment, never stored`, stated.envVar);
   }
   if (stated.value === undefined) return null;
   return { valueClass, entry: literalEntry(key, stated.value, VALUE_SOURCE.REQUIREMENT, valueClass, `Copied from ${where}`) };
@@ -252,13 +257,28 @@ export function effectiveValueClass(key: string, credentialsInFixture = false): 
 }
 
 /**
+ * The class the policy resolves a placeholder under. A credential the AUT profile declares ("validEmail" →
+ * APP_EMAIL) is a credential whatever its name suggests: "validEmail" reads as a synthetic email, and generating one
+ * would sign in with an address no account has. So it is bound to its variable — never generated, and a human answer
+ * must name a variable rather than type the value.
+ * @param {string} key
+ * @param {ProfileValues | null} profile
+ * @returns {ValueClass}
+ */
+export function policyValueClass(key: string, profile: ProfileValues | null): ValueClass {
+  const inFixture = Boolean(profile?.credentialsInFixture);
+  const declaredCredential = Object.keys(profile?.credentialEnvVars || {}).some((name) => name.toLowerCase() === key.toLowerCase());
+  return declaredCredential && !inFixture ? VALUE_CLASS.RUNTIME : effectiveValueClass(key, inFixture);
+}
+
+/**
  * Resolves one placeholder under the value policy.
  * @param {string} key - Placeholder name without braces
  * @param {PolicyContext} ctx
  * @returns {PolicyResult} An entry, or no entry with the reason it stays unresolved
  */
 export function resolvePlaceholder(key: string, ctx: PolicyContext): PolicyResult {
-  const valueClass = effectiveValueClass(key, Boolean(ctx.profile?.credentialsInFixture));
+  const valueClass = policyValueClass(key, ctx.profile);
   const human = fromHuman(key, valueClass, ctx);
   if (human) return { valueClass, entry: human };
   const stated = fromRequirement(key, valueClass, ctx) || fromProfile(key, valueClass, ctx);

@@ -13,6 +13,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { allProjectSecrets, secretsIn } from '../aut/knownSecrets';
 
 
 interface ManifestInput {
@@ -55,7 +56,6 @@ function sharedPlaceholderValues(perTCData: Record<string, any>): Map<string, un
  * - Placeholders used by several test cases with the same value are promoted to a root key.
  * - Other values are stored per test case as `<TCKEY>_<placeholder>` (e.g. `TC004_validName`).
  * - Sensitive, runtime and unresolved entries are skipped.
- * - Generic boundary primitives are included for edge-case tests.
  * @param {any} manifest - Agent 04 manifest (`perTCData`, optional `requirementValues`)
  * @param {Record<string, any>} [explicitValues] - Caller-provided values; override requirement values
  * @returns {Record<string, any>}
@@ -77,21 +77,6 @@ export function buildFlatTestData(manifest: any, explicitValues?: Record<string,
     }
   }
 
-  Object.assign(flat, {
-    stringMin: 'A',
-    stringUnderMin: '',
-    stringLong: 'A'.repeat(1001),
-    stringSpecialChars: '#%&<>!@$^*()',
-    stringUnicode: '🚀 中文 العربية Ñ',
-    stringWhitespace: '   ',
-    numberMin: 0,
-    numberMax: 2147483647,
-    numberUnderMin: -1,
-    numberOverMax: 2147483648,
-    numberZero: 0,
-    numberNegative: -999,
-    numberDecimal: 0.001,
-  });
   return flat;
 }
 
@@ -113,6 +98,28 @@ export function syncFixturesFileFromTestData(
 }
 
 /**
+ * Drops every fixture value that holds a secret an AUT profile declares — including one an earlier run already wrote.
+ * The fixture file is committed; a secret reaches it by value under a name no credential binding covers (a requirement
+ * quoting the login email as "userEmail"). Tests read secrets from the environment, never from the fixture.
+ * @param {Record<string, any>} values
+ * @returns {Record<string, any>}
+ */
+function withoutSecrets(values: Record<string, any>): Record<string, any> {
+  const secrets = allProjectSecrets(process.env);
+  if (secrets.length === 0) return values;
+  const kept: Record<string, any> = {};
+  const dropped: string[] = [];
+  for (const [key, value] of Object.entries(values)) {
+    if (secretsIn(JSON.stringify(value ?? null), secrets).length > 0) dropped.push(key);
+    else kept[key] = value;
+  }
+  if (dropped.length > 0) {
+    console.warn(`[FixtureSync] Left ${dropped.length} value(s) holding a secret out of the fixture: ${dropped.join(', ')}`);
+  }
+  return kept;
+}
+
+/**
  * The only writer of a project's fixture file. Merges into what is already there: one file serves
  * every requirement of the project, and its specs import it by key, so a requirement that defines
  * fewer keys must not delete the keys another requirement's generated tests depend on.
@@ -129,7 +136,7 @@ export function writeFixtureFile(targetPath: string, values: Record<string, any>
   } catch {
     // No fixture file yet, or one this framework did not write: start from the given values alone.
   }
-  const merged = { ...existing, ...values };
+  const merged = withoutSecrets({ ...existing, ...values });
   fs.mkdirSync(path.dirname(targetPath), { recursive: true });
   fs.writeFileSync(targetPath, `${JSON.stringify(merged, null, 2)}\n`, 'utf-8');
   return merged;

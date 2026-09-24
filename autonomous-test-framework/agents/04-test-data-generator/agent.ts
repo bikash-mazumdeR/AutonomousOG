@@ -19,7 +19,7 @@ import { approvalGate } from '../../core/approval-gate/ApprovalGate';
 import { Logger } from '../../core/logger/Logger';
 import { FRAMEWORK_CONFIG } from '../../config/framework.config';
 import { isAutomationApproved, reviewExclusionReason } from '../../core/types';
-import { syncFixturesFileFromTestData } from '../../core/state-manager/FixtureSync';
+import { buildFlatTestData, syncFixturesFileFromTestData } from '../../core/state-manager/FixtureSync';
 import { projectPaths } from '../../core/aut/projectPaths';
 import { ClarificationStore } from '../../core/clarifications/ClarificationStore';
 import { CREDENTIAL_STORAGE, loadAutProfile } from '../../core/aut/AutProfile';
@@ -27,7 +27,7 @@ import { STAGE_ID, VALUE_SOURCE } from './constants';
 import { VALUE_CLASS } from './placeholderIntent';
 import { ProfileValues, resolvePlaceholder } from './valuePolicy';
 import {
-  collectEndpoints, collectRequirementValues, indexAnswers, indexOverrides, literalRequirementValues,
+  collectEndpoints, bindSecretValues, collectRequirementValues, indexAnswers, indexOverrides, literalRequirementValues,
 } from './valueSources';
 import {
   EnvironmentIssue, UnresolvedPlaceholder, describeDataClarifications, syncDataClarifications,
@@ -47,42 +47,11 @@ const NO_LLM_REASON = 'Agent 04 resolves every {{placeholder}} with a determinis
   + 'the AUT profile, environment-variable references for credentials and secrets, and generated synthetic inputs. It makes no LLM call, so a run uses 0 tokens.';
 const NEXT_STAGE = '05-playwright-script-generator';
 
-const SKILL_PATH = path.resolve(__dirname, '../../skills/test-data-generation.md');
 const MEMORY_RULE_ID = 'RULE-04-DATA-PATTERNS';
 const PLACEHOLDER_TOKEN = /\{\{[a-zA-Z][a-zA-Z0-9]*\}\}/g;
 const QUOTED_PLACEHOLDER = /"\{\{([a-zA-Z][a-zA-Z0-9]*)\}\}"/g;
-const MALFORMED_PAYLOAD = '{ broken json }';
 const UNRESOLVED_SUGGESTION = 'Answer the Agent 04 clarification, or set the value (for a credential: the environment variable name) in the Agent 04 UI.';
 const VAULT_NOTE = 'Credentials, secrets and other runtime values are environment variable references; their values are never stored.';
-
-/** Generic edge-case boundary data sets (application-agnostic). */
-const BOUNDARY_LIBRARY = Object.freeze({
-  strings: {
-    min: 1,
-    max: 255,
-    minValue: 'A',
-    maxValue: 'A'.repeat(255),
-    underMin: '',
-    overMax: 'A'.repeat(256),
-    zero: '',
-    longString: 'A'.repeat(1001),
-    specialChars: '#%&<>!@$^*()',
-    unicode: '🚀 中文 العربية Ñ',
-    whitespace: '   ',
-    sqlInject: "' OR '1'='1'; DROP TABLE users;--",
-    xssPayload: "<script>alert('aria-xss-test')</script>",
-  },
-  numbers: {
-    min: 0,
-    max: 2147483647,
-    underMin: -1,
-    overMax: 2147483648,
-    zero: 0,
-    negative: -999,
-    decimal: 0.001,
-    maxDecimal: 999999999.99,
-  },
-});
 
 // ─── TestDataGeneratorAgent ───────────────────────────────────────────────────
 
@@ -93,11 +62,8 @@ const BOUNDARY_LIBRARY = Object.freeze({
 class TestDataGeneratorAgent {
   private readonly _logger: Logger;
 
-  private readonly _skill: string;
-
   constructor() {
     this._logger = new Logger(STAGE_ID);
-    this._skill = this._loadSkill();
   }
 
   // ── Entry Point ──────────────────────────────────────────────────────────
@@ -235,16 +201,63 @@ class TestDataGeneratorAgent {
    * @private
    */
   _buildSources(input: any, memoryContext: any, store: ClarificationStore, approved: any[]): any {
-    const analysis = input.analyzedRequirements || {};
-    return {
+    return this._sourcesFrom({
       seedBase: FRAMEWORK_CONFIG.projectId,
-      answers: indexAnswers(store.listResolvedFor(STAGE_ID)),
-      overrides: indexOverrides(input.previousTestData, approved),
-      requirementValues: collectRequirementValues(analysis),
-      endpoints: collectEndpoints(analysis),
+      analysis: input.analyzedRequirements || {},
       profile: this._loadProfile(),
-      memory: this._loadMemoryPatterns(memoryContext),
       env: process.env,
+      answers: store.listResolvedFor(STAGE_ID),
+      overrides: indexOverrides(input.previousTestData, approved),
+      memory: this._loadMemoryPatterns(memoryContext),
+    });
+  }
+
+  /**
+   * The sources shared by all test cases, from explicit inputs — the one place a run and an evaluation build them.
+   * @private
+   */
+  _sourcesFrom({
+    seedBase, analysis, profile, env, answers, overrides, memory,
+  }: {
+    seedBase: string; analysis: any; profile: ProfileValues | null; env: Record<string, string | undefined>;
+    answers: any[]; overrides: any; memory: Record<string, unknown>;
+  }): any {
+    return {
+      seedBase,
+      answers: indexAnswers(answers),
+      overrides,
+      // A value the requirement states that is really a secret is bound to its variable before anything can use it.
+      requirementValues: bindSecretValues(collectRequirementValues(analysis), profile, env),
+      endpoints: collectEndpoints(analysis),
+      profile,
+      memory,
+      env,
+    };
+  }
+
+  /**
+   * Resolution exactly as the stage performs it — the value policy for every placeholder, the requirement values kept
+   * for the fixture and the flat fixture itself — from an explicit profile, environment and answers, without the
+   * clarification store, memory, disk or approval gate. Used by the Agent 04 catalogue.
+   * @param {{ testCases: any[], analysis: any, profile: ProfileValues | null, env: Record<string, string | undefined>, answers?: any[] }} input
+   * @returns {{ perTCData: Record<string, any>, unresolved: any[], envIssues: any[], requirementValues: Record<string, string>, fixture: Record<string, any> }}
+   */
+  resolveForEval({
+    testCases, analysis, profile, env, answers = [],
+  }: { testCases: any[]; analysis: any; profile: ProfileValues | null; env: Record<string, string | undefined>; answers?: any[] }) {
+    const sources = this._sourcesFrom({
+      seedBase: 'catalogue', analysis, profile, env, answers, overrides: new Map(), memory: {},
+    });
+    const resolution = this._resolveAll(testCases, sources);
+    const requirementValues = literalRequirementValues(
+      sources.requirementValues,
+      Boolean(profile?.credentialsInFixture),
+      Object.keys(profile?.credentialEnvVars || {}),
+    );
+    return {
+      ...resolution,
+      requirementValues,
+      fixture: buildFlatTestData({ requirementValues, perTCData: resolution.perTCData }),
     };
   }
 
@@ -290,11 +303,10 @@ class TestDataGeneratorAgent {
     }
 
     const apiPayload = tc.type === 'API' && tc.apiDetails?.requestBody ? this._resolveAPIPayload(tc.apiDetails.requestBody, inputs) : null;
-    const boundaryData = tc.type === 'Edge' ? this._buildBoundaryData(tc) : null;
 
     return {
       data: {
-        tcKey: tc.key, tcHash: tc.hash || null, type: tc.type, inputs, apiPayload, boundaryData, unresolved: unresolved.map((u) => u.placeholder),
+        tcKey: tc.key, tcHash: tc.hash || null, type: tc.type, inputs, apiPayload, unresolved: unresolved.map((u) => u.placeholder),
       },
       unresolved,
       envIssues,
@@ -333,27 +345,6 @@ class TestDataGeneratorAgent {
   }
 
   /**
-   * Builds boundary data object for edge TCs.
-   * @private
-   */
-  _buildBoundaryData(tc: any): any {
-    const name = String(tc.name || '').toLowerCase();
-
-    if (name.includes('min')) return { type: 'MIN_BOUNDARY', value: BOUNDARY_LIBRARY.strings.minValue, numeric: BOUNDARY_LIBRARY.numbers.min };
-    if (name.includes('max')) return { type: 'MAX_BOUNDARY', value: BOUNDARY_LIBRARY.strings.maxValue, numeric: BOUNDARY_LIBRARY.numbers.max };
-    if (name.includes('long')) return { type: 'LONG_STRING', value: BOUNDARY_LIBRARY.strings.longString };
-    if (name.includes('special')) return { type: 'SPECIAL_CHARS', value: BOUNDARY_LIBRARY.strings.specialChars };
-    if (name.includes('unicode')) return { type: 'UNICODE', value: BOUNDARY_LIBRARY.strings.unicode };
-    if (name.includes('whitespace')) return { type: 'WHITESPACE', value: BOUNDARY_LIBRARY.strings.whitespace };
-    if (name.includes('zero')) return { type: 'ZERO', value: 0, string: '' };
-    if (name.includes('sql')) return { type: 'SQL_INJECT', value: BOUNDARY_LIBRARY.strings.sqlInject };
-    if (name.includes('xss')) return { type: 'XSS', value: BOUNDARY_LIBRARY.strings.xssPayload };
-    if (name.includes('concurrent')) return { type: 'CONCURRENT', parallelRequests: 2 };
-
-    return { type: 'GENERIC_EDGE', value: BOUNDARY_LIBRARY.strings.specialChars };
-  }
-
-  /**
    * Builds a reusable API payload library from the resolved API test cases.
    * @private
    */
@@ -364,11 +355,7 @@ class TestDataGeneratorAgent {
       .forEach((tc) => {
         const key = `${tc.apiDetails.method} ${tc.apiDetails.endpoint}`;
         if (library[key]) return;
-        library[key] = {
-          valid: perTCData[tc.key]?.apiPayload ?? tc.apiDetails.requestBody ?? null,
-          invalid: { field: null, missing: true },
-          malformed: MALFORMED_PAYLOAD,
-        };
+        library[key] = { valid: perTCData[tc.key]?.apiPayload ?? tc.apiDetails.requestBody ?? null };
       });
     return library;
   }
@@ -409,7 +396,6 @@ class TestDataGeneratorAgent {
       runtimeBindings: totals.runtimeBindings,
       environmentConfig: { name: FRAMEWORK_CONFIG.environment, baseUrlEnv: sources.profile?.baseUrlEnv || null },
       perTCData: resolution.perTCData,
-      boundaryLibrary: BOUNDARY_LIBRARY,
       apiPayloadLibrary: this._buildAPIPayloadLibrary(approved, resolution.perTCData),
       sensitiveDataVault: { note: VAULT_NOTE, refs: totals.sensitiveRefs },
 
@@ -578,11 +564,6 @@ class TestDataGeneratorAgent {
     const flatTestData = syncFixturesFileFromTestData(manifest, undefined, fixtureFile);
 
     this._logger.info('Test data saved to disk (flat fixtures synced)', { outDir, fixturesDir, keysCount: Object.keys(flatTestData).length });
-  }
-
-  /** @private */
-  _loadSkill(): string {
-    try { return fs.readFileSync(SKILL_PATH, 'utf-8'); } catch { return ''; }
   }
 }
 

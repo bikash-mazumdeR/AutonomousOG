@@ -28,7 +28,8 @@ function isObject(value: unknown): value is Record<string, unknown> {
 
 function editOptions(): EditOptions {
   try {
-    return { credentialsInFixture: loadAutProfile(stateManager.getProjectId()).auth.credentialStorage === CREDENTIAL_STORAGE.FIXTURE };
+    const profile = loadAutProfile(stateManager.getProjectId());
+    return { credentialsInFixture: profile.auth.credentialStorage === CREDENTIAL_STORAGE.FIXTURE, credentialEnvVars: profile.auth.credentialEnvVars || {} };
   } catch (_) {
     return {};
   }

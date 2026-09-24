@@ -33,7 +33,11 @@ const SECRET_WORDS = [...PASSWORD_WORDS, 'secret', 'token', 'jwt', 'apikey', 'cr
 const EXPECTATION_WORDS = ['message', 'error', 'text', 'title', 'label', 'heading', 'description', 'desc', 'tooltip', 'notification'];
 const MEASURE_WORDS = ['length', 'max', 'min', 'maximum', 'minimum', 'count', 'limit', 'size', 'timeout'];
 const BOUNDARY_WORDS = ['long', 'special', 'unicode', 'whitespace', 'sql', 'injection', 'xss', 'script'];
-const SYNTHETIC_QUALIFIERS = ['valid', 'new', 'random', 'unique', 'synthetic', 'test'];
+/** A value chosen to differ from the real one ("differentPassword", "mismatchedConfirmPassword"): made up, never a secret. */
+export const DIFFERENT_WORDS: readonly string[] = Object.freeze(['different', 'mismatched', 'mismatch', 'unmatched', 'another']);
+/** The shortest possible input ("shortPassword", "singleCharEmail"): made up, never a secret. */
+export const SHORT_WORDS: readonly string[] = Object.freeze(['short', 'single']);
+const SYNTHETIC_QUALIFIERS = ['valid', 'new', 'random', 'unique', 'synthetic', 'test', 'unused', 'fresh'];
 const SYNTHETIC_CORES: readonly string[][] = [['name'], ['first', 'name'], ['last', 'name'], ['full', 'name'], ['email'], ['email', 'address']];
 /** Names ending in these words identify an account ("lockedOutUser", "adminAccount"), which is a credential. */
 const ACCOUNT_WORDS = ['user', 'account', 'login'];
@@ -88,8 +92,15 @@ function subjectOf(words: string[]): Subject | null {
   return null;
 }
 
+/**
+ * A deliberately made-up input: wrong, arbitrary, case-variant, different from the real value, shortest possible or a
+ * boundary string. Such a value is generated, never read from the environment as a secret — even when it is a password.
+ */
 function isDeliberateInput(words: string[]): boolean {
-  return hasAny(words, NEGATIVE_WORDS) || hasAny(words, ARBITRARY_WORDS) || hasAny(words, CASE_WORDS);
+  return hasAny(words, NEGATIVE_WORDS) || hasAny(words, ARBITRARY_WORDS) || hasAny(words, CASE_WORDS)
+    || hasAny(words, DIFFERENT_WORDS) || hasAny(words, SHORT_WORDS) || hasPhrase(words, ['too', 'long'])
+    // "long" alone is no boundary: a "longLivedToken" is a real secret, a "tooLongPassword" is made up.
+    || hasAny(words, BOUNDARY_WORDS.filter((word) => word !== 'long'));
 }
 
 /**
@@ -161,6 +172,10 @@ export function resolveByIntent(key: string, values: IntentValues): IntentResolu
   if (hasAny(words, ARBITRARY_WORDS)) {
     const value = subject === 'username' ? `aria_sample_user_${values.seed}` : `Aria_Sample_${values.seed}!`;
     return { value, note: `Synthetic ${subject} for input-handling checks` };
+  }
+  if (hasAny(words, DIFFERENT_WORDS)) {
+    const value = subject === 'username' ? `aria_other_user_${values.seed}` : `Aria_Different_${values.seed}!`;
+    return { value, note: `Synthetic ${subject} that differs from the real one` };
   }
   return null;
 }

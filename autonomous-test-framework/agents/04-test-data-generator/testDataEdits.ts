@@ -8,9 +8,10 @@
 
 import { buildFlatTestData } from '../../core/state-manager/FixtureSync';
 import { isEnvVarName } from '../../core/aut/envVarNames';
+import { isNonAnswer } from '../../core/clarifications/answerQuality';
 import { RUNTIME_TYPE, VALUE_SOURCE } from './constants';
 import { RUNTIME_SENTINEL, VALUE_CLASS } from './placeholderIntent';
-import { ValueEntry, effectiveValueClass, inferDataType } from './valuePolicy';
+import { ValueEntry, inferDataType, policyValueClass } from './valuePolicy';
 
 /** @enum {string} Kinds of edit the Agent 04 UI sends. */
 export const EDIT_TYPE = Object.freeze({
@@ -40,6 +41,8 @@ export interface EditOutcome {
 export interface EditOptions {
   /** Credentials may be set as values (AUT profile `auth.credentialStorage: "fixture"`). */
   credentialsInFixture?: boolean;
+  /** Credential placeholders the AUT profile binds to environment variables; they only ever take a variable name. */
+  credentialEnvVars?: Record<string, string>;
 }
 
 /** Input totals of a manifest. */
@@ -86,7 +89,14 @@ function isUnchanged(existing: any, value: unknown): boolean {
 }
 
 function overrideEntry(name: string, value: unknown, options: EditOptions): { entry?: ValueEntry; error?: string } {
-  const valueClass = effectiveValueClass(name, Boolean(options.credentialsInFixture));
+  // "N/A" or "skip" declines to answer; taken as a value it would be typed into the application as test data.
+  if (typeof value === 'string' && isNonAnswer(value)) {
+    return { error: `"${value}" is not a value for {{${name}}}: enter the value the test should use (for a credential, its environment variable name), or leave it unset.` };
+  }
+  // The same class the value policy resolves under: a declared credential takes a variable name, never its value.
+  const valueClass = policyValueClass(name, {
+    credentialEnvVars: options.credentialEnvVars || {}, secretsEnvVars: [], credentialsInFixture: options.credentialsInFixture,
+  });
   if (valueClass !== VALUE_CLASS.RUNTIME) {
     return { entry: { value, type: inferDataType(name, value), sensitive: false, source: VALUE_SOURCE.USER_OVERRIDE, note: UI_NOTE, valueClass } };
   }

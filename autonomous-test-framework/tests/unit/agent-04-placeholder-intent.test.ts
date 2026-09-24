@@ -67,3 +67,36 @@ describe('Agent 04 placeholder intent', () => {
     expect(cases.map(([key]) => [key, classifyPlaceholder(key)])).toEqual(cases);
   });
 });
+
+describe('Agent 04 — deliberately made-up inputs are never treated as secrets', () => {
+  const { resolvePlaceholder } = jest.requireActual('../../agents/04-test-data-generator/valuePolicy');
+  const ctx: any = {
+    tc: { key: 'TC-001' }, seed: 'ab12cd34', answers: new Map(), overrides: new Map(), requirementValues: [], endpoints: [], profile: null, memory: {}, env: {},
+  };
+
+  it.each([
+    ['differentPassword', 'Aria_Different_ab12cd34!'],
+    ['mismatchedConfirmPassword', 'Aria_Different_ab12cd34!'],
+    ['shortPassword', 'a'],
+    ['singleCharPassword', 'a'],
+    ['singleCharEmail', 'a'],
+    ['tooLongPassword', 'A'.repeat(1001)],
+    ['unusedEmail', 'aria_test_ab12cd34@example.test'],
+  ])('%s is generated, not read from the environment', (name, value) => {
+    expect(classifyPlaceholder(name)).toBe('GENERATABLE');
+    expect(isSensitivePlaceholder(name)).toBe(false);
+    expect(resolvePlaceholder(name, ctx).entry).toMatchObject({ value, source: 'generated', sensitive: false });
+  });
+
+  it.each([
+    ['validPassword', 'RUNTIME'],
+    ['newPassword', 'RUNTIME'],
+    ['apiToken', 'RUNTIME'],
+    ['longLivedToken', 'RUNTIME'],
+    ['minLengthPassword', 'GROUNDED'],
+    ['maxLengthPassword', 'GROUNDED'],
+    ['otherUserEmail', 'GROUNDED'],
+  ])('%s keeps its class (%s): a real secret, or a value that depends on the application', (name, valueClass) => {
+    expect(classifyPlaceholder(name)).toBe(valueClass);
+  });
+});
