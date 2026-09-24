@@ -11,7 +11,7 @@ import {
 } from '@playwright/test';
 import {
   ACCOUNT_IDENTIFIER_MEMBER, CONTAINER_ROLES, CONTENT_NAMED_ROLES, DISCOVERY_MARK_ATTRIBUTE, DISCOVERY_SETTINGS, DYNAMIC_ID_HEURISTICS,
-  OVERLAY_ROLES,
+  LIVE_REGION_ROLES, OVERLAY_ROLES,
 } from '../constants';
 import { ExtraLocator } from '../../../core/aut/AutProfile';
 import {
@@ -35,6 +35,13 @@ export interface RawElement {
    * the rest of the page. Role locators cannot reach it; text, placeholder and id locators still can.
    */
   ariaHidden?: boolean;
+  /**
+   * Plain text with no role of its own — a dialog's description, a toast's message — collected inside an open
+   * overlay or a live region only, so a test can assert what that overlay or message says. Addressed by its text.
+   */
+  staticText?: boolean;
+  /** The text sits in a live region: a status message the application shows after an action and removes on its own. */
+  live?: boolean;
 }
 
 /** Discovery session options (from the AUT profile). */
@@ -129,6 +136,7 @@ export function isDynamicValue(value: string, patterns: RegExp[]): boolean {
  * @returns {Candidate[]}
  */
 export function candidateLocators(raw: RawElement, options: Pick<DiscoveryOptions, 'testIdAttribute' | 'dynamicIdPatterns'>): Candidate[] {
+  if (raw.staticText) return raw.text ? [{ strategy: 'text', args: [raw.text] }] : [];
   const candidates: Candidate[] = [];
   const role = raw.ariaHidden ? undefined : raw.role;
   if (raw.testId && options.testIdAttribute && !isDynamicValue(raw.testId, options.dynamicIdPatterns)) {
@@ -203,16 +211,29 @@ export function toLocator(page: Page, candidate: Candidate, env: NodeJS.ProcessE
  * @returns {string}
  */
 export function elementBaseName(raw: RawElement): string {
-  const source = raw.testId || raw.label || raw.placeholder || raw.name || raw.id;
-  const suffix = raw.inputType === 'password' || (raw.tag === 'input' && !raw.role)
-    ? 'Input'
-    : (ROLE_SUFFIX[raw.role || ''] || 'Element');
+  const source = raw.staticText ? raw.text : raw.testId || raw.label || raw.placeholder || raw.name || raw.id;
+  let suffix = raw.staticText ? 'Text' : (ROLE_SUFFIX[raw.role || ''] || 'Element');
+  if (raw.inputType === 'password' || (raw.tag === 'input' && !raw.role)) suffix = 'Input';
   // Nothing names it: the role is the identity ("menu", "alertdialog"), not "menuMenu".
   if (!source) return toCamel((raw.role || raw.tag).split(/[^a-zA-Z0-9]+/).filter(Boolean));
   const words = source.split(/[^a-zA-Z0-9]+/).filter(Boolean).slice(0, 5);
   let base = toCamel(words.length > 0 ? words : [raw.role || raw.tag]);
   if (/^[0-9]/.test(base)) base = `element${base}`;
   return base.toLowerCase().endsWith(suffix.toLowerCase()) ? base : `${base}${suffix}`;
+}
+
+/**
+ * What the page contract says about a static text element, so the body generator knows a status message is
+ * transient and asserts it straight after the action that raises it.
+ * @param {RawElement} raw
+ * @returns {string | undefined}
+ */
+export function describeStaticText(raw: RawElement): string | undefined {
+  if (!raw.staticText) return undefined;
+  return raw.live
+    ? 'status message (toast / notification) the application shows after the action that triggers it and removes on '
+      + 'its own a few seconds later — assert it right after that action'
+    : 'static text';
 }
 
 /** A collected element plus the mark that addresses it for its accessibility snapshot. */
@@ -244,17 +265,25 @@ export function detectOverlay(raws: RawElement[]): StateOverlay | undefined {
  * @param {string} [testIdAttribute]
  * @returns {Promise<MarkedElement[]>}
  */
+/**
+ * The elements the inventory collects by themselves: interactive, landmark, heading and test-id elements.
+ * @param {string} [testIdAttribute]
+ * @returns {string} CSS selector list
+ */
+function inventorySelector(testIdAttribute?: string): string {
+  return [
+    'input:not([type="hidden"])', 'textarea', 'select', 'button', 'a[href]', '[role]',
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'img[alt]', '[aria-live]', testIdAttribute ? `[${testIdAttribute}]` : '',
+  ].filter(Boolean).join(',');
+}
+
 async function inventoryDom(page: Page, testIdAttribute?: string): Promise<MarkedElement[]> {
   return page.evaluate(({
-    attr, mark, maxText, maxElements, contentNamedRoles,
+    attr, selector, mark, maxText, maxElements, contentNamedRoles,
   }) => {
     const win: any = globalThis as any;
     const doc: any = win.document;
     const clean = (value: any) => (typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '');
-    const selector = [
-      'input:not([type="hidden"])', 'textarea', 'select', 'button', 'a[href]', '[role]',
-      'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'img[alt]', '[aria-live]', attr ? `[${attr}]` : '',
-    ].filter(Boolean).join(',');
     const implicitRole = (el: any, tag: string, type: string): string | undefined => {
       if (el.getAttribute('role')) return el.getAttribute('role');
       if (tag === 'button' || (tag === 'input' && ['submit', 'button', 'reset'].includes(type))) return 'button';
@@ -301,10 +330,69 @@ async function inventoryDom(page: Page, testIdAttribute?: string): Promise<Marke
     return results;
   }, {
     attr: testIdAttribute || '',
+    selector: inventorySelector(testIdAttribute),
     mark: DISCOVERY_MARK_ATTRIBUTE,
     maxText: DISCOVERY_SETTINGS.MAX_TEXT_LENGTH,
     maxElements: DISCOVERY_SETTINGS.MAX_ELEMENTS_PER_STATE,
     contentNamedRoles: [...CONTENT_NAMED_ROLES],
+  });
+}
+
+/**
+ * Inventories plain text the element inventory cannot see (runs in the browser): the leaf text of the topmost open
+ * overlay (a dialog's description, a menu's account line) and of every visible live region (a toast's title and
+ * message). Text inside an element the inventory already addresses (a button, a link, a heading) is left to that
+ * element, and a visually hidden announcer — the 1px copy screen readers read out — is not text a user sees.
+ * Marks nothing: it also runs while an action settles, and a DOM mutation would restart the quiet window.
+ * @param {Page} page
+ * @param {string} [testIdAttribute]
+ * @param {boolean} [liveOnly] - Live regions only (the settle-time poll)
+ * @returns {Promise<MarkedElement[]>}
+ */
+async function inventoryStaticText(page: Page, testIdAttribute?: string, liveOnly = false): Promise<MarkedElement[]> {
+  return page.evaluate(({
+    selector, overlayRoles, liveRoles, maxText, liveOnly: onlyLive,
+  }) => {
+    const win: any = globalThis as any;
+    const doc: any = win.document;
+    const clean = (value: any) => (typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '');
+    const seen = (el: any) => {
+      const rect = el.getBoundingClientRect();
+      const style = win.getComputedStyle(el);
+      return rect.width > 1 && rect.height > 1 && style.visibility !== 'hidden' && style.display !== 'none';
+    };
+    const containers: Array<{ el: any; live: boolean }> = [];
+    if (!onlyLive) {
+      const overlay = overlayRoles
+        .map((role: string) => (Array.from(doc.querySelectorAll(`[role="${role}"]`)) as any[]).filter(seen).pop())
+        .find(Boolean);
+      if (overlay) containers.push({ el: overlay, live: false });
+    }
+    const liveSelector = [...liveRoles.map((role: string) => `[role="${role}"]`), '[aria-live="polite"]', '[aria-live="assertive"]'].join(',');
+    (Array.from(doc.querySelectorAll(liveSelector)) as any[]).filter(seen).forEach((el) => containers.push({ el, live: true }));
+    const taken = new Set<any>();
+    const results: any[] = [];
+    for (const { el: container, live } of containers) {
+      for (const el of Array.from(container.querySelectorAll('*')) as any[]) {
+        if (taken.has(el) || el.children.length > 0 || el.closest('svg') || !seen(el)) continue;
+        const holder = el.closest(selector);
+        // Text inside an element the inventory addresses belongs to it; a live region's own [role] does not count.
+        if (holder && holder !== container && container.contains(holder)) continue;
+        const text = clean(el.innerText);
+        if (!text || text.length > maxText) continue;
+        taken.add(el);
+        results.push({
+          mark: -1, tag: el.tagName.toLowerCase(), text, staticText: true, ...(live ? { live: true } : {}),
+        });
+      }
+    }
+    return results;
+  }, {
+    selector: inventorySelector(testIdAttribute),
+    overlayRoles: [...OVERLAY_ROLES],
+    liveRoles: [...LIVE_REGION_ROLES],
+    maxText: DISCOVERY_SETTINGS.MAX_TEXT_LENGTH,
+    liveOnly,
   });
 }
 
@@ -340,7 +428,7 @@ async function annotateAccessibleNames(page: Page, elements: MarkedElement[]): P
  * @returns {Promise<RawElement[]>}
  */
 export async function collectRawElements(page: Page, testIdAttribute?: string): Promise<RawElement[]> {
-  const marked = await inventoryDom(page, testIdAttribute);
+  const marked = [...await inventoryDom(page, testIdAttribute), ...await inventoryStaticText(page, testIdAttribute)];
   try {
     await annotateAccessibleNames(page, marked);
   } finally {
@@ -349,6 +437,17 @@ export async function collectRawElements(page: Page, testIdAttribute?: string): 
     }, DISCOVERY_MARK_ATTRIBUTE).catch(() => undefined);
   }
   return marked.map(({ mark, ...raw }) => raw);
+}
+
+/**
+ * The status messages the page shows right now (live-region text only). Cheap and mark-free, so it can poll while an
+ * action settles.
+ * @param {Page} page
+ * @param {string} [testIdAttribute]
+ * @returns {Promise<RawElement[]>}
+ */
+export async function collectStatusMessages(page: Page, testIdAttribute?: string): Promise<RawElement[]> {
+  return (await inventoryStaticText(page, testIdAttribute, true)).map(({ mark, ...raw }) => raw);
 }
 
 /** A live browser session used for discovery. */
@@ -361,6 +460,8 @@ export class DiscoverySession {
   /** Requests the current page has started but not finished. */
   private _inFlight = 0;
   private _accountIdentifier?: AccountIdentifier;
+  /** Status messages verified while the last action settled, for the state captured next. */
+  private _statusMessages: PageElement[] = [];
 
   private constructor(private readonly _options: DiscoveryOptions, private readonly _browser: Browser, context: BrowserContext, page: Page) {
     this._context = context;
@@ -403,6 +504,7 @@ export class DiscoverySession {
     const { context, page } = await DiscoverySession._newContext(this._browser, this._options);
     this._context = context;
     this.page = page;
+    this._statusMessages = [];
     this._trackRequests(page);
   }
 
@@ -416,6 +518,7 @@ export class DiscoverySession {
     // has fully arrived — minutes after the page is interactive, or never on a degraded link. The
     // page would then time out with an empty map, reported as "no verifiable elements" on an
     // application that had in fact rendered. Readiness is judged by what the document contains.
+    this._statusMessages = [];
     await this.page.goto(pathname, { waitUntil: 'commit' });
     await this._waitForInteractiveDom();
     await this.settle();
@@ -425,12 +528,15 @@ export class DiscoverySession {
    * Resolves once the document holds something discovery could verify, or the navigation budget
    * runs out. Bounded and non-throwing: a page that legitimately renders nothing is captured as the
    * empty state it is, and the test cases that needed an element report that precisely.
+   *
+   * "Something to verify" is whatever the inventory collects, headings and test ids included: a page whose only
+   * content is a heading has rendered, and waiting for a control it will never show costs the whole budget.
    */
   private async _waitForInteractiveDom(): Promise<void> {
     try {
       await this.page.waitForFunction(
-        () => (globalThis as any).document.querySelectorAll('input, button, a, select, textarea, [role]').length > 0,
-        undefined,
+        (selector) => (globalThis as any).document.querySelectorAll(selector).length > 0,
+        inventorySelector(this._options.testIdAttribute),
         { timeout: DISCOVERY_SETTINGS.NAVIGATION_TIMEOUT_MS },
       );
     } catch {
@@ -513,9 +619,10 @@ export class DiscoverySession {
    */
   async captureState(knownStates: ReadonlyArray<PageState>, entryPath?: string, reloadVerify = false): Promise<PageState> {
     const urlPath = this.currentPath();
-    const raws = await collectRawElements(this.page, this._options.testIdAttribute);
+    const raws = this._withoutAccountIdentifier(await collectRawElements(this.page, this._options.testIdAttribute));
     const overlay = detectOverlay(raws);
     let elements = await this._verifyElements(raws, overlay !== undefined);
+    elements = [...elements, ...this._takeStatusMessages(elements)];
     elements = [...elements, ...await this._verifyExtraLocators(elements)];
     elements = [...elements, ...await this._verifyAccountIdentifier(elements)];
     if (reloadVerify) {
@@ -533,6 +640,63 @@ export class DiscoverySession {
     return {
       name: stateNameFor(urlPath, overlay, taken), urlPath, entryPath, ...(overlay ? { overlay } : {}), elements,
     };
+  }
+
+  /**
+   * Drops static text that is the signed-in account's identifier: it is account data the environment provides, so it
+   * is addressed through its variable (see _verifyAccountIdentifier) and never written into the page map.
+   */
+  private _withoutAccountIdentifier(raws: RawElement[]): RawElement[] {
+    const identifier = this._accountIdentifier?.value;
+    return identifier ? raws.filter((raw) => !(raw.staticText && raw.text?.includes(identifier))) : raws;
+  }
+
+  /** The status messages seen while the last action settled that this capture did not find itself; consumed once. */
+  private _takeStatusMessages(found: PageElement[]): PageElement[] {
+    const known = new Set(found.map((element) => locatorSignature(element)));
+    const taken = new Set(found.map((element) => element.name));
+    const messages = this._statusMessages.filter((element) => !known.has(locatorSignature(element)));
+    this._statusMessages = [];
+    return messages.map((element) => {
+      const name = uniqueName(element.name, taken);
+      taken.add(name);
+      return { ...element, name };
+    });
+  }
+
+  /** Verifies the status messages the page shows now and keeps the new ones for the next capture. Never throws. */
+  private async _pollStatusMessages(): Promise<void> {
+    try {
+      const raws = this._withoutAccountIdentifier(await collectStatusMessages(this.page, this._options.testIdAttribute));
+      const known = new Set(this._statusMessages.map((element) => locatorSignature(element)));
+      const fresh = raws.filter((raw) => !known.has(locatorSignature({ strategy: 'text', args: [raw.text as string] })));
+      this._statusMessages.push(...await this._verifyElements(fresh));
+    } catch {
+      // The document was replaced mid-poll; the next poll or the capture sees the new one.
+    }
+  }
+
+  /**
+   * Settles after an action while polling for status messages: a toast raised by the action can vanish before the
+   * page is quiet, so waiting for quiet and then capturing would miss it.
+   */
+  private async _settleWatchingStatus(): Promise<void> {
+    let settling = true;
+    const poll = (async () => {
+      while (settling) {
+        // eslint-disable-next-line no-await-in-loop -- one poll at a time, against the live page
+        await this._pollStatusMessages();
+        // eslint-disable-next-line no-await-in-loop
+        await this.page.waitForTimeout(DISCOVERY_SETTINGS.NOTIFICATION_POLL_MS).catch(() => undefined);
+      }
+    })();
+    try {
+      await this.settle(true);
+    } finally {
+      settling = false;
+      await poll;
+    }
+    await this._pollStatusMessages();
   }
 
   private async _isUnique(candidate: Candidate): Promise<boolean> {
@@ -600,8 +764,10 @@ export class DiscoverySession {
         seen.add(signature);
         const name = uniqueName(elementBaseName(raw), taken);
         taken.add(name);
+        const description = describeStaticText(raw);
         elements.push({
           name, strategy: candidate.strategy, args: candidate.args, tag: raw.tag, role: raw.role, accessibleName: raw.name, inputType: raw.inputType,
+          ...(description ? { description } : {}),
         });
         break;
       }
@@ -628,7 +794,7 @@ export class DiscoverySession {
     else if (op === 'selectOption') await locator.selectOption(value as string);
     else if (op === 'press') await locator.press(value as string);
     else throw new Error(`Unsupported discovery operation "${op}"`);
-    await this.settle(true);
+    await this._settleWatchingStatus();
   }
 
   /**

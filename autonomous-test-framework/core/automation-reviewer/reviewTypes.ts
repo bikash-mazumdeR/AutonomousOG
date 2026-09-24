@@ -11,6 +11,15 @@ export enum FILE_TYPE {
   K6 = 'k6',
 }
 
+/** The Playwright test object a spec declares tests with. */
+export const TEST_OBJECT = 'test';
+
+/** The test object a generated spec's shared signed-in session block declares its tests with (`test.extend` of TEST_OBJECT). */
+export const SESSION_TEST_OBJECT = 'sessionTest';
+
+/** Every identifier a spec may declare tests, hooks and describe blocks on. */
+export const TEST_OBJECTS: ReadonlySet<string> = new Set([TEST_OBJECT, SESSION_TEST_OBJECT]);
+
 /** @enum {string} Finding severities. */
 export enum FINDING_SEVERITY {
   BLOCKER = 'BLOCKER',

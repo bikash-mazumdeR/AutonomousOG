@@ -28,6 +28,28 @@ const START_PAGE = `<!doctype html><html><head><title>Sample</title></head><body
   <span data-qa="dup">A</span><span data-qa="dup">B</span>
 </form></body></html>`;
 
+// A profile dialog with plain-text copy, and a save that raises a short-lived toast while the page keeps mutating,
+// so the toast is gone before the page is quiet. The 1px span is the screen-reader copy of the toast.
+const PROFILE_PAGE = `<!doctype html><html><body>
+<button id="open" onclick="document.getElementById('dlg').hidden = false">Open profile</button>
+<div role="dialog" aria-labelledby="dlg-title" id="dlg" hidden>
+  <h2 id="dlg-title">My Profile</h2>
+  <p>View and edit your account information.</p>
+  <div><span>qa@example.test</span></div>
+  <button id="save">Save Changes</button>
+</div>
+<section aria-live="polite" id="toasts"></section>
+<script>
+document.getElementById('save').onclick = () => setTimeout(() => {
+  document.getElementById('toasts').innerHTML = '<li role="status"><div><div>Success</div><div>Profile updated successfully</div></div></li>'
+    + '<span role="status" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)">Notification SuccessProfile updated successfully</span>';
+  document.getElementById('dlg').hidden = true;
+  setTimeout(() => { document.getElementById('toasts').innerHTML = ''; }, 1200);
+  let tick = 0;
+  const churn = setInterval(() => { document.body.dataset.tick = String(tick += 1); if (tick > 40) clearInterval(churn); }, 100);
+}, 300);
+</script></body></html>`;
+
 const DASHBOARD_PAGE = '<!doctype html><html><body><h1 data-qa="welcome">Welcome</h1></body></html>';
 
 /** A sign-in form: email, password and a submit control that lands on the dashboard. */
@@ -196,6 +218,7 @@ describe('Agent 05 live DOM discovery', () => {
       res.writeHead(200, { 'Content-Type': 'text/html' });
       if (req.url?.startsWith('/dashboard')) res.end(DASHBOARD_PAGE);
       else if (req.url?.startsWith('/menu')) res.end(MENU_PAGE);
+      else if (req.url?.startsWith('/profile')) res.end(PROFILE_PAGE);
       else if (req.url?.startsWith('/late-auth')) res.end(LATE_AUTH_PAGE);
       else if (req.url?.startsWith('/account-auth')) res.end(ACCOUNT_AUTH_PAGE);
       else if (req.url?.startsWith('/account')) res.end(ACCOUNT_PAGE);
@@ -266,6 +289,52 @@ describe('Agent 05 live DOM discovery', () => {
         ['menu', '/menu.html', '/menu.html'], ['menuMenu', '/menu.html', undefined], ['menuLogOutDialog', '/menu.html', undefined],
       ]);
       expect(map.states[0].elements.map((e) => e.name)).toContain('blogsButton');
+    } finally {
+      await session.close();
+    }
+  });
+
+  it("captures an overlay's plain text, never the signed-in account's identifier as a literal", async () => {
+    process.env.SAMPLE_EMAIL = 'qa@example.test';
+    const session = await DiscoverySession.open({ baseURL, dynamicIdPatterns: [] });
+    const map = emptyPageMap('F-10');
+    try {
+      session.setAccountIdentifier({ envName: 'SAMPLE_EMAIL', value: 'qa@example.test' });
+      await session.goto('/profile.html');
+      const page = mergeState(map, await session.captureState(map.states, '/profile.html'));
+      await session.perform(page.elements.find((e) => e.name === 'openProfileButton')!, 'click');
+      const dialog = mergeState(map, await session.captureState(map.states));
+      const byName = Object.fromEntries(dialog.elements.map((e) => [e.name, e]));
+      expect(dialog.overlay).toEqual({ role: 'dialog', name: 'My Profile' });
+      expect(byName.viewAndEditYourAccountText).toMatchObject({ strategy: 'text', args: ['View and edit your account information.'], tag: 'p', description: 'static text' });
+      // The heading already addresses its own text, and the account's email is reached through its variable only.
+      expect(dialog.elements.filter((e) => e.args.includes('My Profile')).map((e) => e.strategy)).toEqual(['role']);
+      expect(byName.accountIdentifierText).toMatchObject({ strategy: 'env', args: ['SAMPLE_EMAIL'] });
+      expect(JSON.stringify(dialog)).not.toContain('qa@example.test');
+    } finally {
+      await session.close();
+    }
+  });
+
+  it('keeps a toast the action raised even when it is gone before the page is quiet', async () => {
+    const session = await DiscoverySession.open({ baseURL, dynamicIdPatterns: [] });
+    const map = emptyPageMap('F-11');
+    try {
+      await session.goto('/profile.html');
+      mergeState(map, await session.captureState(map.states, '/profile.html'));
+      await session.perform({ name: 'openProfileButton', strategy: 'role', args: ['button', 'Open profile'], tag: 'button' }, 'click');
+      await session.perform({ name: 'saveChangesButton', strategy: 'role', args: ['button', 'Save Changes'], tag: 'button' }, 'click');
+      const after = mergeState(map, await session.captureState(map.states));
+      const byName = Object.fromEntries(after.elements.map((e) => [e.name, e]));
+      // The toast is no longer on the page, yet its title and message are verified members of the state it led to.
+      expect(await session.page.getByText('Profile updated successfully').count()).toBe(0);
+      expect(after.overlay).toBeUndefined();
+      expect(byName.profileUpdatedSuccessfullyText).toMatchObject({
+        strategy: 'text', args: ['Profile updated successfully'], description: expect.stringContaining('status message'),
+      });
+      expect(byName.successText).toMatchObject({ strategy: 'text', args: ['Success'] });
+      // The visually hidden screen-reader copy is not text a user sees.
+      expect(after.elements.some((e) => e.args.some((arg) => arg.startsWith('Notification')))).toBe(false);
     } finally {
       await session.close();
     }

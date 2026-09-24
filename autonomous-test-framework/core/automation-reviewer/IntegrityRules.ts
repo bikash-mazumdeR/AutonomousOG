@@ -9,7 +9,9 @@
  */
 
 import * as recast from 'recast';
-import { FILE_TYPE, FINDING_SEVERITY, Finding } from './reviewTypes';
+import {
+  FILE_TYPE, FINDING_SEVERITY, Finding, TEST_OBJECTS,
+} from './reviewTypes';
 
 const DIMENSION = 'TEST_INTEGRITY';
 const SKIP_MODIFIERS = new Set(['skip', 'fixme', 'fail', 'slow', 'only']);
@@ -87,8 +89,8 @@ export function isExpectCall(node: any): boolean {
 export function isTestDeclaration(node: any): boolean {
   if (node?.type !== 'CallExpression' || node.arguments.length < 2) return false;
   const { callee } = node;
-  const isTestCallee = (callee.type === 'Identifier' && callee.name === 'test')
-    || (callee.type === 'MemberExpression' && callee.object.type === 'Identifier' && callee.object.name === 'test'
+  const isTestCallee = (callee.type === 'Identifier' && TEST_OBJECTS.has(callee.name))
+    || (callee.type === 'MemberExpression' && callee.object.type === 'Identifier' && TEST_OBJECTS.has(callee.object.name)
       && SKIP_MODIFIERS.has(propName(callee) || ''));
   const last = node.arguments[node.arguments.length - 1];
   return isTestCallee && FUNCTION_TYPES.has(last?.type);
@@ -198,18 +200,30 @@ function checkAssertionShape(node: any, findings: Finding[]): void {
   }
 }
 
+/**
+ * `describe.configure({ mode: 'default' })` and nothing else: runs the block's tests in order on one worker without
+ * chaining them (a failure does not skip the rest) or changing retries, so the tests stay independent.
+ */
+function isDefaultModeOnly(node: any): boolean {
+  const [options] = node.arguments;
+  if (node.arguments.length !== 1 || options?.type !== 'ObjectExpression' || options.properties.length !== 1) return false;
+  const [property] = options.properties;
+  const key = property.key?.name ?? property.key?.value;
+  return key === 'mode' && LITERAL_TYPES.has(property.value?.type) && property.value.value === 'default';
+}
+
 function checkMemberCall(node: any, isSpec: boolean, findings: Finding[]): void {
   const { callee } = node;
   if (callee.type !== 'MemberExpression') return;
   const name = propName(callee) || '';
   const line = node.loc?.start.line;
-  const objectIsTest = callee.object.type === 'Identifier' && callee.object.name === 'test';
-  const objectIsDescribe = callee.object.type === 'MemberExpression' && rootIdentifier(callee.object) === 'test' && propName(callee.object) === 'describe';
+  const objectIsTest = callee.object.type === 'Identifier' && TEST_OBJECTS.has(callee.object.name);
+  const objectIsDescribe = callee.object.type === 'MemberExpression' && TEST_OBJECTS.has(rootIdentifier(callee.object) || '') && propName(callee.object) === 'describe';
 
   if ((objectIsTest && SKIP_MODIFIERS.has(name)) || (objectIsDescribe && DESCRIBE_SKIP_MODIFIERS.has(name))) {
     findings.push(make('INT-002', `test${objectIsDescribe ? '.describe' : ''}.${name}() changes whether or how a test runs.`, 'Remove it; a test that cannot pass must fail or be reported as NEEDS_CONTEXT.', line));
   }
-  if (objectIsDescribe && name === 'configure') {
+  if (objectIsDescribe && name === 'configure' && !isDefaultModeOnly(node)) {
     findings.push(make('INT-010', 'test.describe.configure() changes execution mode or retries.', 'Keep tests independent and parallel-safe.', line));
   }
   if (name === 'catch' && isSpec) {
@@ -309,7 +323,7 @@ export function collectIntegrityFindings(ast: any, fileType: FILE_TYPE): Finding
       if (node.object.type === 'Identifier' && node.object.name === 'process' && propName(node) === 'env') {
         findings.push(make('INT-013', 'process.env accessed directly in test code.', 'Use the requireEnv() helper via the env binding.', line));
       }
-      if (propName(node) === 'serial' && propName(node.object) === 'describe' && rootIdentifier(node.object) === 'test') {
+      if (propName(node) === 'serial' && propName(node.object) === 'describe' && TEST_OBJECTS.has(rootIdentifier(node.object) || '')) {
         findings.push(make('INT-010', 'Serial test mode couples tests together.', 'Keep tests independent.', line));
       }
       this.traverse(path);

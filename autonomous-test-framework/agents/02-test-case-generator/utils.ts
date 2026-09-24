@@ -10,6 +10,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { isTestCaseSelected, GherkinKeyword, REVIEW_STATUS } from '../../core/types';
 import { projectPaths } from '../../core/aut/projectPaths';
+import { loadAutProfile } from '../../core/aut/AutProfile';
+import { bareFeatureName } from '../../core/aut/requirementScope';
 
 /** Feature file tags for test cases excluded from automation at review. */
 const REVIEW_STATUS_TAGS: Readonly<Record<string, string>> = Object.freeze({
@@ -21,7 +23,9 @@ import { TC_TYPE, TYPE_TAGS } from './constants';
 const GHERKIN_KEYWORDS: readonly GherkinKeyword[] = ['Given', 'When', 'Then', 'And', 'But'];
 const ACTION_KEYWORDS: ReadonlySet<string> = new Set(['Given', 'When']);
 const UNMAPPED_STORY_ID = 'UNMAPPED';
-const DEFAULT_FEATURE_FOLDER = 'General Features';
+const DEFAULT_FEATURE_FOLDER = 'General';
+const FEATURE_FILE_SUFFIX = ' Feature';
+const APP_NAME_SEPARATOR = '- ';
 
 /** One rendered Gherkin line. */
 export interface GherkinStepLine {
@@ -131,13 +135,9 @@ export function buildGherkinScenarioText(tc: any): string {
   ].join('\n');
 }
 
-function groupByStory(testCases: any[]): Map<string, any[]> {
-  const groups = new Map<string, any[]>();
-  for (const tc of testCases) {
-    const storyId = String(tc.userStoryId || UNMAPPED_STORY_ID);
-    groups.set(storyId, [...(groups.get(storyId) || []), tc]);
-  }
-  return groups;
+interface FeatureGroup {
+  feature: any | null;
+  stories: Array<{ storyId: string; story: any | null; testCases: any[] }>;
 }
 
 function findStoryContext(analysis: any, storyId: string): StoryContext {
@@ -148,50 +148,104 @@ function findStoryContext(analysis: any, storyId: string): StoryContext {
   return { feature: null, story: null };
 }
 
+/** Groups test cases by the feature their story belongs to, keeping story order within a feature. */
+function groupByFeature(analysis: any, testCases: any[]): FeatureGroup[] {
+  const groups = new Map<string, FeatureGroup>();
+  for (const tc of testCases) {
+    const storyId = String(tc.userStoryId || UNMAPPED_STORY_ID);
+    const { feature, story } = findStoryContext(analysis, storyId);
+    const key = String(feature?.id || UNMAPPED_STORY_ID);
+    const group = groups.get(key) || { feature, stories: [] };
+    const entry = group.stories.find((s) => s.storyId === storyId);
+    if (entry) entry.testCases.push(tc);
+    else group.stories.push({ storyId, story, testCases: [tc] });
+    groups.set(key, group);
+  }
+  return [...groups.values()];
+}
+
 /**
- * Finds the file already holding this story, inside its own feature folder.
- *
- * The search is deliberately confined to that folder. Agent 01 numbers stories from US-01 for every
- * requirement document, so a project's second requirement has a US-01 of its own; searching every
- * folder for the storyId prefix let the newer requirement claim — and overwrite — the older
- * requirement's feature file. A renamed feature now opens a new folder instead, which leaves the
- * previous file in place rather than destroying it.
+ * Feature folder name: the bare feature, e.g. "Profile Feature" → "Profile".
+ * @param {unknown} featureName
+ * @returns {string}
  */
-function findExistingStoryFile(storyId: string, dir: string): string | null {
-  if (!fs.existsSync(dir)) return null;
-  const matches = fs.readdirSync(dir)
-    .filter((file) => file.endsWith('.feature') && file.startsWith(`${storyId}-`))
-    .sort((a, b) => a.length - b.length);
-  return matches[0] || null;
-}
-
-function slugify(text: string): string {
-  return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-}
-
-function resolveStoryFile(featuresDir: string, storyId: string, ctx: StoryContext): { dir: string; baseName: string } {
-  const folder = String(ctx.feature?.name || DEFAULT_FEATURE_FOLDER).replace(/[/\\?%*:|"<>]/g, '-').trim();
-  const dir = path.join(featuresDir, folder);
-  const existing = findExistingStoryFile(storyId, dir);
-  fs.mkdirSync(dir, { recursive: true });
-  if (existing) return { dir, baseName: existing.replace(/\.feature$/i, '').replace(/-(api|perf)$/i, '') };
-  return { dir, baseName: `${storyId}-${slugify(ctx.story?.title || ctx.feature?.name || 'feature')}` };
-}
-
-function renderFeatureFile(ctx: StoryContext, storyId: string, titleSuffix: string, testCases: any[]): string {
-  const { feature, story } = ctx;
-  const storyTitle = story ? `${storyId} ${story.title || ''}`.trim() : storyId;
-  const title = feature?.name ? `${feature.name} — ${storyTitle}` : storyTitle;
-  const narrative = story?.role && story?.goal
-    ? [`  As a ${story.role}`, `  I want to ${story.goal}`, ...(story.benefit ? [`  So that ${String(story.benefit).replace(/\.+$/, '')}`] : [])]
-    : [];
-  return [`Feature: ${title}${titleSuffix}`, ...narrative, '', ...testCases.map((tc) => `${buildGherkinScenarioText(tc)}\n`)].join('\n');
+export function featureFolderName(featureName: unknown): string {
+  return bareFeatureName(featureName) || DEFAULT_FEATURE_FOLDER;
 }
 
 /**
- * Writes one .feature file per story partition (UI / API / Performance) with strict 1:1
+ * Standard feature file base name: "<Feature> Feature- <App>", e.g. "Profile Feature- Nexo".
+ * @param {string} folder - Result of featureFolderName
+ * @param {string} appName - Application short name
+ * @returns {string}
+ */
+export function featureFileBaseName(folder: string, appName: string): string {
+  return `${folder}${FEATURE_FILE_SUFFIX}${APP_NAME_SEPARATOR}${appName}`;
+}
+
+/** The application's short name from its AUT profile; the project id when it has no profile. */
+function resolveAppShortName(projectId: string): string {
+  try {
+    const profile = loadAutProfile(projectId);
+    return (profile.shortName || '').trim() || profile.displayName.trim().split(/\s+/)[0];
+  } catch {
+    return projectId;
+  }
+}
+
+function storyNarrative(story: any, indent: string): string[] {
+  if (!story?.role || !story?.goal) return [];
+  return [
+    `${indent}As a ${story.role}`,
+    `${indent}I want to ${story.goal}`,
+    ...(story.benefit ? [`${indent}So that ${String(story.benefit).replace(/\.+$/, '')}`] : []),
+  ];
+}
+
+function storyHeading(storyId: string, story: any): string {
+  return story ? `${storyId} ${story.title || ''}`.trim() : storyId;
+}
+
+/**
+ * Renders one feature file. A single-story feature keeps the story narrative under the Feature line;
+ * a feature with several stories gives each its own Gherkin `Rule:` block.
+ */
+function renderFeatureFile(group: FeatureGroup, titleSuffix: string): string {
+  const { feature, stories } = group;
+  const scenarios = (testCases: any[]) => testCases.map((tc) => `${buildGherkinScenarioText(tc)}\n`);
+  if (stories.length === 1) {
+    const [{ storyId, story, testCases }] = stories;
+    const heading = storyHeading(storyId, story);
+    const title = feature?.name ? `${feature.name} — ${heading}` : heading;
+    return [`Feature: ${title}${titleSuffix}`, ...storyNarrative(story, '  '), '', ...scenarios(testCases)].join('\n');
+  }
+  const rules = stories.flatMap(({ storyId, story, testCases }) => [
+    `  Rule: ${storyHeading(storyId, story)}`, ...storyNarrative(story, '    '), '', ...scenarios(testCases),
+  ]);
+  return [`Feature: ${feature?.name || DEFAULT_FEATURE_FOLDER}${titleSuffix}`, '', ...rules].join('\n');
+}
+
+function writePartition(group: FeatureGroup, filePath: string, partition: FeaturePartition, logger?: any): boolean {
+  const stories = group.stories
+    .map((s) => ({ ...s, testCases: s.testCases.filter((tc) => partition.matches(String(tc.type || ''))) }))
+    .filter((s) => s.testCases.length > 0);
+  if (stories.length === 0) {
+    if (partition.suffix && fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    return false;
+  }
+  fs.writeFileSync(filePath, renderFeatureFile({ feature: group.feature, stories }, partition.titleSuffix), 'utf-8');
+  const scenariosCount = stories.reduce((sum, s) => sum + s.testCases.length, 0);
+  logger?.info(`Feature file synced: [${partition.name}]`, { filePath, featureId: group.feature?.id, scenariosCount });
+  return true;
+}
+
+/**
+ * Writes one .feature file per feature partition (UI / API / Performance) with strict 1:1
  * scenario ↔ test case parity. Deselected test cases are tagged @obsolete; partition files
  * that no longer have test cases are removed.
+ *
+ * Naming is fixed so every requirement produces the same shape:
+ *   features/<Feature>/<Feature> Feature- <App>.feature   (e.g. features/Profile/Profile Feature- Nexo.feature)
  *
  * Files land under the project's own generated-test root, never in a shared folder, so a feature
  * uploaded for one application cannot appear among another application's features.
@@ -204,21 +258,15 @@ function renderFeatureFile(ctx: StoryContext, storyId: string, titleSuffix: stri
  */
 export function syncFeatureFiles(projectId: string, analysis: any, testCases: any[], logger?: any): string[] {
   const featuresDir = projectPaths(projectId).featuresDir;
-  fs.mkdirSync(featuresDir, { recursive: true });
+  const appName = resolveAppShortName(projectId);
   const savedPaths: string[] = [];
-  for (const [storyId, storyTCs] of groupByStory(testCases || [])) {
-    const ctx = findStoryContext(analysis, storyId);
-    const target = resolveStoryFile(featuresDir, storyId, ctx);
+  for (const group of groupByFeature(analysis, testCases || [])) {
+    const folder = featureFolderName(group.feature?.name);
+    const dir = path.join(featuresDir, folder);
+    fs.mkdirSync(dir, { recursive: true });
     for (const partition of PARTITIONS) {
-      const filePath = path.join(target.dir, `${target.baseName}${partition.suffix}.feature`);
-      const partitionTCs = storyTCs.filter((tc) => partition.matches(String(tc.type || '')));
-      if (partitionTCs.length === 0) {
-        if (partition.suffix && fs.existsSync(filePath)) fs.unlinkSync(filePath);
-        continue;
-      }
-      fs.writeFileSync(filePath, renderFeatureFile(ctx, storyId, partition.titleSuffix, partitionTCs), 'utf-8');
-      savedPaths.push(filePath);
-      logger?.info(`Feature file synced: [${partition.name}]`, { filePath, storyId, scenariosCount: partitionTCs.length });
+      const filePath = path.join(dir, `${featureFileBaseName(folder, appName)}${partition.suffix}.feature`);
+      if (writePartition(group, filePath, partition, logger)) savedPaths.push(filePath);
     }
   }
   return savedPaths;

@@ -75,6 +75,21 @@ function commonPrefixLength(lists: any[][]): number {
 }
 
 /**
+ * The page-object method a test body starts with, e.g. "openStart" for `await featurePage.openStart();`.
+ * @param {string} body - Test body
+ * @param {string} receiver - Identifier the page object is bound to
+ * @returns {string | undefined} Undefined when the first statement is anything else
+ */
+export function leadingMethodCall(body: string, receiver: string): string | undefined {
+  const first = topLevelStatements(body)?.[0];
+  let call = first?.type === 'ExpressionStatement' ? first.expression : undefined;
+  if (call?.type === 'AwaitExpression') call = call.argument;
+  const callee = call?.type === 'CallExpression' ? call.callee : undefined;
+  if (callee?.type !== 'MemberExpression' || callee.object?.type !== 'Identifier' || callee.object.name !== receiver) return undefined;
+  return callee.property?.type === 'Identifier' ? callee.property.name : undefined;
+}
+
+/**
  * Splits the identical leading statements of all test bodies into a shared hook.
  * @param {string[]} bodies - Test bodies of one describe block
  * @returns {HoistResult} `hook` is empty (and bodies unchanged) when nothing can be hoisted

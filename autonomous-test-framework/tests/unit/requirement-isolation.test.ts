@@ -9,12 +9,12 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { requirementScope, scopedFeatureKey, DEFAULT_SCOPE } from '../../core/aut/requirementScope';
+import { requirementScope, scopedFeatureKey, DEFAULT_SCOPE, featureStemsOf } from '../../core/aut/requirementScope';
 import {
   findUnclaimedGeneratedFiles, readManifest, removeSupersededFiles, writeManifest, AutomationManifest,
 } from '../../agents/05-playwright-script-generator/output/manifest';
 import { GENERATED_MARKER } from '../../agents/05-playwright-script-generator/constants';
-import { syncFeatureFiles } from '../../agents/02-test-case-generator/utils';
+import { syncFeatureFiles, featureFolderName, featureFileBaseName } from '../../agents/02-test-case-generator/utils';
 import { projectPaths } from '../../core/aut/projectPaths';
 import { requiresIsolatedRun } from '../../agents/01-requirement-analyzer/inputFingerprint';
 import { stateManager } from '../../core/state-manager/StateManager';
@@ -82,6 +82,59 @@ describe('Agent 02 feature files', () => {
     expect(logout[0]).not.toBe(login[0]);
     expect(fs.readFileSync(login[0], 'utf-8')).toContain('Sign in with valid credentials');
     expect(fs.readFileSync(logout[0], 'utf-8')).toContain('Sign out from the dashboard');
+  });
+});
+
+describe('Agent 02 feature file naming', () => {
+  afterAll(() => fs.rmSync(projectPaths(PROJECT).testsRoot, { recursive: true, force: true }));
+
+  it('reduces the requirement title Agent 01 copied into the feature name to the bare feature', () => {
+    expect(featureFolderName('Profile Feature')).toBe('Profile');
+    expect(featureFolderName('Logout Feature – Nexo Desk')).toBe('Logout');
+    expect(featureFolderName('Login')).toBe('Login');
+    expect(featureFolderName('PRD – Password Reset')).toBe('Password Reset');
+    expect(featureFolderName('Checkout Requirements Document')).toBe('Checkout');
+    expect(featureFolderName('')).toBe('General');
+  });
+
+  it('names the file "<Feature> Feature- <App>" inside the "<Feature>" folder', () => {
+    expect(featureFileBaseName('Profile', 'Nexo')).toBe('Profile Feature- Nexo');
+    const [file] = syncFeatureFiles(PROJECT, analysisFor('Settings Feature', 'Change theme'), [testCaseFor('TC-001', 'Change theme')]);
+    expect(path.relative(FEATURES_DIR, file).split(path.sep)).toEqual(['Settings', `Settings Feature- ${PROJECT}.feature`]);
+  });
+
+  it('keeps every story of a feature in its one file, one Rule per story', () => {
+    const analysis = {
+      features: [{
+        id: 'F-01',
+        name: 'Account Feature',
+        userStories: [{ id: 'US-01', title: 'View account' }, { id: 'US-02', title: 'Edit account' }],
+      }],
+    };
+    const files = syncFeatureFiles(PROJECT, analysis, [
+      testCaseFor('TC-001', 'View the account page'),
+      { ...testCaseFor('TC-002', 'Edit the account name'), userStoryId: 'US-02' },
+    ]);
+    expect(files).toHaveLength(1);
+    const text = fs.readFileSync(files[0], 'utf-8');
+    expect(text).toContain('Rule: US-01 View account');
+    expect(text).toContain('Rule: US-02 Edit account');
+  });
+});
+
+describe('Agent 05 file naming', () => {
+  it('names spec, page object and page map after the bare feature', () => {
+    const stems = featureStemsOf({ features: [
+      { id: 'F-01', name: 'Profile Feature' },
+      { id: 'F-02', name: 'Password Reset – Nexo Desk' },
+    ] });
+    expect(stems.get('F-01')).toBe('Profile');
+    expect(stems.get('F-02')).toBe('PasswordReset');
+  });
+
+  it('leaves out a stem two features would share, so they keep the scoped key', () => {
+    const stems = featureStemsOf({ features: [{ id: 'F-01', name: 'Profile' }, { id: 'F-02', name: 'Profile Feature' }] });
+    expect(stems.size).toBe(0);
   });
 });
 

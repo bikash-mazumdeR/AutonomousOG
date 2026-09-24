@@ -47,6 +47,85 @@
           "status": "NEEDS_CONTEXT"
         }
       ]
+    },
+    "profile-feature": {
+      "sourceReviewId": "tc_review_1790095125971",
+      "files": [
+        "tests/projects/nexolvi/pages/ProfilePage.ts",
+        "tests/projects/nexolvi/specs/Profile.spec.ts"
+      ],
+      "testCases": [
+        {
+          "tcKey": "TC-001",
+          "status": "GENERATED",
+          "file": "tests/projects/nexolvi/specs/Profile.spec.ts"
+        },
+        {
+          "tcKey": "TC-002",
+          "status": "GENERATED",
+          "file": "tests/projects/nexolvi/specs/Profile.spec.ts"
+        },
+        {
+          "tcKey": "TC-003",
+          "status": "GENERATED",
+          "file": "tests/projects/nexolvi/specs/Profile.spec.ts"
+        },
+        {
+          "tcKey": "TC-004",
+          "status": "GENERATED",
+          "file": "tests/projects/nexolvi/specs/Profile.spec.ts"
+        },
+        {
+          "tcKey": "TC-005",
+          "status": "GENERATED",
+          "file": "tests/projects/nexolvi/specs/Profile.spec.ts"
+        },
+        {
+          "tcKey": "TC-006",
+          "status": "GENERATED",
+          "file": "tests/projects/nexolvi/specs/Profile.spec.ts"
+        },
+        {
+          "tcKey": "TC-007",
+          "status": "GENERATED",
+          "file": "tests/projects/nexolvi/specs/Profile.spec.ts"
+        },
+        {
+          "tcKey": "TC-008",
+          "status": "GENERATED",
+          "file": "tests/projects/nexolvi/specs/Profile.spec.ts"
+        },
+        {
+          "tcKey": "TC-009",
+          "status": "GENERATED",
+          "file": "tests/projects/nexolvi/specs/Profile.spec.ts"
+        },
+        {
+          "tcKey": "TC-010",
+          "status": "GENERATED",
+          "file": "tests/projects/nexolvi/specs/Profile.spec.ts"
+        },
+        {
+          "tcKey": "TC-011",
+          "status": "GENERATED",
+          "file": "tests/projects/nexolvi/specs/Profile.spec.ts"
+        },
+        {
+          "tcKey": "TC-012",
+          "status": "GENERATED",
+          "file": "tests/projects/nexolvi/specs/Profile.spec.ts"
+        },
+        {
+          "tcKey": "TC-013",
+          "status": "GENERATED",
+          "file": "tests/projects/nexolvi/specs/Profile.spec.ts"
+        },
+        {
+          "tcKey": "TC-014",
+          "status": "GENERATED",
+          "file": "tests/projects/nexolvi/specs/Profile.spec.ts"
+        }
+      ]
     }
   }
 }

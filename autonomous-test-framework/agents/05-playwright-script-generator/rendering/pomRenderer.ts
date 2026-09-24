@@ -8,7 +8,7 @@
  */
 
 import {
-  GENERATED_MARKER, GOTO_OPERATION, PAGE_FIXTURE, POM_ENV_FUNCTION, SIGN_IN_METHOD,
+  GENERATED_MARKER, GOTO_OPERATION, PAGE_FIXTURE, POM_ENV_FUNCTION, RESUME_SESSION_METHOD, SIGN_IN_METHOD,
 } from '../constants';
 import {
   PageElement, PageMap, PageMapAuth, PageState, VerifiedFlow, locatorSignature, overlayLabel, toPascal, uniqueName,
@@ -33,6 +33,10 @@ export interface ContractMember {
   flowId?: string;
   params?: string[];
   actions?: Array<{ member?: string; op: string }>;
+  /** Locator members only: the exact visible text the locator matches (a role's name, a text or label locator). */
+  matchesText?: string;
+  /** Locator members only: the environment variable whose value the locator matches (the account identifier). */
+  envVar?: string;
 }
 
 /** Closed-world description of the page object handed to the LLM. */
@@ -52,6 +56,8 @@ export interface PomRenderResult {
   memberBySignature: Map<string, string>;
   /** State name → the method that requests its address directly (`open<State>` for an entry state, `visit<State>` otherwise). */
   navigationByState: Map<string, string>;
+  /** Methods that sign in (`signIn` and the `open<State>` that calls it); empty when the page map records no sign-in. */
+  sessionEntryMethods: string[];
 }
 
 /** Page-object rendering options. */
@@ -98,6 +104,8 @@ interface RenderedSignIn {
    * it returns only once the application has rendered the state it lands on — not when the submit was clicked.
    */
   landmark?: string;
+  /** Name of the method that resumes a session still signed in; rendered only when there is a landmark to judge it by. */
+  resume?: string;
 }
 
 /**
@@ -150,6 +158,20 @@ export function locatorExpression(element: Pick<PageElement, 'strategy' | 'args'
     case 'css': return `this.page.locator(${first})`;
     default: return `this.page.locator(${JSON.stringify(cssIdSelector(element.args[0]))})`;
   }
+}
+
+/**
+ * The text a locator matches exactly, so asserting the member visible proves that text is shown. Placeholders and
+ * test ids are not visible text; an `env` locator matches the value of its variable, which is never written down.
+ * @param {PageElement} element
+ * @returns {{ matchesText?: string, envVar?: string }}
+ */
+export function locatorText(element: PageElement): { matchesText?: string; envVar?: string } {
+  const [first, second] = element.args;
+  if (element.strategy === 'env') return { envVar: first };
+  if (element.strategy === 'role' && second !== undefined) return { matchesText: second };
+  if (element.strategy === 'text' || element.strategy === 'label') return { matchesText: first };
+  return {};
 }
 
 function describeElement(element: PageElement, state: PageState): string {
@@ -332,7 +354,7 @@ function buildContract(map: PageMap, className: string, parts: PomParts): PageCo
         actions: f.actions.map(({ member, op }) => ({ member, op })),
       })),
       ...parts.elements.map((a) => ({
-        name: a.memberName, kind: MEMBER_KIND.LOCATOR, state: a.state.name, description: describeElement(a.element, a.state),
+        name: a.memberName, kind: MEMBER_KIND.LOCATOR, state: a.state.name, description: describeElement(a.element, a.state), ...locatorText(a.element),
       })),
     ],
   };
@@ -365,7 +387,31 @@ function renderOpenMethod(method: OpenMethod): string[] {
   return ['', `  /** ${describeOpen(method)} */`, `  async ${method.name}(): Promise<void> {`, body, '  }'];
 }
 
-/** The sign-in exactly as discovery performed it: open the form's entry path, fill both fields from the environment, submit. */
+/**
+ * Returns a still signed-in page to the signed-in state. A page that has shown nothing yet has no session; otherwise
+ * the signed-in state is requested and whichever of its landmark and the sign-in form renders decides.
+ */
+function renderResumeMethod(signIn: RenderedSignIn): string[] {
+  return [
+    '',
+    '  /**',
+    `   * Returns to the "${signIn.signedInState.name}" state (${signIn.signedInState.urlPath}) when this page is still signed in, and`,
+    `   * reports whether it was. Lets tests that share one page sign in once: after a test ends the session, ${signIn.name}()`,
+    '   * fills the form again. Performs actions only and asserts nothing.',
+    '   */',
+    `  async ${signIn.resume}(): Promise<boolean> {`,
+    "    if (this.page.url() === 'about:blank') return false;",
+    `    await this.navigate(${JSON.stringify(signIn.signedInState.urlPath)});`,
+    `    await this.waitForVisible(this.${signIn.landmark}.or(this.${signIn.submit}));`,
+    `    return this.${signIn.landmark}.isVisible();`,
+    '  }',
+  ];
+}
+
+/**
+ * The sign-in exactly as discovery performed it: open the form's entry path, fill both fields from the environment,
+ * submit. A page still signed in resumes its session instead of filling the form again.
+ */
 function renderSignInMethod(signIn: RenderedSignIn): string[] {
   const entry = JSON.stringify(signIn.loginState.entryPath || signIn.loginState.urlPath);
   return [
@@ -374,12 +420,14 @@ function renderSignInMethod(signIn: RenderedSignIn): string[] {
     `   * ${describeSignIn(signIn)}`,
     '   */',
     `  async ${signIn.name}(): Promise<void> {`,
+    ...(signIn.resume ? [`    if (await this.${signIn.resume}()) return;`] : []),
     `    await this.navigate(${entry});`,
     `    await this.${signIn.identifier}.fill(${POM_ENV_FUNCTION}(${JSON.stringify(signIn.identifierEnv)}));`,
     `    await this.${signIn.password}.fill(${POM_ENV_FUNCTION}(${JSON.stringify(signIn.passwordEnv)}));`,
     `    await this.${signIn.submit}.click();`,
     ...(signIn.landmark ? [`    await this.waitForVisible(this.${signIn.landmark});`] : []),
     '  }',
+    ...(signIn.resume ? renderResumeMethod(signIn) : []),
   ];
 }
 
@@ -430,8 +478,11 @@ export function renderPom(map: PageMap, options: PomOptions): PomRenderResult {
   const methods = openMethods(map, taken);
   const signInName = uniqueName(SIGN_IN_METHOD, taken);
   taken.add(signInName);
+  const resumeName = map.auth ? uniqueName(RESUME_SESSION_METHOD, taken) : undefined;
+  if (resumeName) taken.add(resumeName);
   const elements = assignElements(map, taken);
-  const signIn = resolveSignIn(map.auth, map, elements, signInName);
+  const resolved = resolveSignIn(map.auth, map, elements, signInName);
+  const signIn = resolved?.landmark ? { ...resolved, resume: resumeName } : resolved;
   const viaSignIn = signIn ? openViaSignIn(signIn, methods, taken) : undefined;
   const visits = visitMethods(map, taken);
   const navigationByState = new Map([...methods, ...visits].map((method) => [method.state.name, method.name]));
@@ -443,5 +494,6 @@ export function renderPom(map: PageMap, options: PomOptions): PomRenderResult {
     code: renderPomCode(map, options, parts),
     memberBySignature: new Map(elements.map((assigned) => [locatorSignature(assigned.element), assigned.memberName])),
     navigationByState,
+    sessionEntryMethods: signIn ? [signIn.name, ...(viaSignIn ? [viaSignIn.name] : [])] : [],
   };
 }

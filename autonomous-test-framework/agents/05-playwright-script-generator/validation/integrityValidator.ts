@@ -234,13 +234,40 @@ export function quotedTexts(expected: string): string[] {
   return [...new Set(texts)];
 }
 
-function quotedTextErrors(step: AutomationTestCase['steps'][number], mappedCode: string): string[] {
-  return quotedTexts(step.expected.join('\n'))
-    .filter((text) => !mappedCode.includes(text) && !hexToRgbVariants(text).some((variant) => mappedCode.includes(variant)))
-    .map((text) => `Step ${step.index}: the expected result quotes "${snippet(text)}" but no assertion mapped to the step checks that text (toHaveText / toContainText / toHaveValue / toHaveAttribute).`);
+/** A positive presence assertion on a page-object member: `expect(<fixture>.<member>).toBeVisible()`. */
+const VISIBLE_MEMBER = /expect\(\s*\w+\.(\w+)\s*\)\s*\.toBeVisible\(/g;
+
+/**
+ * The texts a step's mapped assertions prove by presence: a member asserted visible whose locator matches a text
+ * exactly (a role's name, a text locator), or whose locator reads the account identifier from its variable.
+ * @param {string} mappedCode
+ * @param {ValidationContext} ctx
+ * @returns {Set<string>}
+ */
+function textsProvenByPresence(mappedCode: string, ctx: ValidationContext): Set<string> {
+  const proven = new Set<string>();
+  const members = new Map((ctx.contract?.members || []).map((member) => [member.name, member]));
+  const secretValues = new Map((ctx.secrets || []).map((secret) => [secret.name, secret.value]));
+  for (const match of mappedCode.matchAll(VISIBLE_MEMBER)) {
+    const member = members.get(match[1]);
+    if (member?.matchesText) proven.add(member.matchesText);
+    const value = member?.envVar ? secretValues.get(member.envVar) : undefined;
+    if (value) proven.add(value);
+  }
+  return proven;
 }
 
-function checkStepMapping(gen: GeneratedTest, statements: AssertionStatement[], tc: AutomationTestCase): string[] {
+function quotedTextErrors(step: AutomationTestCase['steps'][number], mappedCode: string, ctx: ValidationContext): string[] {
+  const proven = textsProvenByPresence(mappedCode, ctx);
+  return quotedTexts(step.expected.join('\n'))
+    .filter((text) => !proven.has(text))
+    .filter((text) => !mappedCode.includes(text) && !hexToRgbVariants(text).some((variant) => mappedCode.includes(variant)))
+    .map((text) => `Step ${step.index}: the expected result quotes "${snippet(text)}" but no assertion mapped to the step checks that text `
+      + '(toHaveText / toContainText / toHaveValue / toHaveAttribute, or toBeVisible on a contract member whose matchesText or envVar is that text).');
+}
+
+function checkStepMapping(gen: GeneratedTest, statements: AssertionStatement[], ctx: ValidationContext): string[] {
+  const { tc } = ctx;
   const errors: string[] = [];
   const entries = Array.isArray(gen.stepAssertions) ? gen.stepAssertions : [];
   const bodyNorms = new Set(statements.map((s) => s.norm));
@@ -263,7 +290,7 @@ function checkStepMapping(gen: GeneratedTest, statements: AssertionStatement[], 
     if (count < step.expected.length) {
       errors.push(`Step ${step.index} has ${step.expected.length} expected result(s) ("${snippet(step.expected.join('; '))}") but ${count} mapped assertion(s).`);
     }
-    errors.push(...quotedTextErrors(step, own.flatMap((e) => e.assertions || []).join('\n')));
+    errors.push(...quotedTextErrors(step, own.flatMap((e) => e.assertions || []).join('\n'), ctx));
   }
   statements.filter((s) => !mapped.has(s.norm)).forEach((s) => errors.push(`Assertion is not mapped to any step: ${snippet(s.code)}`));
   return errors;
@@ -643,7 +670,7 @@ function validateEntry(gen: GeneratedTest, ctx: ValidationContext): string[] {
     ...inlineFlowErrors(ast, ctx),
     ...preconditionErrors(ast, facts.statements, ctx),
     ...secretLiteralErrors(ast, ctx),
-    ...checkStepMapping(gen, facts.statements, ctx.tc),
+    ...checkStepMapping(gen, facts.statements, ctx),
     ...checkProvenance(gen, ast, facts.statements, ctx),
   ];
   return [...new Set(errors)];

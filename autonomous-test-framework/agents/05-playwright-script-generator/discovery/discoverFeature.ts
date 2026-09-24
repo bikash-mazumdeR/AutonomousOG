@@ -12,7 +12,7 @@ import { DISCOVERY_SETTINGS, GOTO_OPERATION, PRECONDITION_STEP_INDEX } from '../
 import { ChatFn } from '../types';
 import { TraceRecorder, traceLabel } from '../../../core/llm/stagePromptTrace';
 import { AutomationTestCase } from '../contracts/automationTestCase';
-import { authenticateSession } from './authBootstrap';
+import { authenticateSession, findSignInControls, signedInStarts } from './authBootstrap';
 import { MissingItem } from '../../../core/readiness/readinessTypes';
 import { ResolvedAutProfile } from '../../../core/aut/AutProfile';
 import { parseJsonObject } from '../sub-agents/shared/generation-utils';
@@ -37,9 +37,9 @@ export interface DiscoverFeatureParams {
   logger: any;
   headless?: boolean;
   /**
-   * Sign in with the profile's declared credentials before crawling, so states behind the login
-   * form are discoverable. Off by default: a feature that exercises the login form itself must meet
-   * the application signed out.
+   * Sign every test case in with the profile's declared credentials (--authenticate). Without it,
+   * each test case is signed in only when its precondition — or its feature — needs a session
+   * (see signedInStarts): a test case that exercises the login form itself meets it signed out.
    */
   authenticate?: boolean;
   /** Records each navigation-plan request and its attempts for the prompt trace (optional). */
@@ -182,6 +182,7 @@ async function crawlTestCase(
   map: PageMap,
   tc: AutomationTestCase,
   params: DiscoverFeatureParams,
+  startSignedIn: boolean,
 ): Promise<{ missing: MissingItem | null; trace: TestCaseTrace }> {
   const { discovery } = params.profile;
   const trace: TestCaseTrace = { tcKey: tc.tcKey, runs: [], stateAfterStep: {} };
@@ -193,9 +194,9 @@ async function crawlTestCase(
     await session.goto(entryPath);
     let current = await captureAndMerge(session, map, entryPath);
     // reset() isolates each test case by clearing the session, which also signs the browser out.
-    // A requirement that lives behind the login form must therefore sign in again here, or every
-    // test case is planned from the login page and none of its preconditions can be met.
-    if (params.authenticate) {
+    // A test case that starts behind the login form must therefore sign in again here, or it is
+    // planned from the login page and its precondition can never be met.
+    if (startSignedIn) {
       const { state, reason } = await signIn(session, map, params, current);
       if (!state) return fail({ kind: 'AUTH', detail: `Discovery could not sign in to reach the state this test case starts from: ${reason}` });
       current = state;
@@ -275,6 +276,28 @@ async function signIn(
 }
 
 /**
+ * Returns the browser to the entry state discovery signs in from, and returns that state.
+ *
+ * The entry paths are visited in turn, so the browser ends on the last one, which is often a page behind
+ * the login form. Signing in there would wait out the whole navigation budget for a form that never renders.
+ * An entry state that already holds the whole form is preferred. Otherwise the first entry path is used, as
+ * each test case does when it signs in again, so a form that mounts late still gets its wait.
+ * @param {DiscoverySession} session
+ * @param {PageMap} map
+ * @param {string[]} entryPaths - From the AUT profile
+ * @returns {Promise<PageState | undefined>}
+ */
+async function goToSignInEntry(session: DiscoverySession, map: PageMap, entryPaths: string[]): Promise<PageState | undefined> {
+  const entryStates = map.states.filter((state) => state.entryPath && !state.overlay);
+  const target = entryStates.find((state) => findSignInControls(state))
+    || entryStates.find((state) => state.entryPath === entryPaths[0])
+    || map.states[0];
+  if (!target) return undefined;
+  if (target.entryPath && session.currentPath() !== target.urlPath) await session.goto(target.entryPath);
+  return target;
+}
+
+/**
  * Discovers verified page states for a feature and persists the page map.
  * @param {DiscoverFeatureParams} params
  * @returns {Promise<DiscoveryResult>}
@@ -305,9 +328,10 @@ export async function discoverFeature(params: DiscoverFeatureParams): Promise<Di
       // eslint-disable-next-line no-await-in-loop
       await captureAndMerge(session, pageMap, entryPath, true);
     }
-    if (params.authenticate) {
-      const signedInPath = session.currentPath();
-      const from = pageMap.states.find((state) => state.urlPath === signedInPath && !state.overlay) || pageMap.states[0];
+    const signIns = signedInStarts(params.testCases, profile.auth.credentialEnvVars || {}, params.authenticate);
+    if (params.authenticate || signIns.size > 0) {
+      params.logger?.info?.('Discovery signs in for', { featureId: params.featureId, testCases: [...signIns].sort() });
+      const from = await goToSignInEntry(session, pageMap, profile.discovery.entryPaths);
       const bootstrap = from ? await signIn(session, pageMap, params, from) : { reason: 'No entry state was captured.' };
       if (bootstrap.state) {
         params.logger?.info?.('Discovery signed in', { featureId: params.featureId, state: bootstrap.state.name, elements: bootstrap.state.elements.length });
@@ -318,7 +342,7 @@ export async function discoverFeature(params: DiscoverFeatureParams): Promise<Di
     if (profile.discovery.executeTestSteps) {
       for (const tc of params.testCases) {
         // eslint-disable-next-line no-await-in-loop -- test cases share one browser, run sequentially
-        const { missing, trace } = await crawlTestCase(session, pageMap, tc, params);
+        const { missing, trace } = await crawlTestCase(session, pageMap, tc, params, signIns.has(tc.tcKey));
         if (missing) addIssue(tc.tcKey, missing);
         else traces.push(trace);
       }

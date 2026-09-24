@@ -2,7 +2,7 @@
   "version": "1.0.0",
   "projectId": "ARIA Project",
   "createdAt": "2026-09-16T12:21:03.645Z",
-  "updatedAt": "2026-09-22T16:38:34.866Z",
+  "updatedAt": "2026-09-24T17:59:58.381Z",
   "cycles": [],
   "globalLearnings": {
     "selectorPatterns": {},
@@ -394,6 +394,182 @@
         "comment": "Approved via ARIA UI",
         "content": "TCs: 13",
         "timestamp": "2026-09-22T16:38:34.866Z"
+      },
+      {
+        "id": "fb_1790234575336",
+        "stageId": "03-test-case-reviewer",
+        "status": "APPROVED",
+        "comment": "Approved Agent 03 review",
+        "content": "",
+        "timestamp": "2026-09-24T07:22:55.336Z"
+      },
+      {
+        "id": "fb_1790234611340",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "Approved test data synthesis and centralized fixtures.",
+        "content": "",
+        "timestamp": "2026-09-24T07:23:31.340Z"
+      },
+      {
+        "id": "fb_1790234611423",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "Approved test data synthesis and centralized fixtures.",
+        "content": "Resolved: 0, Unresolved: 5, Pending clarifications: 3",
+        "timestamp": "2026-09-24T07:23:31.423Z"
+      },
+      {
+        "id": "fb_1790236345618",
+        "stageId": "05-playwright-script-generator",
+        "status": "REJECTED",
+        "comment": "It is not generating the playwright test scripts",
+        "content": "",
+        "timestamp": "2026-09-24T07:52:25.618Z"
+      },
+      {
+        "id": "fb_1790236346030",
+        "stageId": "05-playwright-script-generator",
+        "status": "REJECTED",
+        "comment": "It is not generating the playwright test scripts",
+        "content": "Generated: 0, Needs context: 13, Blocked: 0",
+        "timestamp": "2026-09-24T07:52:26.030Z"
+      },
+      {
+        "id": "fb_1790237487840",
+        "stageId": "05-playwright-script-generator",
+        "status": "REJECTED",
+        "comment": "0 generated / 13 NEEDS_CONTEXT: discovery did not sign in and Profile data/credentials were unresolved. Fixed; re-running 04 and 05.",
+        "content": "",
+        "timestamp": "2026-09-24T08:11:27.840Z"
+      },
+      {
+        "id": "fb_1790237526646",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "All 7 bindings resolved (0 unresolved); values verified on the live app.",
+        "content": "",
+        "timestamp": "2026-09-24T08:12:06.646Z"
+      },
+      {
+        "id": "fb_1790237526676",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "All 7 bindings resolved (0 unresolved); values verified on the live app.",
+        "content": "Resolved: 7, Unresolved: 0, Pending clarifications: 0",
+        "timestamp": "2026-09-24T08:12:06.676Z"
+      },
+      {
+        "id": "fb_1790239917811",
+        "stageId": "05-playwright-script-generator",
+        "status": "REJECTED",
+        "comment": "3/13 generated. Re-running with discovery fixes: auto sign-in, overlay static text, toast capture.",
+        "content": "",
+        "timestamp": "2026-09-24T08:51:57.811Z"
+      },
+      {
+        "id": "fb_1790239917841",
+        "stageId": "05-playwright-script-generator",
+        "status": "REJECTED",
+        "comment": "3/13 generated. Re-running with discovery fixes: auto sign-in, overlay static text, toast capture.",
+        "content": "Generated: 3, Needs context: 10, Blocked: 0",
+        "timestamp": "2026-09-24T08:51:57.841Z"
+      },
+      {
+        "id": "fb_1790240982917",
+        "stageId": "05-playwright-script-generator",
+        "status": "REJECTED",
+        "comment": "6/13 generated. Round 3: wording fixes + quoted-text validator fix; re-running 04 and 05.",
+        "content": "",
+        "timestamp": "2026-09-24T09:09:42.917Z"
+      },
+      {
+        "id": "fb_1790240982950",
+        "stageId": "05-playwright-script-generator",
+        "status": "REJECTED",
+        "comment": "6/13 generated. Round 3: wording fixes + quoted-text validator fix; re-running 04 and 05.",
+        "content": "Generated: 6, Needs context: 5, Blocked: 2",
+        "timestamp": "2026-09-24T09:09:42.950Z"
+      },
+      {
+        "id": "fb_1790240997633",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "All 7 bindings resolved (0 unresolved) after the round-3 wording edits.",
+        "content": "",
+        "timestamp": "2026-09-24T09:09:57.633Z"
+      },
+      {
+        "id": "fb_1790240997661",
+        "stageId": "04-test-data-generator",
+        "status": "APPROVED",
+        "comment": "All 7 bindings resolved (0 unresolved) after the round-3 wording edits.",
+        "content": "Resolved: 7, Unresolved: 0, Pending clarifications: 0",
+        "timestamp": "2026-09-24T09:09:57.661Z"
+      },
+      {
+        "id": "fb_1790241995790",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "13/13 generated; 12 pass live. TC-004 fails: step 3 says close+reopen but Save auto-closes the modal (wording). Probable app defect: profile Name is never sent to the server (PATCH carries only email/phone).",
+        "content": "",
+        "timestamp": "2026-09-24T09:26:35.790Z"
+      },
+      {
+        "id": "fb_1790241995818",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "13/13 generated; 12 pass live. TC-004 fails: step 3 says close+reopen but Save auto-closes the modal (wording). Probable app defect: profile Name is never sent to the server (PATCH carries only email/phone).",
+        "content": "Generated: 13, Needs context: 0, Blocked: 0",
+        "timestamp": "2026-09-24T09:26:35.818Z"
+      },
+      {
+        "id": "fb_1790261408865",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "Approved - TC-005 left NEEDS_CONTEXT (login form did not render during discovery)",
+        "content": "",
+        "timestamp": "2026-09-24T14:50:08.865Z"
+      },
+      {
+        "id": "fb_1790261408906",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "Approved - TC-005 left NEEDS_CONTEXT (login form did not render during discovery)",
+        "content": "Generated: 12, Needs context: 1, Blocked: 0",
+        "timestamp": "2026-09-24T14:50:08.906Z"
+      },
+      {
+        "id": "fb_1790271507774",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "Approved: shared signed-in session spec; TC-005 failure is the Nexolvi second-save 404 defect",
+        "content": "",
+        "timestamp": "2026-09-24T17:38:27.774Z"
+      },
+      {
+        "id": "fb_1790271507817",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "Approved: shared signed-in session spec; TC-005 failure is the Nexolvi second-save 404 defect",
+        "content": "Generated: 13, Needs context: 0, Blocked: 0",
+        "timestamp": "2026-09-24T17:38:27.817Z"
+      },
+      {
+        "id": "fb_1790272798337",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "Approved: 14 generated; TC-004/TC-014 fail on the Nexolvi second-save 404 defect; saving tests isolated",
+        "content": "",
+        "timestamp": "2026-09-24T17:59:58.337Z"
+      },
+      {
+        "id": "fb_1790272798381",
+        "stageId": "05-playwright-script-generator",
+        "status": "APPROVED",
+        "comment": "Approved: 14 generated; TC-004/TC-014 fail on the Nexolvi second-save 404 defect; saving tests isolated",
+        "content": "Generated: 14, Needs context: 0, Blocked: 0",
+        "timestamp": "2026-09-24T17:59:58.381Z"
       }
     ],
     "performanceBaselines": {},
@@ -808,9 +984,9 @@
       "appliesTo": "04-test-data-generator",
       "action": "REUSE_DATA_PATTERNS",
       "data": {},
-      "addedAt": "2026-09-19T07:46:14.533Z",
+      "addedAt": "2026-09-24T09:09:47.306Z",
       "activeCount": 0,
-      "updatedAt": "2026-09-19T07:46:14.535Z"
+      "updatedAt": "2026-09-24T09:09:47.312Z"
     }
   ],
   "metrics": {

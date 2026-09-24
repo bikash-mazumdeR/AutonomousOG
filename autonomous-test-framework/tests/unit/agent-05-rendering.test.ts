@@ -14,6 +14,7 @@ import {
   importPath, renderK6Script, renderTags, renderUiSpec, slaMilliseconds,
 } from '../../agents/05-playwright-script-generator/rendering/specRenderer';
 import { analyzeWithAST, FILE_TYPE, FINDING_SEVERITY } from '../../core/automation-reviewer/ReviewRules';
+import { renderFinalSpec } from '../../agents/05-playwright-script-generator/sub-agents/ui-script-generator';
 
 const map: PageMap = {
   version: 1,
@@ -131,7 +132,7 @@ describe('Agent 05 verified sign-in in page objects', () => {
   it('renders signIn() from the verified form and opens the signed-in state through it', () => {
     const { code, contract } = renderPom(authMap, options);
     expect(code).toContain("import { requireEnv } from '../../../helpers/env';");
-    expect(code).toContain('  async signIn(): Promise<void> {\n    await this.navigate("/login");\n'
+    expect(code).toContain('  async signIn(): Promise<void> {\n    if (await this.resumeSession()) return;\n    await this.navigate("/login");\n'
       + '    await this.emailInput.fill(requireEnv("APP_EMAIL"));\n    await this.passwordInput.fill(requireEnv("APP_PASSWORD"));\n'
       + '    await this.signInButton.click();\n    await this.waitForVisible(this.dashboardHeading);\n  }');
     expect(code).toContain('  async openDashboard(): Promise<void> {\n    await this.signIn();\n  }');
@@ -269,5 +270,106 @@ describe('Agent 05 shared setup hoisting', () => {
     expect(spec).toContain(`  test.beforeEach(async ({ page, featurePage, data }) => {\n    ${open}`);
     const blockers = analyzeWithAST(spec, FILE_TYPE.SPEC, ['TC-007', 'TC-008']).findings.filter((f) => f.severity === FINDING_SEVERITY.BLOCKER);
     expect(blockers).toEqual([]);
+  });
+});
+
+describe('Agent 05 shared signed-in session', () => {
+  const sessionMap: PageMap = {
+    version: 2,
+    featureId: 'F-03',
+    states: [
+      {
+        name: 'login',
+        urlPath: '/login',
+        entryPath: '/login',
+        elements: [
+          { name: 'emailInput', strategy: 'label', args: ['Email'], tag: 'input', role: 'textbox', inputType: 'email' },
+          { name: 'passwordInput', strategy: 'label', args: ['Password'], tag: 'input', inputType: 'password' },
+          { name: 'signInButton', strategy: 'role', args: ['button', 'Sign in'], tag: 'button', role: 'button', accessibleName: 'Sign in' },
+        ],
+      },
+      { name: 'dashboard', urlPath: '/', elements: [{ name: 'dashboardHeading', strategy: 'role', args: ['heading', 'Dashboard'], tag: 'h1', role: 'heading' }] },
+    ],
+    traces: [],
+    flows: [],
+    auth: {
+      loginState: 'login', signedInState: 'dashboard', identifier: 'emailInput', password: 'passwordInput', submit: 'signInButton', identifierEnv: 'APP_EMAIL', passwordEnv: 'APP_PASSWORD',
+    },
+  };
+  const pomOptions = { className: 'SessionPage', basePageImport: '../../../pages/BasePage', projectSlug: 'sample', envHelperImport: '../../../helpers/env' };
+  const base = {
+    projectSlug: 'sample', featureId: 'F-03', sourceReviewId: 'review-3', pageObject: 'SessionPage', pomImport: '../pages/SessionPage', fixtureImport: '../fixtures/test-data.json', envImport: '../../../helpers/env', storageImport: '../../../helpers/storage',
+  };
+  const caseOf = (tcKey: string): AutomationTestCase => ({ ...tc, tcKey, title: `Case ${tcKey}` });
+  const signedIn = (tcKey: string) => ({ tc: caseOf(tcKey), body: 'await featurePage.openDashboard();\nawait expect(featurePage.dashboardHeading).toBeVisible();' });
+  const signedOut = (tcKey: string) => ({ tc: caseOf(tcKey), body: 'await featurePage.openLogin();\nawait expect(featurePage.signInButton).toBeVisible();' });
+
+  it('resumes a still signed-in page instead of filling the form again, and says which methods sign in', () => {
+    const { code, contract, sessionEntryMethods } = renderPom(sessionMap, pomOptions);
+    expect(code).toContain('  async resumeSession(): Promise<boolean> {\n'
+      + "    if (this.page.url() === 'about:blank') return false;\n"
+      + '    await this.navigate("/");\n'
+      + '    await this.waitForVisible(this.dashboardHeading.or(this.signInButton));\n'
+      + '    return this.dashboardHeading.isVisible();\n  }');
+    expect(sessionEntryMethods).toEqual(['signIn', 'openDashboard']);
+    // Tests never call it themselves: signIn() does.
+    expect(contract.members.map((member) => member.name)).not.toContain('resumeSession');
+    expect(analyzeWithAST(code, FILE_TYPE.POM).findings.filter((f) => f.severity === FINDING_SEVERITY.BLOCKER)).toEqual([]);
+  });
+
+  it('keeps signIn() filling the form every time when there is no landmark to judge a session by', () => {
+    const bare: PageMap = { ...sessionMap, states: [sessionMap.states[0], { ...sessionMap.states[1], elements: [] }] };
+    const { code } = renderPom(bare, pomOptions);
+    expect(code).not.toContain('resumeSession');
+    expect(code).toContain('  async signIn(): Promise<void> {\n    await this.navigate("/login");');
+  });
+
+  it('shares one signed-in page among the tests that start by signing in, and keeps a fresh page for the rest', () => {
+    const tests = [signedOut('TC-001'), signedIn('TC-002'), signedIn('TC-003'), signedOut('TC-004')];
+    const { content, hookByTcKey } = renderFinalSpec(base, tests, ['signIn', 'openDashboard']);
+    const [fresh, session] = content.split('sessionTest.describe(');
+    expect(fresh).toContain('test("[TC-001] Case TC-001"');
+    expect(fresh).toContain('test("[TC-004] Case TC-004"');
+    expect(fresh).not.toContain('[TC-002]');
+    expect(session).toContain('sessionTest("[TC-002] Case TC-002"');
+    expect(session).toContain('sessionTest("[TC-003] Case TC-003"');
+    expect(content).toContain("import { test as base, expect, Page } from '@playwright/test';");
+    expect(content).toContain("sessionTest.describe.configure({ mode: 'default' });");
+    expect(content).toContain('sessionPage = await browser.newPage();');
+    // Each group hoists its own shared opening step.
+    expect(hookByTcKey.get('TC-002')).toEqual(['await featurePage.openDashboard();']);
+    expect(hookByTcKey.get('TC-001')).toEqual(['await featurePage.openLogin();']);
+    expect(content).toContain('  sessionTest.beforeEach(async ({ page, featurePage, data }) => {\n    await featurePage.openDashboard();');
+    const blockers = analyzeWithAST(content, FILE_TYPE.SPEC, tests.map((t) => t.tc.tcKey)).findings.filter((f) => f.severity === FINDING_SEVERITY.BLOCKER);
+    expect(blockers).toEqual([]);
+  });
+
+  it('gives every test a fresh page when too few start by signing in, or the page object cannot sign in', () => {
+    const lone = renderFinalSpec(base, [signedOut('TC-001'), signedIn('TC-002')], ['signIn', 'openDashboard']).content;
+    const none = renderFinalSpec(base, [signedIn('TC-002'), signedIn('TC-003')], []).content;
+    for (const content of [lone, none]) {
+      expect(content).not.toContain('sessionTest');
+      expect(content).toContain("import { test as base, expect } from '@playwright/test';");
+    }
+  });
+});
+
+describe('Agent 05 isolated-session label', () => {
+  const base = {
+    projectSlug: 'sample', featureId: 'F-04', sourceReviewId: 'review-4', pageObject: 'SessionPage', pomImport: '../pages/SessionPage', fixtureImport: '../fixtures/test-data.json', envImport: '../../../helpers/env', storageImport: '../../../helpers/storage',
+  };
+  const signedIn = (tcKey: string, labels: string[] = []) => ({
+    tc: { ...tc, tcKey, title: `Case ${tcKey}`, labels }, body: 'await featurePage.openDashboard();\nawait expect(featurePage.dashboardHeading).toBeVisible();',
+  });
+
+  it('gives a test case labelled Isolated Session its own page, whatever the spelling of the label', () => {
+    const tests = [signedIn('TC-001'), signedIn('TC-002', ['UI', 'isolated-session']), signedIn('TC-003'), signedIn('TC-004', ['Isolated Session'])];
+    const { content } = renderFinalSpec(base, tests, ['signIn', 'openDashboard']);
+    const [fresh, session] = content.split('sessionTest.describe(');
+    expect(fresh).toContain('test("[TC-002] Case TC-002"');
+    expect(fresh).toContain('test("[TC-004] Case TC-004"');
+    expect(session).toContain('sessionTest("[TC-001] Case TC-001"');
+    expect(session).toContain('sessionTest("[TC-003] Case TC-003"');
+    expect(session).not.toContain('[TC-002]');
   });
 });

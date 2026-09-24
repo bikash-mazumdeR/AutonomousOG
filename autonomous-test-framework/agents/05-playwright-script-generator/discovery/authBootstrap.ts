@@ -216,3 +216,49 @@ export async function authenticateSession(
     },
   };
 }
+
+/** A precondition that narrates a session ending: the session has to exist first, so discovery signs in and the planner ends it. */
+const SESSION_ENDED = /\b(log(?:ged)?[\s-]?out|sign(?:ed)?[\s-]?out)\b/i;
+
+/** A precondition that starts at the sign-in form, before any session exists. */
+const SIGNED_OUT = /\bnot\s+(?:yet\s+)?(?:signed|logged)[\s-]?in\b|\bunauthenticated\b|\b(?:log[\s-]?in|sign[\s-]?in)\s+(?:page|form|screen)\b|\/(?:log-?in|sign-?in)\b/i;
+
+/** A precondition that starts from an authenticated session. */
+const SIGNED_IN = /\b(?:signed|logged)[\s-]?in\b|\bauthenticated\b/i;
+
+type SignedInStart = boolean | undefined;
+
+/** What a precondition alone says about the start: true (signed in), false (signed out) or undefined (it does not say). */
+function signedInStartOf(precondition: string): SignedInStart {
+  if (SESSION_ENDED.test(precondition)) return true;
+  if (SIGNED_OUT.test(precondition)) return false;
+  if (SIGNED_IN.test(precondition)) return true;
+  return undefined;
+}
+
+/**
+ * Decides which test cases discovery must start signed in, so a requirement behind the login form is
+ * discoverable without an operator remembering to pass --authenticate.
+ *
+ * Only a profile that declares credentials can sign in. A precondition that places the user on the
+ * sign-in form starts signed out, one that says the user is signed in (or has just signed out) starts
+ * signed in. A precondition that says neither ("the My Profile modal is open") belongs to its feature:
+ * it starts signed in when any other test case of the feature does, since a state reached from a
+ * signed-in one sits behind the login form too. `explicit` (--authenticate) signs every test case in.
+ *
+ * @param {Array<{ tcKey: string, precondition: string }>} testCases - One feature's test cases
+ * @param {Record<string, string>} credentialEnvVars - From the AUT profile
+ * @param {boolean} [explicit] - --authenticate was passed
+ * @returns {Set<string>} The tcKeys discovery signs in for
+ */
+export function signedInStarts(
+  testCases: Array<{ tcKey: string; precondition: string }>,
+  credentialEnvVars: Record<string, string>,
+  explicit = false,
+): Set<string> {
+  if (explicit) return new Set(testCases.map((tc) => tc.tcKey));
+  if (Object.keys(credentialEnvVars || {}).length === 0) return new Set();
+  const starts = testCases.map((tc) => ({ tcKey: tc.tcKey, start: signedInStartOf(String(tc.precondition || '')) }));
+  const featureSignedIn = starts.some(({ start }) => start === true);
+  return new Set(starts.filter(({ start }) => start ?? featureSignedIn).map(({ tcKey }) => tcKey));
+}

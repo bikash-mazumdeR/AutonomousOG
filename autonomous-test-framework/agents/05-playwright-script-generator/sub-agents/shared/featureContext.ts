@@ -19,8 +19,9 @@ export interface FeatureGenerationContext {
   projectSlug: string;
   featureId: string;
   /**
-   * Requirement-scoped identity of the feature, e.g. "logout-F-01". Names every generated file so a
-   * second requirement's F-01 cannot overwrite the first's. featureId stays the human-facing id.
+   * File identity of the feature: the bare feature name, e.g. "Profile" (-> Profile.spec.ts, ProfilePage.ts,
+   * page-maps/Profile.json), or the requirement-scoped "logout-F-01" when the feature has no usable name.
+   * featureId stays the human-facing id.
    */
   featureKey: string;
   sourceReviewId: string | null;

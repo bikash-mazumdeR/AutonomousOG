@@ -1,0 +1,1669 @@
+{
+  "version": 2,
+  "featureId": "F-01",
+  "states": [
+    {
+      "name": "login",
+      "urlPath": "/login",
+      "entryPath": "/login",
+      "elements": [
+        {
+          "name": "nexolviImage",
+          "strategy": "role",
+          "args": [
+            "img",
+            "Nexolvi"
+          ],
+          "tag": "img",
+          "role": "img",
+          "accessibleName": "Nexolvi"
+        },
+        {
+          "name": "onePlatformEveryBusinessConnectionHeading",
+          "strategy": "role",
+          "args": [
+            "heading",
+            "One platform. Every business connection."
+          ],
+          "tag": "h1",
+          "role": "heading",
+          "accessibleName": "One platform. Every business connection."
+        },
+        {
+          "name": "welcomeToNexolviHeading",
+          "strategy": "role",
+          "args": [
+            "heading",
+            "Welcome to Nexolvi"
+          ],
+          "tag": "h2",
+          "role": "heading",
+          "accessibleName": "Welcome to Nexolvi"
+        },
+        {
+          "name": "workEmailInput",
+          "strategy": "role",
+          "args": [
+            "textbox",
+            "Work email"
+          ],
+          "tag": "input",
+          "role": "textbox",
+          "accessibleName": "Work email",
+          "inputType": "text"
+        },
+        {
+          "name": "passwordInput",
+          "strategy": "placeholder",
+          "args": [
+            "Enter your password"
+          ],
+          "tag": "input",
+          "accessibleName": "PASSWORD",
+          "inputType": "password"
+        },
+        {
+          "name": "showPasswordButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Show password"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Show password"
+        },
+        {
+          "name": "rememberMeFor30DaysCheckbox",
+          "strategy": "role",
+          "args": [
+            "checkbox",
+            "Remember me for 30 days"
+          ],
+          "tag": "input",
+          "role": "checkbox",
+          "accessibleName": "Remember me for 30 days",
+          "inputType": "checkbox"
+        },
+        {
+          "name": "signInButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Sign in"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Sign in"
+        },
+        {
+          "name": "forMacosLink",
+          "strategy": "role",
+          "args": [
+            "link",
+            "For macOS"
+          ],
+          "tag": "a",
+          "role": "link",
+          "accessibleName": "For macOS"
+        },
+        {
+          "name": "forWindowsLink",
+          "strategy": "role",
+          "args": [
+            "link",
+            "For Windows"
+          ],
+          "tag": "a",
+          "role": "link",
+          "accessibleName": "For Windows"
+        },
+        {
+          "name": "contactYourAdministratorLink",
+          "strategy": "role",
+          "args": [
+            "link",
+            "Contact your administrator"
+          ],
+          "tag": "a",
+          "role": "link",
+          "accessibleName": "Contact your administrator"
+        },
+        {
+          "name": "passwordVisibilityToggle",
+          "strategy": "css",
+          "args": [
+            "button[aria-label=\"Show password\"], button[aria-label=\"Hide password\"]"
+          ],
+          "tag": "button",
+          "description": "eye icon that toggles password visibility; its accessible name states the next action, so this matches it in both the masked and revealed states"
+        }
+      ]
+    },
+    {
+      "name": "start",
+      "urlPath": "/",
+      "elements": [
+        {
+          "name": "nexolviLogoImage",
+          "strategy": "role",
+          "args": [
+            "img",
+            "Nexolvi Logo"
+          ],
+          "tag": "img",
+          "role": "img",
+          "accessibleName": "Nexolvi Logo"
+        },
+        {
+          "name": "engageFlowButton",
+          "strategy": "text",
+          "args": [
+            "Engage Flow"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Engage Flow"
+        },
+        {
+          "name": "gptButton",
+          "strategy": "text",
+          "args": [
+            "GPT"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "GPT"
+        },
+        {
+          "name": "affiliatesButton",
+          "strategy": "text",
+          "args": [
+            "Affiliates"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Affiliates"
+        },
+        {
+          "name": "nexocrmButton",
+          "strategy": "text",
+          "args": [
+            "NexoCRM"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "NexoCRM"
+        },
+        {
+          "name": "chatbotsButton",
+          "strategy": "text",
+          "args": [
+            "Chatbots"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Chatbots"
+        },
+        {
+          "name": "workOsButton",
+          "strategy": "text",
+          "args": [
+            "Work OS"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Work OS"
+        },
+        {
+          "name": "combobox",
+          "strategy": "role",
+          "args": [
+            "combobox"
+          ],
+          "tag": "button",
+          "role": "combobox"
+        },
+        {
+          "name": "bButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "B"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "B"
+        },
+        {
+          "name": "dashboardButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Dashboard"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Dashboard"
+        },
+        {
+          "name": "blogsButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Blogs"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Blogs"
+        },
+        {
+          "name": "authorsButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Authors"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Authors"
+        },
+        {
+          "name": "pagesButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Pages"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Pages"
+        },
+        {
+          "name": "mediaButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Media"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Media"
+        },
+        {
+          "name": "menusButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Menus"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Menus"
+        },
+        {
+          "name": "contactRequestsButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Contact Requests"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Contact Requests"
+        },
+        {
+          "name": "testimonialsButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Testimonials"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Testimonials"
+        },
+        {
+          "name": "releasesButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Releases"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Releases"
+        },
+        {
+          "name": "mediaCoverageButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Media Coverage"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Media Coverage"
+        },
+        {
+          "name": "eventsButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Events"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Events"
+        },
+        {
+          "name": "teamButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Team"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Team"
+        },
+        {
+          "name": "subscribersButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Subscribers"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Subscribers"
+        },
+        {
+          "name": "faqsButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "FAQs"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "FAQs"
+        },
+        {
+          "name": "servicesButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Services"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Services"
+        },
+        {
+          "name": "serviceCategoriesButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Service Categories"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Service Categories"
+        },
+        {
+          "name": "docsLibraryButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Docs Library"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Docs Library"
+        },
+        {
+          "name": "analyticsButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Analytics"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Analytics"
+        },
+        {
+          "name": "siteAuditButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Site Audit"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Site Audit"
+        },
+        {
+          "name": "searchConsoleButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Search Console"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Search Console"
+        },
+        {
+          "name": "seoButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "SEO"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "SEO"
+        },
+        {
+          "name": "backlinksButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Backlinks"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Backlinks"
+        },
+        {
+          "name": "keywordsButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Keywords"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Keywords"
+        },
+        {
+          "name": "collapseButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Collapse"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Collapse"
+        },
+        {
+          "name": "dashboardHeading",
+          "strategy": "role",
+          "args": [
+            "heading",
+            "Dashboard"
+          ],
+          "tag": "h2",
+          "role": "heading",
+          "accessibleName": "Dashboard"
+        },
+        {
+          "name": "status",
+          "strategy": "role",
+          "args": [
+            "status"
+          ],
+          "tag": "li",
+          "role": "status"
+        },
+        {
+          "name": "successText",
+          "strategy": "text",
+          "args": [
+            "Success"
+          ],
+          "tag": "div",
+          "description": "status message (toast / notification) the application shows after the action that triggers it and removes on its own a few seconds later — assert it right after that action"
+        },
+        {
+          "name": "profileUpdatedSuccessfullyText",
+          "strategy": "text",
+          "args": [
+            "Profile updated successfully"
+          ],
+          "tag": "div",
+          "description": "status message (toast / notification) the application shows after the action that triggers it and removes on its own a few seconds later — assert it right after that action"
+        }
+      ]
+    },
+    {
+      "name": "startMenu",
+      "urlPath": "/",
+      "overlay": {
+        "role": "menu",
+        "name": "B"
+      },
+      "elements": [
+        {
+          "name": "bMenu",
+          "strategy": "role",
+          "args": [
+            "menu"
+          ],
+          "tag": "div",
+          "role": "menu",
+          "accessibleName": "B"
+        },
+        {
+          "name": "profileMenuItem",
+          "strategy": "role",
+          "args": [
+            "menuitem",
+            "Profile"
+          ],
+          "tag": "div",
+          "role": "menuitem",
+          "accessibleName": "Profile"
+        },
+        {
+          "name": "logoutMenuItem",
+          "strategy": "role",
+          "args": [
+            "menuitem",
+            "Logout"
+          ],
+          "tag": "div",
+          "role": "menuitem",
+          "accessibleName": "Logout"
+        },
+        {
+          "name": "accountIdentifierText",
+          "strategy": "env",
+          "args": [
+            "NEXOLVI_EMAIL"
+          ],
+          "tag": "span",
+          "description": "the account identifier the session signed in with (email or username) as the page shows it, read from NEXOLVI_EMAIL at runtime — assert that it is visible; never assert, type or bind its literal value"
+        },
+        {
+          "name": "bikashHtcText",
+          "strategy": "text",
+          "args": [
+            "bikash.htc"
+          ],
+          "tag": "span",
+          "description": "static text"
+        },
+        {
+          "name": "bikashQaText",
+          "strategy": "text",
+          "args": [
+            "Bikash QA"
+          ],
+          "tag": "span",
+          "description": "static text"
+        },
+        {
+          "name": "successText",
+          "strategy": "text",
+          "args": [
+            "Success"
+          ],
+          "tag": "div",
+          "description": "status message (toast / notification) the application shows after the action that triggers it and removes on its own a few seconds later — assert it right after that action"
+        },
+        {
+          "name": "profileUpdatedSuccessfullyText",
+          "strategy": "text",
+          "args": [
+            "Profile updated successfully"
+          ],
+          "tag": "div",
+          "description": "status message (toast / notification) the application shows after the action that triggers it and removes on its own a few seconds later — assert it right after that action"
+        }
+      ]
+    },
+    {
+      "name": "startMyProfileDialog",
+      "urlPath": "/",
+      "overlay": {
+        "role": "dialog",
+        "name": "My Profile"
+      },
+      "elements": [
+        {
+          "name": "myProfileDialog",
+          "strategy": "role",
+          "args": [
+            "dialog"
+          ],
+          "tag": "div",
+          "role": "dialog",
+          "accessibleName": "My Profile"
+        },
+        {
+          "name": "myProfileHeading",
+          "strategy": "role",
+          "args": [
+            "heading",
+            "My Profile"
+          ],
+          "tag": "h2",
+          "role": "heading",
+          "accessibleName": "My Profile"
+        },
+        {
+          "name": "nameInput",
+          "strategy": "role",
+          "args": [
+            "textbox",
+            "Name"
+          ],
+          "tag": "input",
+          "role": "textbox",
+          "accessibleName": "Name",
+          "inputType": "text"
+        },
+        {
+          "name": "emailInput",
+          "strategy": "role",
+          "args": [
+            "textbox",
+            "Email"
+          ],
+          "tag": "input",
+          "role": "textbox",
+          "accessibleName": "Email",
+          "inputType": "email"
+        },
+        {
+          "name": "phoneInput",
+          "strategy": "role",
+          "args": [
+            "textbox",
+            "Phone"
+          ],
+          "tag": "input",
+          "role": "textbox",
+          "accessibleName": "Phone",
+          "inputType": "tel"
+        },
+        {
+          "name": "newPasswordInput",
+          "strategy": "label",
+          "args": [
+            "New Password"
+          ],
+          "tag": "input",
+          "accessibleName": "New Password",
+          "inputType": "password"
+        },
+        {
+          "name": "confirmPasswordInput",
+          "strategy": "label",
+          "args": [
+            "Confirm Password"
+          ],
+          "tag": "input",
+          "accessibleName": "Confirm Password",
+          "inputType": "password"
+        },
+        {
+          "name": "cancelButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Cancel"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Cancel"
+        },
+        {
+          "name": "saveChangesButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Save Changes"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Save Changes"
+        },
+        {
+          "name": "closeButton",
+          "strategy": "role",
+          "args": [
+            "button",
+            "Close"
+          ],
+          "tag": "button",
+          "role": "button",
+          "accessibleName": "Close"
+        },
+        {
+          "name": "accountIdentifierText",
+          "strategy": "env",
+          "args": [
+            "NEXOLVI_EMAIL"
+          ],
+          "tag": "p",
+          "description": "the account identifier the session signed in with (email or username) as the page shows it, read from NEXOLVI_EMAIL at runtime — assert that it is visible; never assert, type or bind its literal value"
+        },
+        {
+          "name": "viewAndEditYourAccountText",
+          "strategy": "text",
+          "args": [
+            "View and edit your account information."
+          ],
+          "tag": "p",
+          "description": "static text"
+        },
+        {
+          "name": "bikashHtcText",
+          "strategy": "text",
+          "args": [
+            "bikash.htc"
+          ],
+          "tag": "p",
+          "description": "static text"
+        },
+        {
+          "name": "nameText",
+          "strategy": "text",
+          "args": [
+            "Name"
+          ],
+          "tag": "label",
+          "description": "static text"
+        },
+        {
+          "name": "emailText",
+          "strategy": "text",
+          "args": [
+            "Email"
+          ],
+          "tag": "label",
+          "description": "static text"
+        },
+        {
+          "name": "phoneText",
+          "strategy": "text",
+          "args": [
+            "Phone"
+          ],
+          "tag": "label",
+          "description": "static text"
+        },
+        {
+          "name": "changePasswordText",
+          "strategy": "text",
+          "args": [
+            "Change Password"
+          ],
+          "tag": "p",
+          "description": "static text"
+        },
+        {
+          "name": "newPasswordText",
+          "strategy": "text",
+          "args": [
+            "New Password"
+          ],
+          "tag": "label",
+          "description": "static text"
+        },
+        {
+          "name": "confirmPasswordText",
+          "strategy": "text",
+          "args": [
+            "Confirm Password"
+          ],
+          "tag": "label",
+          "description": "static text"
+        },
+        {
+          "name": "bikashQaText",
+          "strategy": "text",
+          "args": [
+            "Bikash QA"
+          ],
+          "tag": "p",
+          "description": "static text"
+        },
+        {
+          "name": "errorText",
+          "strategy": "text",
+          "args": [
+            "Error"
+          ],
+          "tag": "div",
+          "description": "status message (toast / notification) the application shows after the action that triggers it and removes on its own a few seconds later — assert it right after that action"
+        },
+        {
+          "name": "userNotFoundText",
+          "strategy": "text",
+          "args": [
+            "User not found"
+          ],
+          "tag": "div",
+          "description": "status message (toast / notification) the application shows after the action that triggers it and removes on its own a few seconds later — assert it right after that action"
+        },
+        {
+          "name": "passwordsDoNotMatchText",
+          "strategy": "text",
+          "args": [
+            "Passwords do not match"
+          ],
+          "tag": "div",
+          "description": "status message (toast / notification) the application shows after the action that triggers it and removes on its own a few seconds later — assert it right after that action"
+        }
+      ]
+    }
+  ],
+  "traces": [
+    {
+      "tcKey": "TC-001",
+      "runs": [
+        {
+          "state": "login",
+          "actions": [
+            {
+              "stepIndex": 1,
+              "state": "login",
+              "op": "goto",
+              "target": "login"
+            },
+            {
+              "stepIndex": 3,
+              "state": "login",
+              "element": "workEmailInput",
+              "op": "fill",
+              "value": {
+                "literal": "qa.user@example.test"
+              }
+            },
+            {
+              "stepIndex": 4,
+              "state": "login",
+              "element": "workEmailInput",
+              "op": "fill",
+              "value": {
+                "literal": "qa.user@example.test"
+              }
+            },
+            {
+              "stepIndex": 4,
+              "state": "login",
+              "element": "passwordInput",
+              "op": "fill",
+              "value": {
+                "literal": "Aria_Pass_01!"
+              }
+            }
+          ],
+          "reachedState": "login"
+        }
+      ],
+      "stateAfterStep": {
+        "0": "login",
+        "1": "login",
+        "2": "login",
+        "3": "login",
+        "4": "login"
+      }
+    },
+    {
+      "tcKey": "TC-002",
+      "runs": [
+        {
+          "state": "login",
+          "actions": [
+            {
+              "stepIndex": 2,
+              "state": "login",
+              "element": "workEmailInput",
+              "op": "fill",
+              "value": {
+                "binding": "{{validEmail}}"
+              }
+            },
+            {
+              "stepIndex": 2,
+              "state": "login",
+              "element": "passwordInput",
+              "op": "fill",
+              "value": {
+                "binding": "{{validPassword}}"
+              }
+            },
+            {
+              "stepIndex": 2,
+              "state": "login",
+              "element": "signInButton",
+              "op": "click"
+            }
+          ],
+          "reachedState": "start"
+        }
+      ],
+      "stateAfterStep": {
+        "0": "login",
+        "1": "login",
+        "2": "start",
+        "3": "start"
+      }
+    },
+    {
+      "tcKey": "TC-003",
+      "runs": [
+        {
+          "state": "start",
+          "actions": [
+            {
+              "stepIndex": 2,
+              "state": "start",
+              "element": "bButton",
+              "op": "click"
+            }
+          ],
+          "reachedState": "startMenu"
+        },
+        {
+          "state": "startMenu",
+          "actions": [
+            {
+              "stepIndex": 3,
+              "state": "startMenu",
+              "element": "profileMenuItem",
+              "op": "click"
+            }
+          ],
+          "reachedState": "startMyProfileDialog"
+        }
+      ],
+      "stateAfterStep": {
+        "0": "start",
+        "1": "start",
+        "2": "startMenu",
+        "3": "startMyProfileDialog",
+        "4": "startMyProfileDialog"
+      }
+    },
+    {
+      "tcKey": "TC-004",
+      "runs": [
+        {
+          "state": "start",
+          "actions": [
+            {
+              "stepIndex": 0,
+              "state": "start",
+              "element": "bButton",
+              "op": "click"
+            }
+          ],
+          "reachedState": "startMenu"
+        },
+        {
+          "state": "startMenu",
+          "actions": [
+            {
+              "stepIndex": 0,
+              "state": "startMenu",
+              "element": "profileMenuItem",
+              "op": "click"
+            }
+          ],
+          "reachedState": "startMyProfileDialog"
+        },
+        {
+          "state": "startMyProfileDialog",
+          "actions": [
+            {
+              "stepIndex": 2,
+              "state": "startMyProfileDialog",
+              "element": "nameInput",
+              "op": "fill",
+              "value": {
+                "binding": "{{updatedName}}"
+              }
+            },
+            {
+              "stepIndex": 2,
+              "state": "startMyProfileDialog",
+              "element": "saveChangesButton",
+              "op": "click"
+            }
+          ],
+          "reachedState": "start"
+        },
+        {
+          "state": "start",
+          "actions": [
+            {
+              "stepIndex": 3,
+              "state": "start",
+              "element": "bButton",
+              "op": "click"
+            }
+          ],
+          "reachedState": "startMenu"
+        },
+        {
+          "state": "startMenu",
+          "actions": [
+            {
+              "stepIndex": 3,
+              "state": "startMenu",
+              "element": "profileMenuItem",
+              "op": "click"
+            }
+          ],
+          "reachedState": "startMyProfileDialog"
+        },
+        {
+          "state": "startMyProfileDialog",
+          "actions": [
+            {
+              "stepIndex": 4,
+              "state": "startMyProfileDialog",
+              "element": "nameInput",
+              "op": "fill",
+              "value": {
+                "literal": "bikash.htc"
+              }
+            },
+            {
+              "stepIndex": 4,
+              "state": "startMyProfileDialog",
+              "element": "saveChangesButton",
+              "op": "click"
+            }
+          ],
+          "reachedState": "startMyProfileDialog"
+        }
+      ],
+      "stateAfterStep": {
+        "0": "startMyProfileDialog",
+        "1": "startMyProfileDialog",
+        "2": "start",
+        "3": "startMyProfileDialog",
+        "4": "startMyProfileDialog"
+      }
+    },
+    {
+      "tcKey": "TC-005",
+      "runs": [
+        {
+          "state": "start",
+          "actions": [
+            {
+              "stepIndex": 0,
+              "state": "start",
+              "element": "bButton",
+              "op": "click"
+            }
+          ],
+          "reachedState": "startMenu"
+        },
+        {
+          "state": "startMenu",
+          "actions": [
+            {
+              "stepIndex": 0,
+              "state": "startMenu",
+              "element": "profileMenuItem",
+              "op": "click"
+            }
+          ],
+          "reachedState": "startMyProfileDialog"
+        },
+        {
+          "state": "startMyProfileDialog",
+          "actions": [
+            {
+              "stepIndex": 2,
+              "state": "startMyProfileDialog",
+              "element": "newPasswordInput",
+              "op": "fill",
+              "value": {
+                "binding": "{{newPassword}}"
+              }
+            },
+            {
+              "stepIndex": 2,
+              "state": "startMyProfileDialog",
+              "element": "confirmPasswordInput",
+              "op": "fill",
+              "value": {
+                "binding": "{{newPassword}}"
+              }
+            },
+            {
+              "stepIndex": 2,
+              "state": "startMyProfileDialog",
+              "element": "saveChangesButton",
+              "op": "click"
+            }
+          ],
+          "reachedState": "start"
+        }
+      ],
+      "stateAfterStep": {
+        "0": "startMyProfileDialog",
+        "1": "startMyProfileDialog",
+        "2": "start"
+      }
+    },
+    {
+      "tcKey": "TC-006",
+      "runs": [
+        {
+          "state": "start",
+          "actions": [
+            {
+              "stepIndex": 0,
+              "state": "start",
+              "element": "bButton",
+              "op": "click"
+            }
+          ],
+          "reachedState": "startMenu"
+        },
+        {
+          "state": "startMenu",
+          "actions": [
+            {
+              "stepIndex": 0,
+              "state": "startMenu",
+              "element": "profileMenuItem",
+              "op": "click"
+            }
+          ],
+          "reachedState": "startMyProfileDialog"
+        },
+        {
+          "state": "startMyProfileDialog",
+          "actions": [
+            {
+              "stepIndex": 2,
+              "state": "startMyProfileDialog",
+              "element": "newPasswordInput",
+              "op": "fill",
+              "value": {
+                "binding": "{{newPassword}}"
+              }
+            },
+            {
+              "stepIndex": 2,
+              "state": "startMyProfileDialog",
+              "element": "confirmPasswordInput",
+              "op": "fill",
+              "value": {
+                "binding": "{{differentPassword}}"
+              }
+            },
+            {
+              "stepIndex": 2,
+              "state": "startMyProfileDialog",
+              "element": "saveChangesButton",
+              "op": "click"
+            }
+          ],
+          "reachedState": "startMyProfileDialog"
+        }
+      ],
+      "stateAfterStep": {
+        "0": "startMyProfileDialog",
+        "1": "startMyProfileDialog",
+        "2": "startMyProfileDialog"
+      }
+    },
+    {
+      "tcKey": "TC-007",
+      "runs": [
+        {
+          "state": "login",
+          "actions": [
+            {
+              "stepIndex": 2,
+              "state": "login",
+              "element": "workEmailInput",
+              "op": "fill",
+              "value": {
+                "literal": "qa.user@example.test"
+              }
+            }
+          ],
+          "reachedState": "login"
+        }
+      ],
+      "stateAfterStep": {
+        "0": "login",
+        "1": "login",
+        "2": "login"
+      }
+    },
+    {
+      "tcKey": "TC-008",
+      "runs": [
+        {
+          "state": "login",
+          "actions": [
+            {
+              "stepIndex": 2,
+              "state": "login",
+              "element": "passwordInput",
+              "op": "fill",
+              "value": {
+                "literal": "Aria_Pass_01!"
+              }
+            }
+          ],
+          "reachedState": "login"
+        }
+      ],
+      "stateAfterStep": {
+        "0": "login",
+        "1": "login",
+        "2": "login"
+      }
+    },
+    {
+      "tcKey": "TC-009",
+      "runs": [
+        {
+          "state": "start",
+          "actions": [
+            {
+              "stepIndex": 0,
+              "state": "start",
+              "element": "bButton",
+              "op": "click"
+            }
+          ],
+          "reachedState": "startMenu"
+        },
+        {
+          "state": "startMenu",
+          "actions": [
+            {
+              "stepIndex": 0,
+              "state": "startMenu",
+              "element": "profileMenuItem",
+              "op": "click"
+            }
+          ],
+          "reachedState": "startMyProfileDialog"
+        },
+        {
+          "state": "startMyProfileDialog",
+          "actions": [
+            {
+              "stepIndex": 0,
+              "state": "startMyProfileDialog",
+              "element": "nameInput",
+              "op": "fill",
+              "value": {
+                "literal": "Unsaved Name"
+              }
+            },
+            {
+              "stepIndex": 2,
+              "state": "startMyProfileDialog",
+              "element": "cancelButton",
+              "op": "click"
+            }
+          ],
+          "reachedState": "start"
+        },
+        {
+          "state": "start",
+          "actions": [
+            {
+              "stepIndex": 3,
+              "state": "start",
+              "element": "bButton",
+              "op": "click"
+            }
+          ],
+          "reachedState": "startMenu"
+        },
+        {
+          "state": "startMenu",
+          "actions": [
+            {
+              "stepIndex": 3,
+              "state": "startMenu",
+              "element": "profileMenuItem",
+              "op": "click"
+            }
+          ],
+          "reachedState": "startMyProfileDialog"
+        }
+      ],
+      "stateAfterStep": {
+        "0": "startMyProfileDialog",
+        "1": "startMyProfileDialog",
+        "2": "start",
+        "3": "startMyProfileDialog"
+      }
+    },
+    {
+      "tcKey": "TC-010",
+      "runs": [
+        {
+          "state": "login",
+          "actions": [
+            {
+              "stepIndex": 0,
+              "state": "login",
+              "op": "goto",
+              "target": "login"
+            }
+          ],
+          "reachedState": "login"
+        },
+        {
+          "state": "login",
+          "actions": [
+            {
+              "stepIndex": 2,
+              "state": "login",
+              "element": "workEmailInput",
+              "op": "fill",
+              "value": {
+                "literal": "a"
+              }
+            },
+            {
+              "stepIndex": 2,
+              "state": "login",
+              "element": "passwordInput",
+              "op": "fill",
+              "value": {
+                "literal": "b"
+              }
+            }
+          ],
+          "reachedState": "login"
+        }
+      ],
+      "stateAfterStep": {
+        "0": "login",
+        "1": "login",
+        "2": "login"
+      }
+    },
+    {
+      "tcKey": "TC-011",
+      "runs": [
+        {
+          "state": "start",
+          "actions": [
+            {
+              "stepIndex": 0,
+              "state": "start",
+              "element": "bButton",
+              "op": "click"
+            }
+          ],
+          "reachedState": "startMenu"
+        },
+        {
+          "state": "startMenu",
+          "actions": [
+            {
+              "stepIndex": 0,
+              "state": "startMenu",
+              "element": "profileMenuItem",
+              "op": "click"
+            }
+          ],
+          "reachedState": "startMyProfileDialog"
+        },
+        {
+          "state": "startMyProfileDialog",
+          "actions": [
+            {
+              "stepIndex": 2,
+              "state": "startMyProfileDialog",
+              "element": "closeButton",
+              "op": "click"
+            }
+          ],
+          "reachedState": "start"
+        }
+      ],
+      "stateAfterStep": {
+        "0": "startMyProfileDialog",
+        "1": "startMyProfileDialog",
+        "2": "start"
+      }
+    },
+    {
+      "tcKey": "TC-012",
+      "runs": [
+        {
+          "state": "start",
+          "actions": [
+            {
+              "stepIndex": 2,
+              "state": "start",
+              "element": "bButton",
+              "op": "hover"
+            },
+            {
+              "stepIndex": 3,
+              "state": "start",
+              "element": "bButton",
+              "op": "click"
+            }
+          ],
+          "reachedState": "startMenu"
+        },
+        {
+          "state": "startMenu",
+          "actions": [
+            {
+              "stepIndex": 4,
+              "state": "startMenu",
+              "element": "profileMenuItem",
+              "op": "click"
+            }
+          ],
+          "reachedState": "startMyProfileDialog"
+        }
+      ],
+      "stateAfterStep": {
+        "0": "start",
+        "1": "start",
+        "2": "start",
+        "3": "startMenu",
+        "4": "startMyProfileDialog"
+      }
+    },
+    {
+      "tcKey": "TC-013",
+      "runs": [
+        {
+          "state": "start",
+          "actions": [
+            {
+              "stepIndex": 0,
+              "state": "start",
+              "element": "bButton",
+              "op": "click"
+            }
+          ],
+          "reachedState": "startMenu"
+        },
+        {
+          "state": "startMenu",
+          "actions": [
+            {
+              "stepIndex": 0,
+              "state": "startMenu",
+              "element": "profileMenuItem",
+              "op": "click"
+            }
+          ],
+          "reachedState": "startMyProfileDialog"
+        },
+        {
+          "state": "startMyProfileDialog",
+          "actions": [
+            {
+              "stepIndex": 2,
+              "state": "startMyProfileDialog",
+              "element": "newPasswordInput",
+              "op": "fill",
+              "value": {
+                "binding": "{{newPassword}}"
+              }
+            },
+            {
+              "stepIndex": 2,
+              "state": "startMyProfileDialog",
+              "element": "confirmPasswordInput",
+              "op": "fill",
+              "value": {
+                "binding": "{{newPassword}}"
+              }
+            }
+          ],
+          "reachedState": "startMyProfileDialog"
+        }
+      ],
+      "stateAfterStep": {
+        "0": "startMyProfileDialog",
+        "1": "startMyProfileDialog",
+        "2": "startMyProfileDialog"
+      }
+    },
+    {
+      "tcKey": "TC-014",
+      "runs": [
+        {
+          "state": "start",
+          "actions": [
+            {
+              "stepIndex": 0,
+              "state": "start",
+              "element": "bButton",
+              "op": "click"
+            }
+          ],
+          "reachedState": "startMenu"
+        },
+        {
+          "state": "startMenu",
+          "actions": [
+            {
+              "stepIndex": 0,
+              "state": "startMenu",
+              "element": "profileMenuItem",
+              "op": "click"
+            }
+          ],
+          "reachedState": "startMyProfileDialog"
+        },
+        {
+          "state": "startMyProfileDialog",
+          "actions": [
+            {
+              "stepIndex": 2,
+              "state": "startMyProfileDialog",
+              "element": "saveChangesButton",
+              "op": "click"
+            }
+          ],
+          "reachedState": "start"
+        },
+        {
+          "state": "start",
+          "actions": [
+            {
+              "stepIndex": 3,
+              "state": "start",
+              "element": "bButton",
+              "op": "click"
+            }
+          ],
+          "reachedState": "startMenu"
+        },
+        {
+          "state": "startMenu",
+          "actions": [
+            {
+              "stepIndex": 3,
+              "state": "startMenu",
+              "element": "profileMenuItem",
+              "op": "click"
+            }
+          ],
+          "reachedState": "startMyProfileDialog"
+        },
+        {
+          "state": "startMyProfileDialog",
+          "actions": [
+            {
+              "stepIndex": 4,
+              "state": "startMyProfileDialog",
+              "element": "saveChangesButton",
+              "op": "click"
+            }
+          ],
+          "reachedState": "startMyProfileDialog"
+        }
+      ],
+      "stateAfterStep": {
+        "0": "startMyProfileDialog",
+        "1": "startMyProfileDialog",
+        "2": "start",
+        "3": "startMyProfileDialog",
+        "4": "startMyProfileDialog"
+      }
+    }
+  ],
+  "flows": [
+    {
+      "id": "0792c91d9e63",
+      "name": "startMyProfileDialogClickSaveChangesButtonFlow",
+      "state": "startMyProfileDialog",
+      "actions": [
+        {
+          "element": "newPasswordInput",
+          "op": "fill",
+          "param": "newPasswordInput"
+        },
+        {
+          "element": "confirmPasswordInput",
+          "op": "fill",
+          "param": "confirmPasswordInput"
+        },
+        {
+          "element": "saveChangesButton",
+          "op": "click"
+        }
+      ],
+      "usedBy": [
+        "TC-005",
+        "TC-006"
+      ]
+    }
+  ],
+  "auth": {
+    "loginState": "login",
+    "signedInState": "start",
+    "identifier": "workEmailInput",
+    "password": "passwordInput",
+    "submit": "signInButton",
+    "identifierEnv": "NEXOLVI_EMAIL",
+    "passwordEnv": "NEXOLVI_PASSWORD"
+  }
+}

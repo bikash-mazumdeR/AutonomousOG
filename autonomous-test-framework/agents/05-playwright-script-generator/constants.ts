@@ -65,6 +65,8 @@ export const ENV_FUNCTION = 'env';
 
 /** Page-object method that performs the sign-in discovery verified; the framework env helper it reads credentials with. */
 export const SIGN_IN_METHOD = 'signIn';
+/** Page-object method that returns a still signed-in page to the signed-in state, so tests sharing one page sign in once. */
+export const RESUME_SESSION_METHOD = 'resumeSession';
 export const POM_ENV_FUNCTION = 'requireEnv';
 
 /**
@@ -144,6 +146,11 @@ export const DISCOVERY_SETTINGS = Object.freeze({
   REQUEST_START_GRACE_MS: 800,
   /** Poll interval while in-flight requests drain. */
   IN_FLIGHT_POLL_MS: 100,
+  /**
+   * Poll interval for status messages while an action settles. A toast lives a few seconds and may be gone
+   * by the time the page is quiet, so it is looked for while settling, not only when the state is captured.
+   */
+  NOTIFICATION_POLL_MS: 200,
   MAX_ELEMENTS_PER_STATE: 150,
   MAX_TEXT_LENGTH: 80,
   PLANNER_ATTEMPTS: 2,
@@ -175,6 +182,12 @@ export const CONTENT_NAMED_ROLES: ReadonlySet<string> = new Set([
 export const OVERLAY_ROLES: readonly string[] = Object.freeze(['alertdialog', 'dialog', 'menu']);
 
 /**
+ * Roles of live regions: a status message, toast or alert the application announces after an action. Elements with
+ * aria-live="polite" or "assertive" are live regions too, whatever their role.
+ */
+export const LIVE_REGION_ROLES: readonly string[] = Object.freeze(['status', 'alert', 'log']);
+
+/**
  * Roles that are addressable by role alone (`getByRole('alertdialog')`) when the page holds exactly one: overlays,
  * landmarks and composite widgets. They typically carry no accessible name, which is why a role + name locator
  * cannot capture them, yet a test must reach them to assert what they show or to scope its own assertions.
@@ -194,6 +207,15 @@ export const FLOW_SETTINGS = Object.freeze({
 
 /** Minimum number of tests in a spec before leading statements they all share are moved into beforeEach. */
 export const HOOK_MIN_TESTS = 2;
+
+/** Minimum number of tests that start by signing in before they share one signed-in page instead of signing in each. */
+export const SESSION_MIN_TESTS = 2;
+
+/**
+ * Review label that keeps a test case out of the shared signed-in session: it gets a fresh page and its own sign-in,
+ * so what earlier tests did in the session cannot change its outcome. Matched case-insensitively, ignoring separators.
+ */
+export const ISOLATED_SESSION_LABEL = 'Isolated Session';
 
 /** Minimum length of a state-name word that must appear in an expected result before its URL path may be asserted. */
 export const MIN_STATE_WORD_LENGTH = 3;

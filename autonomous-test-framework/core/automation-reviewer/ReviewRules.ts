@@ -8,7 +8,9 @@
  */
 
 import * as recast from 'recast';
-import { FILE_TYPE, FINDING_SEVERITY, Finding, ReviewResult } from './reviewTypes';
+import {
+  FILE_TYPE, FINDING_SEVERITY, Finding, ReviewResult, TEST_OBJECTS,
+} from './reviewTypes';
 import {
   collectIntegrityFindings, isExpectCall, isLiteral, propName,
 } from './IntegrityRules';
@@ -114,8 +116,8 @@ function checkCompleteness(ast: any, expectedTCKeys: string[]): Finding[] {
   recast.visit(ast, {
     visitCallExpression(path: any) {
       const { callee } = path.node;
-      const isTest = (callee.type === 'Identifier' && callee.name === 'test')
-        || (callee.type === 'MemberExpression' && callee.object.type === 'Identifier' && callee.object.name === 'test');
+      const isTest = (callee.type === 'Identifier' && TEST_OBJECTS.has(callee.name))
+        || (callee.type === 'MemberExpression' && callee.object.type === 'Identifier' && TEST_OBJECTS.has(callee.object.name));
       if (isTest && path.node.arguments.length >= 1) collectAnnotatedKeys(path.node, expectedTCKeys, foundKeys);
       this.traverse(path);
     },

@@ -136,6 +136,26 @@ describe('Agent 05 integrity validator', () => {
     expect(validate(validEntry)).toEqual([]);
   });
 
+  it('accepts a quoted text proven by a visible member whose locator matches it exactly, or reads it from its variable', () => {
+    const presence = (member: string, notVisible = false) => withBody(validBody.replace("toHaveText('Access code is required')", notVisible ? 'not.toBeVisible()' : 'toBeVisible()'), [
+      validEntry.stepAssertions![0],
+      { stepIndex: 2, assertions: [`await expect(featurePage.${member}).${notVisible ? 'not.' : ''}toBeVisible();`, "await expect(featurePage.errorBanner).toHaveCSS('background-color', 'rgb(255, 0, 0)');"] },
+    ]);
+    const withMember = (extra: Partial<PageContract['members'][number]>) => ({
+      ...contract, members: contract.members.map((m) => (m.name === 'errorBanner' ? { ...m, ...extra } : m)),
+    });
+    const run = (entry: GeneratedTest, contractFor: PageContract, extra: Partial<Parameters<typeof validateGeneratedTest>[1]> = {}) => validateGeneratedTest(entry, {
+      mode: 'UI', tc, contract: contractFor, harness: harness(entry.body as string), ...extra,
+    });
+    expect(run(presence('errorBanner'), withMember({ matchesText: 'Access code is required' }))).toEqual([]);
+    // Absence proves nothing, and a member matching another text does not stand in for this one.
+    expect(run(presence('errorBanner', true), withMember({ matchesText: 'Access code is required' })).join('\n')).toContain('quotes "Access code is required"');
+    expect(run(presence('errorBanner'), withMember({ matchesText: 'Access code' })).join('\n')).toContain('quotes "Access code is required"');
+    // The account identifier: the quoted value is the variable's value, proven through the env member, never written down.
+    const secrets = [{ name: 'SAMPLE_CODE_MESSAGE', value: 'Access code is required' }];
+    expect(run(presence('errorBanner'), withMember({ envVar: 'SAMPLE_CODE_MESSAGE' }), { secrets })).toEqual([]);
+  });
+
   it('requires every expected result to be mapped and every assertion to be listed', () => {
     const errors = validate(withBody(validBody, [validEntry.stepAssertions![0]])).join('\n');
     expect(errors).toContain('Step 2 has 2 expected result(s)');

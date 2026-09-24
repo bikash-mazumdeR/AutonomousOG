@@ -87,3 +87,35 @@ export class F01Page extends BasePage {
     expect(ruleIds(k6, FILE_TYPE.K6)).toEqual([]);
   });
 });
+
+describe('IntegrityRules — the shared signed-in session block', () => {
+  const sessionSpec = (configure: string, declaration = "sessionTest('[TC-002] sample'") => `import { test as base, expect, Page } from '@playwright/test';
+const test = base;
+let sessionPage: Page;
+const sessionTest = test.extend({ page: async ({}, use) => { await use(sessionPage); } });
+sessionTest.describe('F-01 signed-in session', () => {
+  ${configure}
+  ${declaration}, { annotation: [{ type: 'TC Key', description: 'TC-002' }] }, async ({ featurePage }) => {
+    await featurePage.openStart();
+    await expect(featurePage.dashboardHeading).toBeVisible();
+  });
+});
+`;
+
+  it('finds the tests declared on sessionTest and allows keeping them in order on one worker', () => {
+    const code = sessionSpec("sessionTest.describe.configure({ mode: 'default' });");
+    expect(analyzeWithAST(code, FILE_TYPE.SPEC, ['TC-002']).findings.filter((f) => f.severity === FINDING_SEVERITY.BLOCKER)).toEqual([]);
+  });
+
+  it.each([
+    ["sessionTest.describe.configure({ mode: 'serial' });", 'INT-010'],
+    ["sessionTest.describe.configure({ mode: 'default', retries: 3 });", 'INT-010'],
+    ["test.describe.configure({ mode: 'parallel' });", 'INT-010'],
+  ])('still flags %s', (configure, ruleId) => {
+    expect(ruleIds(sessionSpec(configure))).toContain(ruleId);
+  });
+
+  it('still flags a skipped session test', () => {
+    expect(ruleIds(sessionSpec('', "sessionTest.skip('[TC-002] sample'"))).toContain('INT-002');
+  });
+});

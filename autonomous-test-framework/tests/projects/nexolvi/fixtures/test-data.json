@@ -23,5 +23,15 @@
   "profileInitial": "B",
   "dashboardUrl": "https://admin.nexolvi.ai/",
   "popupHeader": "Log out?",
-  "popupMessage": "Are you sure you want to log out? Any unsaved changes will be lost."
+  "popupMessage": "Are you sure you want to log out? Any unsaved changes will be lost.",
+  "loginUrl": "https://admin.nexolvi.ai/login",
+  "profileButtonInitial": "B",
+  "userFullName": "Bikash h",
+  "userEmail": "bikash.htc@gmail.com",
+  "userPhone": "+1 555 000 0000",
+  "profileButtonTooltipText": "bikash.h",
+  "modalTitle": "My Profile",
+  "modalDescription": "View and edit your account information.",
+  "TC004_updatedName": "Bikash QA",
+  "updatedName": "Bikash QA"
 }

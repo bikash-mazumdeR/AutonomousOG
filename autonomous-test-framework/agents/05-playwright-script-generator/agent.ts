@@ -45,7 +45,7 @@ import { renderTestTitle } from './rendering/specRenderer';
 import {
   findUnclaimedGeneratedFiles, readManifest, removeSupersededFiles, toRelative, writeManifest,
 } from './output/manifest';
-import { requirementScope, scopedFeatureKey, toSpecStem } from '../../core/aut/requirementScope';
+import { requirementScope, scopedFeatureKey, toSpecStem, featureStemsOf } from '../../core/aut/requirementScope';
 import { writeFixtureFile } from '../../core/state-manager/FixtureSync';
 import { UIScriptGenerator } from './sub-agents/ui-script-generator';
 import { APIScriptGenerator } from './sub-agents/api-script-generator';
@@ -79,6 +79,8 @@ interface SharedGeneration {
   scope: string;
   /** Explicit file stem from --spec-name, e.g. "Logout" -> Logout.spec.ts, LogoutPage.ts. */
   specStem: string;
+  /** Standard file stem per feature id, from the bare feature name, e.g. "F-01" -> "Profile". */
+  featureStems: Map<string, string>;
   /** Sign in before discovery, for a requirement whose states sit behind the login form. */
   authenticate: boolean;
   sourceReviewId: string | null;
@@ -163,6 +165,7 @@ class PlaywrightScriptGeneratorAgent {
         paths,
         scope: requirementScope(analysis),
         specStem: toSpecStem(String(input.specName || '')),
+        featureStems: featureStemsOf(analysis),
         authenticate: Boolean(input.authenticate),
         sourceReviewId,
         fixtureValues: fixture.toObject(),
@@ -236,7 +239,8 @@ class PlaywrightScriptGeneratorAgent {
    * --spec-name names the files directly, which is why it drops the feature id when the requirement
    * has a single feature: "Logout" then yields Logout.spec.ts rather than Logout-F-01.spec.ts. With
    * several features the id is kept, because one name cannot address them all. Without the option the
-   * requirement scope is used, which is unique per requirement and so cannot collide with another.
+   * bare feature name is used ("Profile Feature" -> Profile.spec.ts, ProfilePage.ts, Profile.json),
+   * and the requirement scope only when the feature has no usable name.
    * @param {SharedGeneration} shared
    * @param {string} featureId
    * @param {number} featureCount - Features generated in this run
@@ -244,8 +248,8 @@ class PlaywrightScriptGeneratorAgent {
    * @private
    */
   private _featureKey(shared: SharedGeneration, featureId: string, featureCount: number): string {
-    if (!shared.specStem) return scopedFeatureKey(shared.scope, featureId);
-    return featureCount === 1 ? shared.specStem : `${shared.specStem}-${featureId}`;
+    if (shared.specStem) return featureCount === 1 ? shared.specStem : `${shared.specStem}-${featureId}`;
+    return shared.featureStems.get(featureId) || scopedFeatureKey(shared.scope, featureId);
   }
 
   private async _generateFeatures(testCases: AutomationTestCase[], shared: SharedGeneration): Promise<FeatureGenerationResult[]> {
@@ -515,7 +519,7 @@ if (require.main === module) {
       projectId,
       // --spec-name=Logout names the generated files Logout.spec.ts / LogoutPage.ts.
       specName: opts['spec-name'],
-      // --authenticate signs discovery in first, for a feature that lives behind the login form.
+      // --authenticate signs every test case in; without it, discovery signs in the ones whose precondition needs a session.
       authenticate: Boolean(opts.authenticate),
       reviewedTestCases,
       testData: await stateManager.getPipelineArtifact('testData'),

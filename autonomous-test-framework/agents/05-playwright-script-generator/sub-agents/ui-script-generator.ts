@@ -16,7 +16,8 @@ import {
   MEMBER_KIND, PomRenderResult, pageObjectClassName, renderPom,
 } from '../rendering/pomRenderer';
 import { UiSpecParams, importPath, renderUiSpec } from '../rendering/specRenderer';
-import { hoistCommonPrefix } from '../rendering/hookHoister';
+import { hoistCommonPrefix, leadingMethodCall } from '../rendering/hookHoister';
+import { ISOLATED_SESSION_LABEL, PAGE_FIXTURE, SESSION_MIN_TESTS } from '../constants';
 import { generateTestBodies, TestOutcome } from '../generation/testBodyGenerator';
 import { analyzeWithAST, FILE_TYPE, FINDING_SEVERITY } from '../../../core/automation-reviewer/ReviewRules';
 import { FRAMEWORK_BASE_PAGE, FRAMEWORK_ENV_HELPER, FRAMEWORK_STORAGE_HELPER } from '../../../core/aut/projectPaths';
@@ -26,7 +27,7 @@ import {
   needsContextOutcome, splitByReadiness,
 } from './shared/featureContext';
 
-type SpecBase = Omit<UiSpecParams, 'tests' | 'hook'>;
+export type SpecBase = Omit<UiSpecParams, 'tests' | 'hook'>;
 
 interface DiscoveryBindings {
   flowsByTcKey: Map<string, FlowUsage[]>;
@@ -77,18 +78,68 @@ function discoveryBindings(
   };
 }
 
+type SpecTest = { tc: AutomationTestCase; body: string };
+
+/** Tests of one spec: those with a fresh page each, and those sharing one signed-in page. */
+interface SpecGroups {
+  fresh: SpecTest[];
+  session: SpecTest[];
+}
+
+const labelKey = (label: string) => String(label).toLowerCase().replace(/[^a-z0-9]/g, '');
+
+/** Whether review marked the test case to run on its own page, outside the shared session. */
+function isIsolated(tc: AutomationTestCase): boolean {
+  return (tc.labels || []).some((label) => labelKey(label) === labelKey(ISOLATED_SESSION_LABEL));
+}
+
 /**
- * Renders the final spec with the leading statements every test shares moved into beforeEach. Falls back to the
- * unhoisted spec when hoisting would introduce any blocking review finding.
+ * Splits off the tests that start by signing in, so they can share one signed-in page. A test case labelled
+ * ISOLATED_SESSION_LABEL keeps its own page. Too few tests to share a page, or a page object without a sign-in,
+ * leaves every test with a fresh page.
  */
-function renderFinalSpec(base: SpecBase, tests: Array<{ tc: AutomationTestCase; body: string }>): { content: string; hook: string[] } {
-  const plain = renderUiSpec({ ...base, tests });
+function groupBySession(tests: SpecTest[], sessionEntryMethods: string[]): SpecGroups {
+  const entries = new Set(sessionEntryMethods);
+  const session = tests.filter((test) => !isIsolated(test.tc) && entries.has(leadingMethodCall(test.body, PAGE_FIXTURE) || ''));
+  if (session.length < SESSION_MIN_TESTS) return { fresh: tests, session: [] };
+  return { fresh: tests.filter((test) => !session.includes(test)), session };
+}
+
+/** The leading statements a group's tests share, moved into that group's beforeEach. */
+function hoistGroup(tests: SpecTest[]): { hook: string[]; tests: SpecTest[] } {
   const { hook, bodies } = hoistCommonPrefix(tests.map((test) => test.body));
-  if (hook.length === 0) return { content: plain, hook };
-  const hoisted = renderUiSpec({ ...base, hook, tests: tests.map((test, idx) => ({ tc: test.tc, body: bodies[idx] })) });
+  return { hook, tests: hook.length > 0 ? tests.map((test, idx) => ({ tc: test.tc, body: bodies[idx] })) : tests };
+}
+
+function renderGroups(base: SpecBase, groups: SpecGroups, hoist: boolean): { content: string; hookByTcKey: Map<string, string[]> } {
+  const fresh = hoist ? hoistGroup(groups.fresh) : { hook: [], tests: groups.fresh };
+  const session = hoist ? hoistGroup(groups.session) : { hook: [], tests: groups.session };
+  const hookByTcKey = new Map<string, string[]>([
+    ...fresh.tests.map((test) => [test.tc.tcKey, fresh.hook] as [string, string[]]),
+    ...session.tests.map((test) => [test.tc.tcKey, session.hook] as [string, string[]]),
+  ]);
+  const content = renderUiSpec({
+    ...base, hook: fresh.hook, tests: fresh.tests, sessionHook: session.hook, sessionTests: session.tests,
+  });
+  return { content, hookByTcKey };
+}
+
+/**
+ * Renders the final spec: tests that start by signing in share one signed-in page, and each group's shared leading
+ * statements move into its beforeEach. Each refinement is dropped in turn — hoisting first, then the shared session —
+ * when it would introduce a blocking review finding, down to one fresh page per test with nothing hoisted.
+ */
+export function renderFinalSpec(base: SpecBase, tests: SpecTest[], sessionEntryMethods: string[]): { content: string; hookByTcKey: Map<string, string[]> } {
+  const grouped = groupBySession(tests, sessionEntryMethods);
+  const ungrouped: SpecGroups = { fresh: tests, session: [] };
   const keys = tests.map((test) => test.tc.tcKey);
-  const blocked = analyzeWithAST(hoisted, FILE_TYPE.SPEC, keys).findings.some((finding) => finding.severity === FINDING_SEVERITY.BLOCKER);
-  return blocked ? { content: plain, hook: [] } : { content: hoisted, hook };
+  const variants: Array<[SpecGroups, boolean]> = [[grouped, true], [grouped, false], [ungrouped, true]];
+  for (const [groups, hoist] of variants) {
+    const rendered = renderGroups(base, groups, hoist);
+    const blocked = analyzeWithAST(rendered.content, FILE_TYPE.SPEC, keys).findings.some((finding) => finding.severity === FINDING_SEVERITY.BLOCKER);
+    if (!blocked) return rendered;
+  }
+  return renderGroups(base, ungrouped, false);
 }
 
 export class UIScriptGenerator {
@@ -153,7 +204,9 @@ export class UIScriptGenerator {
     }, ctx.chat);
 
     const specPath = path.join(ctx.paths.specsDir, `${stem}.spec.ts`);
-    const assembled = this._assemble(generatable, bodies, base, { pomPath, pomCode: pom.code, specPath });
+    const assembled = this._assemble(generatable, bodies, base, {
+      pomPath, pomCode: pom.code, specPath, sessionEntryMethods: ctx.profile.sharedSignIn === false ? [] : pom.sessionEntryMethods,
+    });
     return {
       outcomes: [...notReady, ...blocked, ...bodies], files: assembled.files, pageMapFile, fileByTcKey: assembled.fileByTcKey,
     };
@@ -176,13 +229,17 @@ export class UIScriptGenerator {
     testCases: AutomationTestCase[],
     bodies: TestOutcome[],
     base: SpecBase,
-    target: { pomPath: string; pomCode: string; specPath: string },
+    target: { pomPath: string; pomCode: string; specPath: string; sessionEntryMethods: string[] },
   ): Pick<FeatureGenerationResult, 'files' | 'fileByTcKey'> {
     const byKey = new Map(testCases.map((tc) => [tc.tcKey, tc]));
     const generated = bodies.filter((outcome) => outcome.status === 'GENERATED');
     if (generated.length === 0) return { files: [], fileByTcKey: new Map() };
-    const spec = renderFinalSpec(base, generated.map((outcome) => ({ tc: byKey.get(outcome.tcKey) as AutomationTestCase, body: outcome.body as string })));
-    if (spec.hook.length > 0) generated.forEach((outcome) => { outcome.sharedSetup = spec.hook; });
+    const tests = generated.map((outcome) => ({ tc: byKey.get(outcome.tcKey) as AutomationTestCase, body: outcome.body as string }));
+    const spec = renderFinalSpec(base, tests, target.sessionEntryMethods);
+    generated.forEach((outcome) => {
+      const hook = spec.hookByTcKey.get(outcome.tcKey) || [];
+      if (hook.length > 0) outcome.sharedSetup = hook;
+    });
     const files: GeneratedFile[] = [
       { path: target.pomPath, content: target.pomCode, kind: 'pom' },
       { path: target.specPath, content: spec.content, kind: 'spec' },

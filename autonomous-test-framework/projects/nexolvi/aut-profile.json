@@ -1,6 +1,7 @@
 {
   "projectId": "Nexolvi",
   "displayName": "Nexo Desk Admin (admin.nexolvi.ai)",
+  "shortName": "Nexo",
   "baseUrlEnv": "NEXOLVI_BASE_URL",
   "browsers": [
     "chromium"

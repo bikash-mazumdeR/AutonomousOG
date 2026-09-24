@@ -4,7 +4,7 @@
  */
 
 import {
-  AuthenticatableSession, authenticateSession, resolveCredentials,
+  AuthenticatableSession, authenticateSession, resolveCredentials, signedInStarts,
 } from '../../agents/05-playwright-script-generator/discovery/authBootstrap';
 import { PageElement, PageState } from '../../agents/05-playwright-script-generator/discovery/pageMap';
 
@@ -93,5 +93,39 @@ describe('Agent 05 sign-in bootstrap', () => {
     expect(await authenticateSession(fakeSession(), loginState(), credentialEnvVars, {})).toEqual({
       signedIn: false, reason: 'Credential environment variable(s) not set: APP_EMAIL, APP_PASSWORD.',
     });
+  });
+});
+
+describe('signedInStarts', () => {
+  const credentials = { validEmail: 'APP_EMAIL', validPassword: 'APP_PASSWORD' };
+  const cases = (...preconditions: string[]) => preconditions.map((precondition, i) => ({ tcKey: `TC-00${i + 1}`, precondition }));
+
+  it('signs in test cases behind the login form and leaves the ones on the sign-in form signed out', () => {
+    const profileFeature = cases(
+      'the user navigates to "https://app.example.test/login"',
+      'the user is on the login page at "https://app.example.test/login"',
+      'the user is authenticated and on the Dashboard at "https://app.example.test/"',
+      'the user has the My Profile modal open',
+      'the user is not logged in',
+    );
+    expect([...signedInStarts(profileFeature, credentials)].sort()).toEqual(['TC-003', 'TC-004']);
+  });
+
+  it('signs in a precondition that narrates a sign-out, so the planner can perform it', () => {
+    const logoutFeature = cases(
+      'the authenticated user is on the Dashboard at https://app.example.test/',
+      'the user has completed the logout flow and is on the Login page at https://app.example.test/',
+    );
+    expect([...signedInStarts(logoutFeature, credentials)].sort()).toEqual(['TC-001', 'TC-002']);
+  });
+
+  it('keeps a feature whose preconditions never mention a session signed out', () => {
+    expect(signedInStarts(cases('the user navigates to https://app.example.test', 'the user has the modal open'), credentials).size).toBe(0);
+  });
+
+  it('never signs in without declared credentials, and signs everything in when --authenticate is passed', () => {
+    const feature = cases('the user is authenticated', 'the user is on the login page');
+    expect(signedInStarts(feature, {}).size).toBe(0);
+    expect([...signedInStarts(feature, {}, true)].sort()).toEqual(['TC-001', 'TC-002']);
   });
 });

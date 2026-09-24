@@ -10,6 +10,7 @@ import { GENERATED_MARKER, STORAGE_HELPERS } from '../constants';
 import { SLA_PATTERN } from '../../../core/readiness/readinessConstants';
 import { browserTag } from '../../../core/readiness/browserTargets';
 import { AutomationTestCase } from '../contracts/automationTestCase';
+import { SESSION_TEST_OBJECT } from '../../../core/automation-reviewer/reviewTypes';
 
 /** A test case with its validated body. */
 export interface RenderedTest {
@@ -35,6 +36,10 @@ export interface UiSpecParams extends SpecRenderContext {
   /** Statements every test starts with, rendered once as test.beforeEach. */
   hook?: string[];
   tests: RenderedTest[];
+  /** Tests that start behind the login form: rendered in their own block that shares one signed-in page. */
+  sessionTests?: RenderedTest[];
+  /** Statements every session test starts with, rendered once as that block's beforeEach. */
+  sessionHook?: string[];
 }
 
 /** API spec parameters. */
@@ -122,9 +127,9 @@ function header(ctx: SpecRenderContext): string[] {
   ];
 }
 
-function renderTestBlock(tc: AutomationTestCase, body: string, fixtureParams: string): string {
+function renderTestBlock(tc: AutomationTestCase, body: string, fixtureParams: string, testFn = 'test'): string {
   return [
-    `  test(${JSON.stringify(renderTestTitle(tc))}, {`,
+    `  ${testFn}(${JSON.stringify(renderTestTitle(tc))}, {`,
     `    tag: [${renderTags(tc).map((tag) => JSON.stringify(tag)).join(', ')}],`,
     '    annotation: [',
     ...renderAnnotations(tc).map((a) => `      { type: ${JSON.stringify(a.type)}, description: ${JSON.stringify(a.description)} },`),
@@ -144,23 +149,69 @@ function dataFixtureLines(): string[] {
   ];
 }
 
-function renderHook(hook: string[]): string {
-  return ['  test.beforeEach(async ({ page, featurePage, data }) => {', indent(hook.join('\n'), 4), '  });'].join('\n');
+function renderHook(hook: string[], testFn = 'test'): string {
+  return [`  ${testFn}.beforeEach(async ({ page, featurePage, data }) => {`, indent(hook.join('\n'), 4), '  });'].join('\n');
+}
+
+/** Name of the test object whose page fixture is the shared signed-in page. */
+const SESSION_TEST = SESSION_TEST_OBJECT;
+const UI_FIXTURE_PARAMS = '{ page, featurePage, data, browser }';
+
+/** The shared page and the test object that hands it to every session test in place of a fresh one. */
+function sessionFixtureLines(): string[] {
+  return [
+    '',
+    '// One signed-in page shared by the tests that start behind the login form (see the session block below).',
+    'let sessionPage: Page;',
+    `const ${SESSION_TEST} = test.extend({`,
+    '  // eslint-disable-next-line no-empty-pattern',
+    '  page: async ({}, use) => {',
+    '    await use(sessionPage);',
+    '  },',
+    '});',
+  ];
+}
+
+function renderSessionBlock(p: UiSpecParams): string[] {
+  const sessionHook = p.sessionHook || [];
+  return [
+    '',
+    '// These tests start behind the login form, so they share one page and sign in once: signIn() resumes the session',
+    '// while it lasts and signs in again after a test ends it. They run in order on one worker; a failure restarts the',
+    '// worker, which opens a new page, so the tests after it still run.',
+    `${SESSION_TEST}.describe(${JSON.stringify(`${p.featureId} signed-in session`)}, () => {`,
+    `  ${SESSION_TEST}.describe.configure({ mode: 'default' });`,
+    '',
+    `  ${SESSION_TEST}.beforeAll(async ({ browser }) => {`,
+    '    sessionPage = await browser.newPage();',
+    '  });',
+    '',
+    `  ${SESSION_TEST}.afterAll(async () => {`,
+    '    await sessionPage?.context().close();',
+    '  });',
+    '',
+    ...(sessionHook.length > 0 ? [renderHook(sessionHook, SESSION_TEST), ''] : []),
+    (p.sessionTests || []).map((t) => renderTestBlock(t.tc, t.body, UI_FIXTURE_PARAMS, SESSION_TEST)).join('\n\n'),
+    '});',
+  ];
 }
 
 /**
- * Renders a UI spec file. `hook` statements run in test.beforeEach before every test body.
+ * Renders a UI spec file. `hook` statements run in test.beforeEach before every test body. Session tests, when
+ * given, follow in their own block sharing one signed-in page.
  * @param {UiSpecParams} p
  * @returns {string}
  */
 export function renderUiSpec(p: UiSpecParams): string {
   const hook = p.hook || [];
-  const bodies = [...hook, ...p.tests.map((t) => t.body)];
+  const sessionTests = p.sessionTests || [];
+  const hasSession = sessionTests.length > 0;
+  const bodies = [...hook, ...(p.sessionHook || []), ...[...p.tests, ...sessionTests].map((t) => t.body)];
   const usesEnv = bodies.some((code) => /\benv\(/.test(code));
   const storageHelpers = STORAGE_HELPERS.filter((helper) => bodies.some((code) => new RegExp(`\\b${helper}\\(`).test(code)));
   return [
     ...header(p),
-    "import { test as base, expect } from '@playwright/test';",
+    `import { test as base, expect${hasSession ? ', Page' : ''} } from '@playwright/test';`,
     ...(usesEnv ? [`import { requireEnv as env } from '${p.envImport}';`] : []),
     ...(storageHelpers.length > 0 ? [`import { ${storageHelpers.join(', ')} } from '${p.storageImport}';`] : []),
     `import fixtureData from '${p.fixtureImport}';`,
@@ -172,11 +223,15 @@ export function renderUiSpec(p: UiSpecParams): string {
     '  },',
     ...dataFixtureLines(),
     '});',
+    ...(hasSession ? sessionFixtureLines() : []),
     '',
-    `test.describe(${JSON.stringify(p.featureId)}, () => {`,
-    ...(hook.length > 0 ? [renderHook(hook), ''] : []),
-    p.tests.map((t) => renderTestBlock(t.tc, t.body, '{ page, featurePage, data, browser }')).join('\n\n'),
-    '});',
+    ...(p.tests.length > 0 || !hasSession ? [
+      `test.describe(${JSON.stringify(p.featureId)}, () => {`,
+      ...(hook.length > 0 ? [renderHook(hook), ''] : []),
+      p.tests.map((t) => renderTestBlock(t.tc, t.body, UI_FIXTURE_PARAMS)).join('\n\n'),
+      '});',
+    ] : []),
+    ...(hasSession ? renderSessionBlock(p) : []),
     '',
   ].join('\n');
 }

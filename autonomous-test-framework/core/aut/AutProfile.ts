@@ -35,6 +35,16 @@ export interface ExtraLocator {
 export interface AutProfile {
   projectId: string;
   displayName: string;
+  /**
+   * Short application name used in generated file names, e.g. "Nexo" in "Login Feature- Nexo.feature".
+   * Defaults to the first word of `displayName`.
+   */
+  shortName?: string;
+  /**
+   * Whether generated UI specs let the tests that start behind the login form share one signed-in page, signing in
+   * once instead of once per test. Defaults to true; set false for an application whose sessions must not be shared.
+   */
+  sharedSignIn?: boolean;
   /** Name of the env var holding the base URL — the value is never stored in the profile. */
   baseUrlEnv: string;
   testIdAttribute?: string;
@@ -140,6 +150,10 @@ export function validateAutProfile(raw: any): string[] {
   if (!raw || typeof raw !== 'object') return ['profile must be a JSON object'];
   if (typeof raw.projectId !== 'string' || !raw.projectId.trim()) errors.push('projectId is required');
   if (typeof raw.displayName !== 'string' || !raw.displayName.trim()) errors.push('displayName is required');
+  if (raw.shortName !== undefined && (typeof raw.shortName !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9 _.-]*$/.test(raw.shortName.trim()))) {
+    errors.push('shortName must be a non-empty, file-name-safe string when set');
+  }
+  if (raw.sharedSignIn !== undefined && typeof raw.sharedSignIn !== 'boolean') errors.push('sharedSignIn must be a boolean when set');
   if (typeof raw.baseUrlEnv !== 'string' || !ENV_NAME.test(raw.baseUrlEnv)) errors.push('baseUrlEnv must be an env var name');
   if (raw.testIdAttribute !== undefined && (typeof raw.testIdAttribute !== 'string' || !raw.testIdAttribute.trim())) {
     errors.push('testIdAttribute must be a non-empty string when set');

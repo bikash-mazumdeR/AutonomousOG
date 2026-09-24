@@ -41,6 +41,7 @@
     "agent:11": "node -r ts-node/register agents/11-retest-agent/agent.ts",
     "test": "jest",
     "test:unit": "jest --verbose",
+    "test:changed": "jest --onlyChanged",
     "test:coverage": "jest --coverage",
     "test:watch": "jest --watch",
     "test:playwright": "npx playwright test",
